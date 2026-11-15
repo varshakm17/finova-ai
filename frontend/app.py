@@ -191,7 +191,7 @@ def main() -> None:
                 "Company Lookup & Ingestion (SEC)",
                 "Hybrid Research Search (RRF)",
                 "Retrieval Evaluation & Evidence Quality",
-                "Research Workspace (Preview)",
+                "Financial Research Assistant",
                 "Agent Architecture",
                 "Configuration",
             ],
@@ -226,9 +226,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 03</div>
+                    <div class="metric-value">Session 08</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        HTML Ingestion, Section Extractor & Deterministic Text Chunking active.
+                        Evidence-Grounded Financial RAG & LLM Integration operational.
                     </p>
                 </div>
                 """,
@@ -238,10 +238,10 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">Disclosure Sections</div>
-                    <div class="metric-value">4 Items</div>
+                    <div class="metric-label">Multi-Modal Context</div>
+                    <div class="metric-value">Hybrid + Calcs</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Item 1 (Business), 1A (Risk), 7 (MD&A), 7A (Market Risk).
+                        FAISS Dense + BM25 Sparse + Reranker + Deterministic XBRL Receipts.
                     </p>
                 </div>
                 """,
@@ -251,10 +251,10 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">Chunk Provenance</div>
-                    <div class="metric-value">Traceable</div>
+                    <div class="metric-label">Citation Auditing</div>
+                    <div class="metric-value">100% Traceable</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Every chunk maps to CIK, accession number, section, and character offset.
+                        Every factual assertion requires verified [E1]/[C1] citations and EDGAR URLs.
                     </p>
                 </div>
                 """,
@@ -266,17 +266,17 @@ def main() -> None:
             """
             Finova AI is engineered to automate rigorous, evidence-backed corporate financial analysis:
             
-            - **Automated SEC EDGAR Retrieval**: Programmatic acquisition of annual (10-K) and quarterly (10-Q) filings.
-            - **Section-Aware Filing Ingestion**: Full HTML parsing, TOC disambiguation, and boundary-aware extraction of MD&A and Risk Factors.
-            - **Deterministic Text Chunking**: Boundary-aware overlapping text chunks preserving paragraph and sentence coherence.
-            - **Structured Metric Extraction**: Accurate parsing of Income Statements, Balance Sheets, and Cash Flow statements.
-            - **Traceable Provenance**: Every chunk and fact traces directly to its source SEC archive accession and document coordinate.
+            - **Evidence-Grounded Financial RAG**: Answer complex corporate finance queries with statutory passage citations ([E1]) and deterministic calculation receipts ([C1]).
+            - **Anti-Hallucination Guardrails**: Arithmetic calculations are executed strictly by deterministic Python formulas, not LLMs. Insufficient evidence triggers explicit uncertainty declarations.
+            - **Hybrid IR & Reranking**: Reciprocal Rank Fusion (RRF) over FAISS dense vectors and BM25 sparse lexical tokens, refined with Cross-Encoder reranking.
+            - **Automated SEC EDGAR Retrieval**: Programmatic acquisition of annual (10-K) and quarterly (10-Q) filings with section-aware chunking.
+            - **Deterministic Metric Engine**: Exact calculation of revenue growth, margins, liquidity, leverage, and free cash flows from structured XBRL facts.
             """
         )
 
         st.info(
-            "📌 **Session 03 Active**: SEC filing document ingestion, HTML parsing, and section-aware "
-            "chunking are fully operational. Visit **Company Lookup & Ingestion (SEC)** to ingest a 10-K or 10-Q filing."
+            "📌 **Session 08 Active**: Evidence-grounded financial RAG and LLM integration are fully operational. "
+            "Navigate to **Financial Research Assistant** to ask research questions backed by verified SEC filings."
         )
 
     # -------------------------------------------------------------------------
@@ -1510,67 +1510,266 @@ def main() -> None:
                             st.error(f"Error connecting to backend: {exc}")
 
     # -------------------------------------------------------------------------
-    # View 4: Research Workspace (Preview)
+    # View 4: Financial Research Assistant (Session 08 Grounded RAG)
     # -------------------------------------------------------------------------
-    elif nav_selection == "Research Workspace (Preview)":
-        st.markdown("### 🔍 Financial Research Workspace (Preview)")
-        st.markdown(
-            '<span class="badge-planned">Future Session Capability — UI Scaffolding Preview</span>',
-            unsafe_allow_html=True,
+    elif nav_selection == "Financial Research Assistant":
+        st.markdown("### 🤖 Financial Research Assistant — Evidence-Grounded RAG")
+        st.caption(
+            "Synthesize objective, evidence-backed answers to corporate finance questions "
+            "strictly grounded in statutory SEC EDGAR filings and deterministic calculation receipts."
         )
+
+        # Provider Diagnostics banner
+        llm_status = None
+        try:
+            with httpx.Client(timeout=3.0) as client:
+                res = client.get(f"{backend_url}/api/v1/llm/status")
+                if res.status_code == 200:
+                    llm_status = res.json()
+        except Exception:
+            pass
+
+        if llm_status:
+            is_online = llm_status.get("online", False)
+            badge_class = "badge-active" if is_online else "badge-offline"
+            st.markdown(
+                f'<span class="{badge_class}">● Provider: {llm_status.get("provider")} ({llm_status.get("model")}) — {"ONLINE" if is_online else "OFFLINE"}</span>',
+                unsafe_allow_html=True,
+            )
+            if not is_online and llm_status.get("provider") == "ollama":
+                st.warning(
+                    f"⚠️ Ollama is not detected at `{llm_status.get('base_url')}`. "
+                    f"To enable local LLM generation, start Ollama (`ollama serve`) and pull `{llm_status.get('model')}`. "
+                    "Alternatively, test the pipeline with `LLM_PROVIDER=mock`."
+                )
         st.write("")
 
-        with st.container():
-            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-            with col1:
-                st.text_input(
-                    "Company Ticker or CIK",
-                    value="AAPL",
-                    help="Enter a US stock ticker (e.g., AAPL, MSFT, NVDA) or SEC CIK number.",
-                    disabled=True,
-                )
-            with col2:
-                st.selectbox(
-                    "Filing Type",
-                    options=["10-K (Annual)", "10-Q (Quarterly)", "8-K (Current)"],
-                    index=0,
-                    disabled=True,
-                )
-            with col3:
-                st.selectbox(
-                    "Fiscal Year",
-                    options=["2024", "2023", "2022", "Multi-Year (3Y)"],
-                    index=0,
-                    disabled=True,
-                )
-            with col4:
-                st.write("")
-                st.write("")
-                st.button("Analyze Filing", disabled=True, use_container_width=True)
-
-        st.caption(
-            "Note: Multi-agent orchestration and report synthesis will be activated in Sessions 05-06."
+        # Query Formulation
+        st.markdown("#### 📝 Financial Research Inquiry")
+        research_question = st.text_area(
+            "Research Question",
+            value="What are the key risk factors and operating margin trends reported by Apple?",
+            help="Enter a corporate finance or statutory disclosure question.",
+            height=100,
         )
 
-        st.markdown("---")
-        st.markdown("#### Target Financial Metrics Layout")
-        mcol1, mcol2, mcol3, mcol4 = st.columns(4)
-        with mcol1:
-            st.metric(
-                label="Total Revenue", value="Extracted (XBRL)", delta="Session 02"
+        col_q1, col_q2, col_q3, col_q4 = st.columns([1.5, 1.2, 1.5, 1.5])
+        with col_q1:
+            q_ticker = (
+                st.text_input(
+                    "Target Ticker",
+                    value="AAPL",
+                    help="Company ticker symbol (e.g. AAPL)",
+                )
+                .strip()
+                .upper()
             )
-        with mcol2:
-            st.metric(
-                label="Operating Income", value="Extracted (XBRL)", delta="Session 02"
+        with col_q2:
+            q_filing = st.selectbox(
+                "Filing Type", options=["All", "10-K", "10-Q"], index=0
             )
-        with mcol3:
-            st.metric(
-                label="Section Chunks", value="Active (10-K/10-Q)", delta="Session 03"
+        with col_q3:
+            q_section = st.selectbox(
+                "Filing Section",
+                options=[
+                    "All",
+                    "ITEM_1A (Risk Factors)",
+                    "ITEM_7 (MD&A)",
+                    "ITEM_1 (Business)",
+                    "ITEM_7A (Market Risk)",
+                ],
+                index=0,
             )
-        with mcol4:
-            st.metric(
-                label="Free Cash Flow", value="Planned Session 04", delta="Calc Engine"
+        with col_q4:
+            q_style = st.selectbox(
+                "Response Depth",
+                options=["detailed", "concise", "bullet_points"],
+                index=0,
             )
+
+        with st.expander("⚙️ Advanced RAG & Retrieval Settings", expanded=False):
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                top_k = st.slider(
+                    "Evidence Passages (Top-K)", min_value=1, max_value=15, value=5
+                )
+            with col_s2:
+                use_reranker = st.checkbox(
+                    "Cross-Encoder Reranker",
+                    value=True,
+                    help="Rerank candidates using cross-encoder model",
+                )
+            with col_s3:
+                include_calcs = st.checkbox(
+                    "Include Calculation Receipts",
+                    value=True,
+                    help="Inject relevant deterministic XBRL ratio/margin receipts",
+                )
+
+        ask_submitted = st.button(
+            "🚀 Synthesize Grounded Research Answer",
+            type="primary",
+            use_container_width=True,
+        )
+
+        if ask_submitted:
+            if not research_question.strip():
+                st.error("Please enter a research question.")
+            else:
+                sec_filter = None if q_section == "All" else q_section.split(" ")[0]
+                filing_filter = None if q_filing == "All" else q_filing
+                payload = {
+                    "question": research_question.strip(),
+                    "ticker": q_ticker if q_ticker else None,
+                    "filing_type": filing_filter,
+                    "section_identifier": sec_filter,
+                    "top_k": top_k,
+                    "use_reranker": use_reranker,
+                    "include_calculations": include_calcs,
+                    "response_style": q_style,
+                }
+
+                with st.spinner(
+                    "Executing hybrid retrieval, reranking, and evidence-grounded synthesis..."
+                ):
+                    try:
+                        with httpx.Client(timeout=120.0) as client:
+                            resp = client.post(
+                                f"{backend_url}/api/v1/research/ask", json=payload
+                            )
+                            if resp.status_code == 200:
+                                ans_data = resp.json()
+                                st.session_state["last_rag_answer"] = ans_data
+                            else:
+                                st.error(f"Error {resp.status_code}: {resp.text}")
+                    except Exception as exc:
+                        st.error(f"Failed to communicate with RAG endpoint: {exc}")
+
+        # Display answer if present in session state
+        ans = st.session_state.get("last_rag_answer")
+        if ans:
+            st.markdown("---")
+            st.markdown("### 📋 Grounded Research Answer")
+
+            status_val = ans.get("answer_status", "unknown")
+            status_badges = {
+                "answered": '<span class="badge-active">✅ Answered & Verified</span>',
+                "partially_supported": '<span style="color: #F59E0B; background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 600;">⚠️ Partially Supported</span>',
+                "insufficient_evidence": '<span style="color: #38BDF8; background-color: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 600;">ℹ️ Insufficient Evidence</span>',
+                "provider_unavailable": '<span class="badge-offline">🔴 LLM Provider Offline</span>',
+                "citation_validation_failed": '<span class="badge-offline">❌ Citation Validation Failed</span>',
+                "generation_failed": '<span class="badge-offline">❌ Generation Failed</span>',
+            }
+            badge_html = status_badges.get(status_val, f"<span>{status_val}</span>")
+
+            m_col1, m_col2, m_col3, m_col4 = st.columns([1.5, 1.5, 1.5, 1.5])
+            with m_col1:
+                st.markdown(f"**Status:** {badge_html}", unsafe_allow_html=True)
+            with m_col2:
+                st.markdown(
+                    f"**Model:** `{ans.get('provider')}` / `{ans.get('model_name')}`"
+                )
+            with m_col3:
+                st.markdown(f"**Pipeline:** `{ans.get('retrieval_method')}`")
+            with m_col4:
+                lat = ans.get("generation_metadata", {}).get("latency_ms")
+                st.markdown(
+                    f"**Latency:** `{lat:,.1f} ms`" if lat else "**Latency:** N/A"
+                )
+
+            # Main Answer Text Box
+            st.markdown(
+                f"""
+                <div class="card" style="font-size: 1.05rem; line-height: 1.6; margin-top: 1rem; border-left: 4px solid var(--accent-teal);">
+                    {ans.get("answer")}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Warnings if any
+            warnings = ans.get("warnings", [])
+            if warnings:
+                with st.expander(f"⚠️ Audit Warnings ({len(warnings)})", expanded=False):
+                    for w in warnings:
+                        st.markdown(f"- {w}")
+
+            # Citations Breakdown
+            citations = ans.get("citations", [])
+            with st.expander(
+                f"📑 Verified Citations ({len(citations)})", expanded=bool(citations)
+            ):
+                if not citations:
+                    st.caption("No statutory citations attached to this response.")
+                else:
+                    for cit in citations:
+                        c_id = cit.get("citation_id")
+                        c_type = cit.get("evidence_type")
+                        c_ref = cit.get("source_reference")
+                        c_url = cit.get("source_url")
+                        c_exc = cit.get("excerpt")
+
+                        type_tag = (
+                            "📄 SEC Filing Passage"
+                            if c_type == "filing_passage"
+                            else "🔢 Calculation Receipt"
+                        )
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 0.85rem; margin-bottom: 0.75rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                    <span style="font-weight: 700; color: #38BDF8; font-size: 0.95rem;">[{c_id}] {c_ref}</span>
+                                    <span style="font-size: 0.8rem; color: #94A3B8;">{type_tag}</span>
+                                </div>
+                                <div style="color: #CBD5E1; font-size: 0.9rem; font-style: italic; margin-bottom: 0.5rem;">
+                                    "{c_exc}"
+                                </div>
+                                <div>
+                                    <a href="{c_url}" target="_blank" style="color: #00B4D8; text-decoration: underline; font-size: 0.82rem;">🔗 View Statutory Source on SEC EDGAR</a>
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+            # Retrieved Evidence Passages
+            retrieved_ev = ans.get("retrieved_evidence", [])
+            with st.expander(
+                f"📚 Retrieved Filing Passages ({len(retrieved_ev)})", expanded=False
+            ):
+                if not retrieved_ev:
+                    st.caption("No filing passages retrieved.")
+                else:
+                    for rev in retrieved_ev:
+                        st.markdown(
+                            f"**[{rev.get('evidence_id')}]** `{rev.get('ticker')}` {rev.get('filing_type')} ({rev.get('filing_date')}) - {rev.get('section_title') or rev.get('section_identifier')}"
+                        )
+                        st.caption(
+                            f"Dense: {rev.get('dense_score', 0.0):.4f} | BM25: {rev.get('bm25_score', 0.0):.2f} | RRF: {rev.get('rrf_score', 0.0):.5f} | Reranker: {rev.get('reranker_score', 0.0):.4f}"
+                        )
+                        st.markdown(
+                            f"""<div style="background-color: #0F172A; border-left: 3px solid #38BDF8; padding: 0.6rem; margin-bottom: 0.8rem; font-size: 0.88rem; color: #E2E8F0;">
+                            {rev.get("chunk_text", "")[:400]}...
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+
+            # Calculation Receipts
+            calc_ev = ans.get("calculation_evidence", [])
+            with st.expander(
+                f"🔢 Deterministic Calculation Receipts ({len(calc_ev)})",
+                expanded=False,
+            ):
+                if not calc_ev:
+                    st.caption("No deterministic calculation receipts attached.")
+                else:
+                    for cev in calc_ev:
+                        st.markdown(
+                            f"**[{cev.get('evidence_id')}]** `{cev.get('metric_name')}`: **{cev.get('calculated_value'):,.2f} {cev.get('unit')}** (Period: `{cev.get('period_end')}`)"
+                        )
+                        st.caption(
+                            f"Formula: `{cev.get('formula')}` | Receipt ID: `{cev.get('calculation_id')}`"
+                        )
 
     # -------------------------------------------------------------------------
     # View 4: Retrieval Evaluation & Evidence Quality (Session 07)
@@ -2049,6 +2248,16 @@ def main() -> None:
             "Evidence Validation Enabled": "Yes"
             if settings.EVIDENCE_VALIDATION_ENABLED
             else "No",
+            "LLM Provider": settings.LLM_PROVIDER,
+            "Ollama Base URL": settings.OLLAMA_BASE_URL,
+            "Ollama Model": settings.OLLAMA_MODEL,
+            "LLM Request Timeout": f"{settings.LLM_REQUEST_TIMEOUT} s",
+            "LLM Temperature": str(settings.LLM_TEMPERATURE),
+            "LLM Max Tokens": str(settings.LLM_MAX_TOKENS),
+            "LLM Context Window": f"{settings.LLM_CONTEXT_WINDOW} tokens",
+            "RAG Default Top K": str(settings.RAG_DEFAULT_TOP_K),
+            "RAG Minimum Evidence": str(settings.RAG_MINIMUM_EVIDENCE),
+            "RAG Max Context Chars": f"{settings.RAG_MAX_CONTEXT_CHARACTERS:,} chars",
         }
 
         st.table([{"Parameter": k, "Value": str(v)} for k, v in config_data.items()])

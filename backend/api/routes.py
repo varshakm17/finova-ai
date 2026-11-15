@@ -36,6 +36,13 @@ from backend.finance.calculation_service import (
     ALL_CALCULATION_METRICS,
     CalculationService,
 )
+from backend.llm import get_llm_provider
+from backend.rag.rag_models import (
+    RAGAnswer,
+    RAGCapabilitiesResponse,
+    RAGRequest,
+)
+from backend.rag.rag_service import RAGService
 from backend.retrieval.bm25_indexing_service import BM25IndexingService
 from backend.retrieval.bm25_search import BM25SearchService
 from backend.retrieval.hybrid_search import HybridSearchService
@@ -130,6 +137,12 @@ _evidence_report_generator = EvidenceReportGenerator(
     settings=_settings,
 )
 _evaluation_reports: dict[str, RetrievalEvaluationReport] = {}
+_llm_provider = get_llm_provider(settings=_settings)
+_rag_service = RAGService(
+    llm_provider=_llm_provider,
+    database=_db,
+    settings=_settings,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -1546,3 +1559,76 @@ def get_retrieval_evaluation_report(
 def get_reranker_status() -> RerankerStatusResponse:
     """Retrieve operational status of the cross-encoder reranker."""
     return _reranker.get_status()
+
+
+# =============================================================================
+# Session 08: Evidence-Grounded Financial RAG & LLM Endpoints
+# =============================================================================
+@router.post(
+    "/research/ask",
+    response_model=RAGAnswer,
+    summary="Ask Grounded Financial Research Question",
+    description="Synthesize an evidence-backed financial research answer using retrieved SEC filing passages and deterministic calculation receipts.",
+    tags=["Grounded Financial RAG & LLM"],
+)
+def ask_financial_question(request: RAGRequest) -> RAGAnswer:
+    """Execute evidence-grounded RAG query."""
+    try:
+        return _rag_service.ask(request)
+    except Exception as exc:
+        logger.error("Error processing RAG request: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"RAG query execution failed: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/research/answers/{answer_id}",
+    response_model=RAGAnswer,
+    summary="Get Stored Research Answer",
+    description="Retrieve a previously generated financial research answer and its full provenance trail by answer_id.",
+    tags=["Grounded Financial RAG & LLM"],
+)
+def get_research_answer(answer_id: str) -> RAGAnswer:
+    """Fetch stored research answer by identifier."""
+    answer = _rag_service.get_answer(answer_id)
+    if not answer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research answer '{answer_id}' not found.",
+        )
+    return answer
+
+
+@router.get(
+    "/llm/status",
+    summary="Get LLM Provider Status",
+    description="Inspect configured LLM provider, active model, reachability/health, and inference settings.",
+    tags=["Grounded Financial RAG & LLM"],
+)
+def get_llm_status() -> dict[str, Any]:
+    """Retrieve operational health and configuration of the LLM provider."""
+    online = _llm_provider.health_check()
+    return {
+        "provider": _llm_provider.provider_name,
+        "model": _llm_provider.model_name,
+        "online": online,
+        "base_url": getattr(_llm_provider, "base_url", None),
+        "timeout": _settings.LLM_REQUEST_TIMEOUT,
+        "temperature": _settings.LLM_TEMPERATURE,
+        "max_tokens": _settings.LLM_MAX_TOKENS,
+        "context_window": _settings.LLM_CONTEXT_WINDOW,
+    }
+
+
+@router.get(
+    "/research/capabilities",
+    response_model=RAGCapabilitiesResponse,
+    summary="Get RAG System Capabilities",
+    description="Expose supported retrieval modes, reranker availability, calculation integration, and LLM readiness.",
+    tags=["Grounded Financial RAG & LLM"],
+)
+def get_research_capabilities() -> RAGCapabilitiesResponse:
+    """Retrieve operational capabilities of the financial RAG system."""
+    return _rag_service.get_capabilities()

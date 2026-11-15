@@ -211,3 +211,4 @@ The test suite covers:
 - **FastAPI Endpoints**: Request/response contracts, 404 handling, parameter filtering, report retrieval (`tests/test_api_evaluation.py`).
 
 All standard unit and integration tests run **100% offline** with zero network calls and zero model downloads.
+

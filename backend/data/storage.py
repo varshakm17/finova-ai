@@ -206,6 +206,34 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_calc_period ON financial_calculations (period_end, period_type);"
             )
 
+            # 5. Research Answers Table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS research_answers (
+                    answer_id TEXT PRIMARY KEY,
+                    question TEXT NOT NULL,
+                    ticker TEXT,
+                    answer_text TEXT NOT NULL,
+                    answer_status TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    retrieval_method TEXT NOT NULL,
+                    citations_json TEXT NOT NULL,
+                    retrieved_evidence_json TEXT NOT NULL,
+                    calculation_evidence_json TEXT NOT NULL,
+                    generation_metadata_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_answers_ticker ON research_answers (ticker);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_answers_created_at ON research_answers (created_at);"
+            )
+
         logger.info("Database initialized successfully at: %s", self.db_path)
 
     def save_company(self, company_data: dict[str, Any]) -> None:
@@ -601,3 +629,108 @@ class Database:
             except (json.JSONDecodeError, TypeError):
                 r_dict["warnings"] = []
             return r_dict
+
+    def save_research_answer(self, answer_data: dict[str, Any]) -> None:
+        """Persist a synthesized RAG research answer and its provenance trail."""
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO research_answers (
+                    answer_id, question, ticker, answer_text, answer_status,
+                    provider, model_name, retrieval_method, citations_json,
+                    retrieved_evidence_json, calculation_evidence_json,
+                    generation_metadata_json, warnings_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(answer_id) DO UPDATE SET
+                    answer_text = excluded.answer_text,
+                    answer_status = excluded.answer_status,
+                    citations_json = excluded.citations_json,
+                    warnings_json = excluded.warnings_json;
+                """,
+                (
+                    answer_data["answer_id"],
+                    answer_data["question"],
+                    answer_data.get("ticker"),
+                    answer_data.get("answer_text") or answer_data.get("answer", ""),
+                    answer_data["answer_status"],
+                    answer_data["provider"],
+                    answer_data["model_name"],
+                    answer_data.get("retrieval_method", "hybrid"),
+                    json.dumps(answer_data.get("citations", [])),
+                    json.dumps(answer_data.get("retrieved_evidence", [])),
+                    json.dumps(answer_data.get("calculation_evidence", [])),
+                    json.dumps(answer_data.get("generation_metadata", {})),
+                    json.dumps(answer_data.get("warnings", [])),
+                    answer_data.get("created_at") or datetime.now(UTC).isoformat(),
+                ),
+            )
+
+    def get_research_answer(self, answer_id: str) -> dict[str, Any] | None:
+        """Fetch a saved research answer by its unique answer_id."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM research_answers WHERE answer_id = ?;",
+                (answer_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            r_dict = dict(row)
+            r_dict["answer"] = r_dict["answer_text"]
+            for field_name, json_col in [
+                ("citations", "citations_json"),
+                ("retrieved_evidence", "retrieved_evidence_json"),
+                ("calculation_evidence", "calculation_evidence_json"),
+                ("generation_metadata", "generation_metadata_json"),
+                ("warnings", "warnings_json"),
+            ]:
+                try:
+                    r_dict[field_name] = json.loads(
+                        r_dict.pop(
+                            json_col,
+                            "[]"
+                            if "json" in json_col and "metadata" not in json_col
+                            else "{}",
+                        )
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    r_dict[field_name] = [] if "metadata" not in field_name else {}
+            return r_dict
+
+    def list_research_answers(
+        self, ticker: str | None = None, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """List recently saved research answers, optionally filtered by ticker."""
+        query = "SELECT * FROM research_answers"
+        params: list[Any] = []
+        if ticker:
+            query += " WHERE ticker = ?"
+            params.append(ticker.strip().upper())
+        query += " ORDER BY created_at DESC LIMIT ?;"
+        params.append(limit)
+
+        with self.connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            results: list[dict[str, Any]] = []
+            for row in rows:
+                r_dict = dict(row)
+                r_dict["answer"] = r_dict["answer_text"]
+                for field_name, json_col in [
+                    ("citations", "citations_json"),
+                    ("retrieved_evidence", "retrieved_evidence_json"),
+                    ("calculation_evidence", "calculation_evidence_json"),
+                    ("generation_metadata", "generation_metadata_json"),
+                    ("warnings", "warnings_json"),
+                ]:
+                    try:
+                        r_dict[field_name] = json.loads(
+                            r_dict.pop(
+                                json_col,
+                                "[]"
+                                if "json" in json_col and "metadata" not in json_col
+                                else "{}",
+                            )
+                        )
+                    except (json.JSONDecodeError, TypeError):
+                        r_dict[field_name] = [] if "metadata" not in field_name else {}
+                results.append(r_dict)
+            return results

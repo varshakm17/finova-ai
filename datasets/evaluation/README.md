@@ -48,3 +48,4 @@ Each evaluation entry in `retrieval_queries.json` follows this structured schema
 
 > [!NOTE]
 > **Curated Real-World Benchmarks** must be annotated by financial analysts inspecting actual SEC 10-K/10-Q text extracted from the database. When curating real-world entries, set `"dataset_type": "curated"`.
+

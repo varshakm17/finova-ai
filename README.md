@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 07 Retrieval Evaluation Complete](https://img.shields.io/badge/Status-Retrieval%20Eval%20%26%20Reranking%20Active-brightgreen.svg)]()
-[![Tests: 220 Passed](https://img.shields.io/badge/Tests-220%20Passed%20(89%25%20cov)-brightgreen.svg)]()
+[![Status: Session 08 Grounded Financial RAG Complete](https://img.shields.io/badge/Status-Grounded%20RAG%20%26%20LLM%20Active-brightgreen.svg)]()
+[![Tests: 257 Passed](https://img.shields.io/badge/Tests-257%20Passed%20(89%25%20cov)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -90,6 +90,8 @@ For detailed architectural specifications, agent definitions, sequence diagrams,
 - [financial-calculation-engine.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/financial-calculation-engine.md) — Deterministic financial arithmetic engine, receipts schema, and API specification.
 - [embeddings-and-vector-indexing.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/embeddings-and-vector-indexing.md) — Local sentence embeddings, persistent FAISS/NumPy indexing, and dense semantic search.
 - [hybrid-retrieval.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/hybrid-retrieval.md) — BM25 sparse search, domain-aware financial tokenization, and Reciprocal Rank Fusion (RRF).
+- [retrieval-evaluation-and-evidence-quality.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/retrieval-evaluation-and-evidence-quality.md) — Empirical IR evaluation metrics, cross-encoder reranking, and deterministic evidence quality audits.
+- [grounded-rag-and-llm-integration.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/grounded-rag-and-llm-integration.md) — Local LLM provider integration, multi-modal context building, citation verification, and evidence-grounded financial RAG.
 
 ---
 
@@ -381,6 +383,23 @@ The FastAPI backend exposes interactive Swagger UI at `http://127.0.0.1:8000/doc
 - **Endpoint**: `GET /api/v1/retrieval/reranker/status`
 - **Response**: Model identifier (`cross-encoder/ms-marco-MiniLM-L-6-v2`), initialization state, compute device (`cpu`), batch size, candidate count, and benchmark latency.
 
+### 22. Ask Grounded Financial Research Question
+- **Endpoint**: `POST /api/v1/research/ask`
+- **Body Params**: `question` (string), `ticker` (optional), `filing_type` (optional), `section_identifier` (optional), `top_k` (default 5), `use_reranker` (default true), `include_calculations` (default true), `response_style` (`detailed`, `concise`, `bullet_points`)
+- **Response**: Complete evidence-grounded answer (`RAGAnswer`) with verified citations (`[E1]`, `[C1]`), retrieved statutory filing passages, deterministic calculation receipts, active model/provider info, generation latency, and status (`answered`, `partially_supported`, `insufficient_evidence`, `provider_unavailable`).
+
+### 23. Get Stored Research Answer
+- **Endpoint**: `GET /api/v1/research/answers/{answer_id}`
+- **Response**: Stored research answer and its complete provenance trail from SQLite.
+
+### 24. Get LLM Provider Status
+- **Endpoint**: `GET /api/v1/llm/status`
+- **Response**: Configured provider, active model, reachability/health check, base URL, timeout, temperature, max tokens, and context window.
+
+### 25. Get RAG System Capabilities
+- **Endpoint**: `GET /api/v1/research/capabilities`
+- **Response**: Supported retrieval modes, reranker availability, calculation engine integration status, citation verification status, and provider readiness.
+
 ---
 
 ## 9. Windows Installation & Execution
@@ -468,16 +487,23 @@ pytest -v --cov=backend --cov=config
 - [x] Query-level evidence report generator assembling LLM-ready evidence briefs (`backend/evaluation/evidence_report.py`).
 - [x] FastAPI evaluation, comparison, evidence validation, and reranker status endpoints (`backend/api/routes.py`).
 - [x] Dedicated Streamlit Retrieval Evaluation & Evidence Quality workspace with method comparison, query inspector, reranker benchmark, and evidence auditor (`frontend/app.py`).
-- [x] Automated test suite with 220 unit and integration tests passing offline with 89% coverage (`tests/`).
+- [x] Vendor-agnostic LLM provider abstraction supporting local Ollama (`qwen2.5:3b`) and offline mock test provider (`backend/llm/llm_provider.py`, `backend/llm/ollama_provider.py`).
+- [x] Multi-modal evidence context builder integrating hybrid search, cross-encoder reranking, and deterministic XBRL calculation receipts with budget pruning (`backend/rag/context_builder.py`).
+- [x] Regulatory anti-hallucination prompt architecture enforcing bracketed citations (`[E1]`, `[C1]`), period awareness, and no investment advice (`backend/rag/prompt_templates.py`).
+- [x] Automated citation validator and provenance auditor mapping claims to verified statutory SEC EDGAR URLs and detecting unsupported claims (`backend/rag/citation_validator.py`).
+- [x] RAG orchestration service with insufficient evidence detection, offline provider fallbacks, and SQLite `research_answers` persistence (`backend/rag/rag_service.py`).
+- [x] 4 FastAPI REST routes for grounded research questions, stored answer retrieval, LLM diagnostics, and RAG capabilities (`backend/api/routes.py`).
+- [x] Dedicated Streamlit "Financial Research Assistant" workspace with live provider diagnostics, citation badges, and evidence inspection (`frontend/app.py`).
+- [x] Automated test suite with 257 unit and integration tests passing offline with 89% overall coverage and 92% coverage on RAG/LLM modules (`tests/`).
 
 ---
 
 ## 11. Future Development Roadmap
 
-- **Session 08: LangGraph Multi-Agent Orchestration & Anti-Hallucination Verification**
+- **Session 09: LangGraph Multi-Agent Orchestration & Anti-Hallucination Verification**
   - 6-agent cooperative state graph with Supervisor, Research, Analyst, Calculation, Verification, and Report agents.
   - Bidirectional verification and anti-hallucination fact auditor cross-checking math and text against SEC citations.
-- **Session 09: Production UI & Full Report Generation**
+- **Session 10: Production UI & Full Report Generation**
   - Interactive multi-agent financial workspace.
   - Exportable PDF research briefs with source citations and audit receipts.
 

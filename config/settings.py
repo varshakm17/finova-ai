@@ -207,6 +207,48 @@ class Settings(BaseSettings):
         description="Enable deterministic evidence provenance and duplicate validation",
     )
 
+    # LLM Provider & Evidence-Grounded Financial RAG (Session 08)
+    LLM_PROVIDER: str = Field(
+        default="ollama",
+        description="Configured LLM provider ('ollama' or mock/custom)",
+    )
+    OLLAMA_BASE_URL: str = Field(
+        default="http://localhost:11434",
+        description="Base URL of local Ollama HTTP service",
+    )
+    OLLAMA_MODEL: str = Field(
+        default="qwen2.5:3b",
+        description="Model identifier for Ollama generation (e.g. qwen2.5:3b, llama3.2:3b)",
+    )
+    LLM_REQUEST_TIMEOUT: float = Field(
+        default=60.0,
+        description="Timeout in seconds for LLM generation HTTP requests",
+    )
+    LLM_TEMPERATURE: float = Field(
+        default=0.1,
+        description="Sampling temperature for deterministic, evidence-grounded generation",
+    )
+    LLM_MAX_TOKENS: int = Field(
+        default=1024,
+        description="Maximum generation output tokens",
+    )
+    LLM_CONTEXT_WINDOW: int = Field(
+        default=4096,
+        description="Maximum context window token capacity for prompt assembly",
+    )
+    RAG_DEFAULT_TOP_K: int = Field(
+        default=5,
+        description="Default number of evidence passages retrieved for RAG context",
+    )
+    RAG_MINIMUM_EVIDENCE: int = Field(
+        default=1,
+        description="Minimum number of valid evidence passages required to attempt answer generation",
+    )
+    RAG_MAX_CONTEXT_CHARACTERS: int = Field(
+        default=12000,
+        description="Maximum total character length of context text sent to LLM",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:
