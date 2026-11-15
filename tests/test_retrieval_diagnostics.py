@@ -135,3 +135,4 @@ def test_synthetic_benchmark_runner() -> None:
         assert "query_id" in b
         assert "matching_expected_section_count" in b
         assert "jaccard_overlap" in b
+

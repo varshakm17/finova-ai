@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 06 Hybrid Retrieval Complete](https://img.shields.io/badge/Status-BM25%20%26%20Hybrid%20RRF%20Active-brightgreen.svg)]()
-[![Tests: 184 Passed](https://img.shields.io/badge/Tests-184%20Passed%20(90%25%20cov)-brightgreen.svg)]()
+[![Status: Session 07 Retrieval Evaluation Complete](https://img.shields.io/badge/Status-Retrieval%20Eval%20%26%20Reranking%20Active-brightgreen.svg)]()
+[![Tests: 220 Passed](https://img.shields.io/badge/Tests-220%20Passed%20(89%25%20cov)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -358,6 +358,29 @@ The FastAPI backend exposes interactive Swagger UI at `http://127.0.0.1:8000/doc
 - **Endpoint**: `GET /api/v1/index/bm25/stats`
 - **Response**: Total chunks, tokenizer version, vocabulary size, average document length, and indexed tickers.
 
+### 17. Run Retrieval Evaluation
+- **Endpoint**: `POST /api/v1/evaluation/retrieval/run`
+- **Body Params**: `dataset_path` (optional), `retrieval_method` (`dense`, `sparse`, `hybrid`, `hybrid_reranked`), `top_k` (default 5), `rerank` (boolean), `ticker_filter` (optional)
+- **Response**: Complete evaluation report with macro/micro Precision@K, Recall@K, Recall@5/10/20, MRR, MAP, NDCG@K, Coverage, and per-query metric records.
+
+### 18. Compare Retrieval Methods
+- **Endpoint**: `POST /api/v1/evaluation/retrieval/compare`
+- **Body Params**: `dataset_path` (optional), `top_k` (default 5), `include_reranking` (boolean), `ticker_filter` (optional)
+- **Response**: Multi-method benchmark comparing Dense, Sparse, Hybrid, and Reranked search with relative performance deltas and per-query comparisons.
+
+### 19. Validate Evidence Quality
+- **Endpoint**: `POST /api/v1/evaluation/evidence/validate`
+- **Body Params**: `query` (optional string), `chunk_ids` (optional list), `retrieval_method` (default `hybrid`), `top_k` (default 5)
+- **Response**: Provenance completeness audit, official SEC EDGAR domain verification, duplicate cluster detection, and multi-period reporting divergence warnings.
+
+### 20. Retrieve Evaluation Report by ID
+- **Endpoint**: `GET /api/v1/evaluation/retrieval/reports/{report_id}`
+- **Response**: Previously generated retrieval evaluation report.
+
+### 21. Check Cross-Encoder Reranker Status
+- **Endpoint**: `GET /api/v1/retrieval/reranker/status`
+- **Response**: Model identifier (`cross-encoder/ms-marco-MiniLM-L-6-v2`), initialization state, compute device (`cpu`), batch size, candidate count, and benchmark latency.
+
 ---
 
 ## 9. Windows Installation & Execution
@@ -437,16 +460,24 @@ pytest -v --cov=backend --cov=config
 - [x] REST endpoints for BM25 indexing, status, lexical search, hybrid RRF search, and sparse stats (`backend/api/routes.py`).
 - [x] Multi-modal Streamlit search workspace supporting Hybrid (RRF), Dense, and BM25 modes with diagnostic metrics (`frontend/app.py`).
 - [x] Diagnostic evaluation suite analyzing candidate overlap, Jaccard similarity, rank shifts, and synthetic benchmark suite (`backend/evaluation/retrieval_diagnostics.py`).
-- [x] Automated test suite with 184 unit and integration tests passing offline with 90% coverage (`tests/`).
+- [x] Structured retrieval evaluation dataset format and synthetic test fixtures (`datasets/evaluation/retrieval_queries.json`).
+- [x] Pure deterministic IR metrics calculation engine: Precision@K, Recall@K, Recall@5/10/20, MRR, MAP, NDCG@K, Coverage (`backend/evaluation/retrieval_evaluator.py`).
+- [x] Fair multi-retriever comparative benchmark comparing Dense, Sparse, Hybrid, and Reranked search with relative deltas (`backend/evaluation/retrieval_comparison.py`).
+- [x] Lightweight CPU cross-encoder reranking layer (`cross-encoder/ms-marco-MiniLM-L-6-v2`) with lazy loading and provenance preservation (`backend/retrieval/reranker.py`).
+- [x] Deterministic evidence quality validator checking statutory provenance, official SEC domains, duplicate passages, and multi-period divergence (`backend/evaluation/evidence_validator.py`).
+- [x] Query-level evidence report generator assembling LLM-ready evidence briefs (`backend/evaluation/evidence_report.py`).
+- [x] FastAPI evaluation, comparison, evidence validation, and reranker status endpoints (`backend/api/routes.py`).
+- [x] Dedicated Streamlit Retrieval Evaluation & Evidence Quality workspace with method comparison, query inspector, reranker benchmark, and evidence auditor (`frontend/app.py`).
+- [x] Automated test suite with 220 unit and integration tests passing offline with 89% coverage (`tests/`).
 
 ---
 
 ## 11. Future Development Roadmap
 
-- **Session 07: LangGraph Multi-Agent Orchestration & Anti-Hallucination Verification**
+- **Session 08: LangGraph Multi-Agent Orchestration & Anti-Hallucination Verification**
   - 6-agent cooperative state graph with Supervisor, Research, Analyst, Calculation, Verification, and Report agents.
   - Bidirectional verification and anti-hallucination fact auditor cross-checking math and text against SEC citations.
-- **Session 08: Production UI & Full Report Generation**
+- **Session 09: Production UI & Full Report Generation**
   - Interactive multi-agent financial workspace.
   - Exportable PDF research briefs with source citations and audit receipts.
 

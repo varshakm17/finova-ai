@@ -173,6 +173,40 @@ class Settings(BaseSettings):
         description="Default top-k results for hybrid search",
     )
 
+    # Retrieval Evaluation, Cross-Encoder Reranking & Evidence Quality (Session 07)
+    RERANKER_ENABLED: bool = Field(
+        default=True,
+        description="Enable optional cross-encoder reranking stage for hybrid retrieval candidates",
+    )
+    RERANKER_MODEL_NAME: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        description="Pretrained cross-encoder model identifier for candidate reranking",
+    )
+    RERANKER_DEVICE: str = Field(
+        default="cpu",
+        description="Compute device for cross-encoder reranking inference (cpu explicitly)",
+    )
+    RERANKER_BATCH_SIZE: int = Field(
+        default=16,
+        description="Batch size for cross-encoder inference scoring",
+    )
+    RERANKER_CANDIDATE_COUNT: int = Field(
+        default=25,
+        description="Number of fused hybrid candidates to feed into the cross-encoder reranker",
+    )
+    RETRIEVAL_EVALUATION_DATASET: str = Field(
+        default="datasets/evaluation/retrieval_queries.json",
+        description="Default path to curated retrieval evaluation query dataset",
+    )
+    RETRIEVAL_EVALUATION_TOP_K: int = Field(
+        default=5,
+        description="Default top-k cutoff rank for standard IR evaluation metrics",
+    )
+    EVIDENCE_VALIDATION_ENABLED: bool = Field(
+        default=True,
+        description="Enable deterministic evidence provenance and duplicate validation",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -550,3 +550,465 @@ class HybridSearchResponse(BaseModel):
         default_factory=list,
         description="Diagnostic warnings or degraded-mode notifications",
     )
+
+
+# ==============================================================================
+# Cross-Encoder Reranking Models (Session 07)
+# ==============================================================================
+
+
+class RerankedSearchResult(BaseModel):
+    """Document chunk result after cross-encoder reranking, preserving provenance."""
+
+    chunk_id: str = Field(..., description="Unique persistent chunk identifier")
+    ticker: str = Field(..., description="Normalized company ticker symbol")
+    company_name: str = Field(..., description="Official registered company title")
+    cik: str = Field(..., description="10-digit zero-padded CIK number")
+    filing_type: str = Field(..., description="Filing type (e.g. '10-K', '10-Q')")
+    filing_date: str = Field(..., description="Filing submission date (YYYY-MM-DD)")
+    report_date: str | None = Field(
+        default=None,
+        description="Filing period end date (YYYY-MM-DD)",
+    )
+    accession_number: str = Field(..., description="SEC EDGAR accession number")
+    section_identifier: str = Field(
+        ...,
+        description="Canonical section identifier (e.g. 'ITEM_1A', 'ITEM_7')",
+    )
+    section_title: str = Field(..., description="Human-readable section title")
+    chunk_text: str = Field(..., description="Original raw text of the chunk")
+    source_url: str = Field(..., description="Direct URL to filing on SEC EDGAR")
+    original_rank: int = Field(
+        ...,
+        description="Original 1-based rank from initial retriever (e.g. hybrid RRF rank)",
+    )
+    rerank_rank: int = Field(
+        ...,
+        description="Final 1-based rank after cross-encoder reranking",
+    )
+    rerank_score: float = Field(
+        ...,
+        description="Relevance score assigned by the cross-encoder model",
+    )
+    original_dense_rank: int | None = Field(
+        default=None,
+        description="1-based rank in dense search, if retrieved by dense",
+    )
+    original_dense_score: float | None = Field(
+        default=None,
+        description="Dense cosine similarity score, if available",
+    )
+    original_sparse_rank: int | None = Field(
+        default=None,
+        description="1-based rank in sparse search, if retrieved by sparse",
+    )
+    original_bm25_score: float | None = Field(
+        default=None,
+        description="BM25 lexical score, if available",
+    )
+    original_rrf_score: float | None = Field(
+        default=None,
+        description="RRF score prior to reranking",
+    )
+    retrieval_sources: list[str] = Field(
+        default_factory=list,
+        description="Retriever components that discovered this chunk",
+    )
+
+
+class RerankerStatusResponse(BaseModel):
+    """Operational status and configuration of the cross-encoder reranker."""
+
+    enabled: bool = Field(
+        ..., description="Whether reranking is enabled in configuration"
+    )
+    model_name: str = Field(..., description="Name or path of the cross-encoder model")
+    device: str = Field(..., description="Compute device ('cpu' or 'cuda')")
+    batch_size: int = Field(
+        ..., description="Candidate batch size for reranker scoring"
+    )
+    candidate_count: int = Field(
+        ..., description="Number of candidate chunks sent for reranking"
+    )
+    initialized: bool = Field(
+        ..., description="Whether model weights are loaded in memory"
+    )
+    is_available: bool = Field(
+        ..., description="Whether reranker is ready to process queries"
+    )
+    benchmarked: bool = Field(
+        default=False,
+        description="Whether CPU inference benchmark has run in this session",
+    )
+    last_benchmark_latency_ms: float | None = Field(
+        default=None,
+        description="Measured inference latency for candidate batch (milliseconds)",
+    )
+    message: str | None = Field(
+        default=None,
+        description="Status message or warning if degraded/unavailable",
+    )
+
+
+# ==============================================================================
+# Retrieval Evaluation & Comparison Models (Session 07)
+# ==============================================================================
+
+
+class EvaluationQuery(BaseModel):
+    """Schema for an individual evaluation query with ground-truth relevant chunks."""
+
+    query_id: str = Field(..., description="Unique evaluation query identifier")
+    query: str = Field(..., description="Natural language search query")
+    ticker: str | None = Field(default=None, description="Optional ticker filter")
+    filing_type: str | None = Field(
+        default=None, description="Optional filing type filter"
+    )
+    section_identifier: str | None = Field(
+        default=None, description="Optional section filter"
+    )
+    relevant_chunk_ids: list[str] = Field(
+        default_factory=list,
+        description="List of known relevant chunk IDs",
+    )
+    relevance_grades: dict[str, int] = Field(
+        default_factory=dict,
+        description="Optional mapping from chunk_id to integer grade (0=unrelated, 1=partial, 2=exact)",
+    )
+    dataset_type: str = Field(
+        default="synthetic",
+        description="'synthetic' fixture or 'curated' human financial analyst judgment",
+    )
+    notes: str | None = Field(
+        default=None, description="Annotation rationale or context"
+    )
+
+
+class RetrievalEvaluationRequest(BaseModel):
+    """Request payload to execute retrieval evaluation on a benchmark dataset."""
+
+    dataset_path: str | None = Field(
+        default=None,
+        description="Path to evaluation JSON dataset (defaults to configured setting)",
+    )
+    retrieval_method: Literal["dense", "sparse", "hybrid", "hybrid_reranked"] = Field(
+        default="hybrid",
+        description="Retrieval method to evaluate",
+    )
+    top_k: int = Field(
+        default=5, ge=1, le=50, description="Cutoff rank for metrics evaluation"
+    )
+    rerank: bool = Field(
+        default=False, description="Whether to apply cross-encoder reranking"
+    )
+    ticker_filter: str | None = Field(
+        default=None,
+        description="Optional ticker symbol to restrict evaluation queries to",
+    )
+
+
+class PerQueryMetric(BaseModel):
+    """Deterministic evaluation metrics for a single query."""
+
+    query_id: str = Field(..., description="Evaluation query identifier")
+    query: str = Field(..., description="Query text evaluated")
+    expected_relevant_count: int = Field(
+        ..., description="Count of known relevant chunks"
+    )
+    retrieved_count: int = Field(
+        ..., description="Number of results returned by retriever"
+    )
+    relevant_retrieved_count: int = Field(
+        ..., description="Relevant results found in top-k"
+    )
+    precision_at_k: float = Field(..., description="Precision at cutoff k")
+    recall_at_k: float = Field(..., description="Recall at cutoff k")
+    reciprocal_rank: float = Field(
+        ..., description="Reciprocal rank of first relevant chunk (1/rank)"
+    )
+    average_precision: float = Field(
+        ..., description="Average precision for this query"
+    )
+    ndcg_at_k: float = Field(
+        ..., description="Normalized Discounted Cumulative Gain at cutoff k"
+    )
+    retrieved_chunk_ids: list[str] = Field(
+        default_factory=list, description="IDs of chunks retrieved"
+    )
+    latency_ms: float = Field(
+        default=0.0, description="Query execution time in milliseconds"
+    )
+
+
+class RetrievalMetricResult(BaseModel):
+    """Summary of deterministic evaluation metrics across a query dataset."""
+
+    precision_at_k: float = Field(..., description="Macro-averaged Precision@K")
+    recall_at_k: float = Field(..., description="Macro-averaged Recall@K")
+    recall_at_5: float = Field(..., description="Macro-averaged Recall@5")
+    recall_at_10: float = Field(..., description="Macro-averaged Recall@10")
+    recall_at_20: float = Field(..., description="Macro-averaged Recall@20")
+    mrr: float = Field(..., description="Mean Reciprocal Rank (MRR)")
+    map_score: float = Field(..., description="Mean Average Precision (MAP)")
+    ndcg_at_k: float = Field(..., description="Macro-averaged NDCG@K")
+    coverage: float = Field(
+        ..., description="Fraction of queries that returned >= 1 result"
+    )
+    k: int = Field(..., description="Cutoff rank k used for evaluation")
+    evaluated_queries_count: int = Field(
+        ..., description="Total queries successfully evaluated"
+    )
+    skipped_queries_count: int = Field(
+        default=0,
+        description="Queries skipped (e.g. zero ground truth labels)",
+    )
+    macro_precision: float = Field(..., description="Macro-averaged Precision")
+    micro_precision: float = Field(
+        ..., description="Micro-averaged Precision across all results"
+    )
+    macro_recall: float = Field(..., description="Macro-averaged Recall")
+    micro_recall: float = Field(
+        ..., description="Micro-averaged Recall across all results"
+    )
+
+
+class RetrievalEvaluationReport(BaseModel):
+    """Complete evaluation report for a retrieval method over a dataset."""
+
+    report_id: str = Field(..., description="Unique generated report identifier")
+    evaluation_method: str = Field(..., description="Evaluated method name")
+    dataset_identifier: str = Field(
+        ..., description="Identifier or path of evaluation dataset"
+    )
+    dataset_type: str = Field(
+        default="synthetic",
+        description="'synthetic' fixture or 'curated' human financial analyst judgment",
+    )
+    metrics: RetrievalMetricResult = Field(..., description="Aggregated metric summary")
+    per_query_results: list[PerQueryMetric] = Field(
+        default_factory=list,
+        description="Individual per-query metric records",
+    )
+    execution_time_seconds: float = Field(
+        ..., description="Total evaluation run duration"
+    )
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat(),
+        description="ISO 8601 creation timestamp",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Evaluation warnings or notices",
+    )
+
+
+class RetrievalComparisonRequest(BaseModel):
+    """Request payload to execute fair comparative evaluation across all retrieval methods."""
+
+    dataset_path: str | None = Field(
+        default=None,
+        description="Optional custom path to evaluation dataset JSON",
+    )
+    top_k: int = Field(
+        default=5, ge=1, le=50, description="Common top-k cutoff for all methods"
+    )
+    include_reranking: bool = Field(
+        default=True,
+        description="Whether to include reranked hybrid in the comparative benchmark",
+    )
+    ticker_filter: str | None = Field(
+        default=None,
+        description="Optional ticker symbol to restrict comparison to",
+    )
+
+
+class MethodComparisonSummary(BaseModel):
+    """Metric summary for an individual retrieval method within a comparative benchmark."""
+
+    method: str = Field(
+        ..., description="Method name: dense, sparse, hybrid, or hybrid_reranked"
+    )
+    precision_at_k: float = Field(..., description="Precision at cutoff k")
+    recall_at_k: float = Field(..., description="Recall at cutoff k")
+    mrr: float = Field(..., description="Mean Reciprocal Rank")
+    map_score: float = Field(..., description="Mean Average Precision")
+    ndcg_at_k: float = Field(..., description="NDCG at cutoff k")
+    coverage: float = Field(..., description="Result coverage ratio")
+    avg_latency_ms: float = Field(
+        ..., description="Average query latency in milliseconds"
+    )
+
+
+class RetrievalComparisonResponse(BaseModel):
+    """Fair comparative evaluation report across dense, sparse, hybrid, and reranked retrieval."""
+
+    dataset_identifier: str = Field(..., description="Evaluation dataset identifier")
+    total_queries: int = Field(..., description="Total queries evaluated")
+    top_k: int = Field(..., description="Evaluation rank cutoff k")
+    methods_evaluated: list[str] = Field(
+        ..., description="List of retrieval methods benchmarked"
+    )
+    method_summaries: dict[str, MethodComparisonSummary] = Field(
+        ...,
+        description="Per-method aggregated metrics",
+    )
+    hybrid_delta_vs_dense: dict[str, float] = Field(
+        ...,
+        description="Relative metric percentage changes of hybrid over dense baseline",
+    )
+    hybrid_delta_vs_sparse: dict[str, float] = Field(
+        ...,
+        description="Relative metric percentage changes of hybrid over sparse baseline",
+    )
+    reranked_delta_vs_hybrid: dict[str, float] | None = Field(
+        default=None,
+        description="Relative metric percentage changes of reranked hybrid over standard hybrid",
+    )
+    per_query_comparisons: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Per-query method ranking breakdowns and overlap",
+    )
+    duration_seconds: float = Field(
+        ..., description="Total benchmark run duration in seconds"
+    )
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat(),
+        description="ISO 8601 creation timestamp",
+    )
+
+
+# ==============================================================================
+# Evidence Quality Validation Models (Session 07)
+# ==============================================================================
+
+
+class EvidenceChunkValidation(BaseModel):
+    """Deterministic validation results for an individual retrieved evidence chunk."""
+
+    chunk_id: str = Field(..., description="Validated chunk identifier")
+    status: Literal[
+        "valid",
+        "incomplete_provenance",
+        "source_mismatch",
+        "possible_duplicate",
+        "temporal_mismatch",
+        "requires_review",
+    ] = Field(..., description="Categorical validation status")
+    warnings: list[str] = Field(
+        default_factory=list, description="Descriptive validation warnings"
+    )
+    provenance_complete: bool = Field(
+        ..., description="Whether all required statutory fields exist"
+    )
+    source_domain_valid: bool = Field(
+        ..., description="Whether source_url is on official SEC domain"
+    )
+    document_matched: bool | None = Field(
+        default=None,
+        description="Whether chunk matches a persistent filing document record in storage",
+    )
+    is_duplicate: bool = Field(
+        default=False,
+        description="Whether this chunk is an exact or near duplicate of another retrieved chunk",
+    )
+    duplicate_of_chunk_id: str | None = Field(
+        default=None,
+        description="ID of the earlier chunk this chunk duplicates",
+    )
+    reporting_period: str | None = Field(
+        default=None,
+        description="Extracted financial period (e.g. '2023-09-30')",
+    )
+    filing_date: str | None = Field(
+        default=None,
+        description="Filing submission date (e.g. '2023-11-03')",
+    )
+    source_url: str = Field(..., description="Direct SEC EDGAR source link")
+
+
+class EvidenceValidationRequest(BaseModel):
+    """Request payload to validate retrieved evidence chunks."""
+
+    chunk_ids: list[str] = Field(
+        default_factory=list,
+        description="List of specific chunk IDs to validate against storage",
+    )
+    query: str | None = Field(
+        default=None,
+        description="Optional search query to retrieve and validate fresh results for",
+    )
+    retrieval_method: str = Field(
+        default="hybrid",
+        description="Retrieval method to execute if query is provided ('dense', 'sparse', 'hybrid')",
+    )
+    top_k: int = Field(
+        default=5, ge=1, le=50, description="Top-k chunks to retrieve and validate"
+    )
+
+
+class EvidenceValidationResult(BaseModel):
+    """Summary of deterministic evidence quality inspection across retrieved chunks."""
+
+    total_chunks_inspected: int = Field(
+        ..., description="Number of evidence chunks analyzed"
+    )
+    valid_count: int = Field(
+        ..., description="Count of chunks meeting all provenance standards"
+    )
+    warning_count: int = Field(
+        ..., description="Count of chunks raising warnings or reviews"
+    )
+    overall_status: Literal["valid", "requires_review", "invalid"] = Field(
+        ...,
+        description="Overall quality classification for the retrieved evidence set",
+    )
+    chunk_validations: list[EvidenceChunkValidation] = Field(
+        default_factory=list,
+        description="Per-chunk validation records",
+    )
+    distinct_reporting_periods: list[str] = Field(
+        default_factory=list,
+        description="Unique financial reporting periods detected among evidence chunks",
+    )
+    duplicate_clusters: list[list[str]] = Field(
+        default_factory=list,
+        description="Clusters of duplicate or highly overlapping chunk IDs",
+    )
+    summary_notes: list[str] = Field(
+        default_factory=list,
+        description="High-level audit findings and recommendations",
+    )
+
+
+class EvidenceReport(BaseModel):
+    """LLM-ready structured evidence brief consolidating retrieved chunks and provenance."""
+
+    report_id: str = Field(..., description="Unique evidence report identifier")
+    query: str = Field(..., description="Target financial research query")
+    retrieval_method: str = Field(..., description="Retrieval method utilized")
+    reranker_applied: bool = Field(
+        default=False, description="Whether reranking was executed"
+    )
+    reranker_model: str | None = Field(
+        default=None, description="Active cross-encoder model"
+    )
+    ranked_candidates: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Ranked candidate chunks with provenance, scores, and validation status",
+    )
+    validation_summary: EvidenceValidationResult = Field(
+        ...,
+        description="Evidence quality validation summary",
+    )
+    distinct_periods: list[str] = Field(
+        default_factory=list,
+        description="Unique financial periods represented in evidence",
+    )
+    sec_source_links: list[str] = Field(
+        default_factory=list,
+        description="Verified SEC EDGAR direct links for citation",
+    )
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat(),
+        description="ISO 8601 timestamp",
+    )

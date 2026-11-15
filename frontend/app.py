@@ -190,6 +190,7 @@ def main() -> None:
                 "Overview",
                 "Company Lookup & Ingestion (SEC)",
                 "Hybrid Research Search (RRF)",
+                "Retrieval Evaluation & Evidence Quality",
                 "Research Workspace (Preview)",
                 "Agent Architecture",
                 "Configuration",
@@ -1572,7 +1573,398 @@ def main() -> None:
             )
 
     # -------------------------------------------------------------------------
-    # View 4: Agent Architecture
+    # View 4: Retrieval Evaluation & Evidence Quality (Session 07)
+    # -------------------------------------------------------------------------
+    elif nav_selection == "Retrieval Evaluation & Evidence Quality":
+        st.markdown("### ⚖️ Retrieval Evaluation & Evidence Quality Workspace")
+        st.caption(
+            "Quantitative Information Retrieval metrics, cross-encoder reranking latency benchmarks, "
+            "and deterministic evidence provenance validation."
+        )
+
+        st.info(
+            "ℹ️ **Evaluation Note**: Ground-truth datasets contain synthetic relevance fixtures for "
+            "verifying IR metrics (Precision, Recall, MRR, MAP, NDCG). Synthetic benchmark scores measure "
+            "algorithmic mechanics and rank shifts, not human-curated domain expert efficacy."
+        )
+
+        tab_comp, tab_query, tab_rerank, tab_evidence = st.tabs(
+            [
+                "📊 Retrieval Comparison",
+                "🔍 Per-Query Inspector",
+                "⚡ Reranker Benchmark",
+                "🛡️ Evidence Quality Validator",
+            ]
+        )
+
+        # --- Tab 1: Retrieval Comparison ---
+        with tab_comp:
+            st.markdown(
+                "#### Comparative Benchmark (Dense vs. Sparse vs. Hybrid vs. Reranked)"
+            )
+            st.caption(
+                "Fair comparison over identical evaluation queries, filters, and rank cutoffs."
+            )
+
+            c1, c2, c3 = st.columns([1, 1, 1])
+            with c1:
+                eval_top_k = st.slider(
+                    "Evaluation Cutoff (Top-K)",
+                    min_value=1,
+                    max_value=20,
+                    value=5,
+                    step=1,
+                )
+            with c2:
+                include_rerank = st.checkbox(
+                    "Include Cross-Encoder Reranker", value=True
+                )
+            with c3:
+                eval_ticker = st.text_input(
+                    "Ticker Filter (Optional)", value="", placeholder="e.g. AAPL"
+                )
+
+            run_benchmark = st.button("🚀 Run Comparative Benchmark", type="primary")
+
+            if run_benchmark or "last_comparison" in st.session_state:
+                if run_benchmark:
+                    with st.spinner(
+                        "Executing comparative multi-retriever benchmark..."
+                    ):
+                        try:
+                            payload = {
+                                "top_k": eval_top_k,
+                                "include_reranking": include_rerank,
+                                "ticker_filter": eval_ticker.strip().upper()
+                                if eval_ticker.strip()
+                                else None,
+                            }
+                            resp = httpx.post(
+                                f"{backend_url}/api/v1/evaluation/retrieval/compare",
+                                json=payload,
+                                timeout=60.0,
+                            )
+                            if resp.status_code == 200:
+                                st.session_state["last_comparison"] = resp.json()
+                            else:
+                                st.error(
+                                    f"Benchmark error ({resp.status_code}): {resp.text}"
+                                )
+                        except Exception as exc:
+                            st.error(f"Failed to connect to backend: {exc}")
+
+                comp_data = st.session_state.get("last_comparison")
+                if comp_data:
+                    st.success(
+                        f"Benchmark completed in {comp_data.get('duration_seconds', 0.0):.2f}s "
+                        f"across {comp_data.get('total_queries', 0)} queries (Top-{comp_data.get('top_k', 5)})."
+                    )
+
+                    summaries = comp_data.get("method_summaries", {})
+                    if summaries:
+                        table_rows = []
+                        for method_name, m in summaries.items():
+                            table_rows.append(
+                                {
+                                    "Retriever Method": method_name.upper().replace(
+                                        "_", " "
+                                    ),
+                                    "Precision@K": f"{m.get('precision_at_k', 0.0):.4f}",
+                                    "Recall@K": f"{m.get('recall_at_k', 0.0):.4f}",
+                                    "MRR": f"{m.get('mrr', 0.0):.4f}",
+                                    "MAP": f"{m.get('map_score', 0.0):.4f}",
+                                    "NDCG@K": f"{m.get('ndcg_at_k', 0.0):.4f}",
+                                    "Coverage": f"{m.get('coverage', 0.0) * 100:.1f}%",
+                                    "Avg Latency (ms)": f"{m.get('avg_latency_ms', 0.0):.1f} ms",
+                                }
+                            )
+                        st.table(table_rows)
+
+                        # Delta Callouts
+                        d_col1, d_col2, d_col3 = st.columns(3)
+                        delta_den = comp_data.get("hybrid_delta_vs_dense", {})
+                        delta_spa = comp_data.get("hybrid_delta_vs_sparse", {})
+                        delta_rr = comp_data.get("reranked_delta_vs_hybrid", {})
+
+                        with d_col1:
+                            st.markdown(
+                                f"""
+                                <div class="card">
+                                    <div class="metric-label">Hybrid vs. Dense Baseline</div>
+                                    <div class="metric-value">{delta_den.get("ndcg_delta_pct", 0.0):+.1f}%</div>
+                                    <p style="color: #94A3B8; font-size: 0.85rem; margin-top: 0.3rem;">
+                                        NDCG shift: {delta_den.get("ndcg_delta_pct", 0.0):+.1f}% | Recall: {delta_den.get("recall_delta_pct", 0.0):+.1f}%
+                                    </p>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        with d_col2:
+                            st.markdown(
+                                f"""
+                                <div class="card">
+                                    <div class="metric-label">Hybrid vs. Sparse BM25</div>
+                                    <div class="metric-value">{delta_spa.get("ndcg_delta_pct", 0.0):+.1f}%</div>
+                                    <p style="color: #94A3B8; font-size: 0.85rem; margin-top: 0.3rem;">
+                                        NDCG shift: {delta_spa.get("ndcg_delta_pct", 0.0):+.1f}% | Recall: {delta_spa.get("recall_delta_pct", 0.0):+.1f}%
+                                    </p>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        with d_col3:
+                            if delta_rr:
+                                st.markdown(
+                                    f"""
+                                    <div class="card">
+                                        <div class="metric-label">Reranked vs. Hybrid</div>
+                                        <div class="metric-value">{delta_rr.get("ndcg_delta_pct", 0.0):+.1f}%</div>
+                                        <p style="color: #94A3B8; font-size: 0.85rem; margin-top: 0.3rem;">
+                                            NDCG shift: {delta_rr.get("ndcg_delta_pct", 0.0):+.1f}% | MRR: {delta_rr.get("mrr_delta_pct", 0.0):+.1f}%
+                                        </p>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+                            else:
+                                st.markdown(
+                                    """
+                                    <div class="card">
+                                        <div class="metric-label">Reranker Status</div>
+                                        <div class="metric-value">Not Evaluated</div>
+                                        <p style="color: #94A3B8; font-size: 0.85rem; margin-top: 0.3rem;">
+                                            Reranking was disabled or unavailable for this run.
+                                        </p>
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+
+        # --- Tab 2: Per-Query Inspector ---
+        with tab_query:
+            st.markdown("#### Per-Query Breakdown & Retrieval Positions")
+            st.caption(
+                "Inspect how individual queries perform across candidate selection and rank fusion."
+            )
+
+            comp_data = st.session_state.get("last_comparison")
+            if comp_data and "per_query_comparisons" in comp_data:
+                pq_list = comp_data["per_query_comparisons"]
+                query_labels = [
+                    f"{q['query_id']} — {q['query'][:60]}..." for q in pq_list
+                ]
+                sel_idx = st.selectbox(
+                    "Select Query to Inspect",
+                    range(len(query_labels)),
+                    format_func=lambda i: query_labels[i],
+                )
+
+                sel_q = pq_list[sel_idx]
+                st.markdown(
+                    f"**Query ID**: `{sel_q['query_id']}` | **Ticker**: `{sel_q.get('ticker') or 'Global'}` | **Section**: `{sel_q.get('section') or 'All'}`"
+                )
+                st.markdown(f'> *"{sel_q["query"]}"*')
+
+                qcol1, qcol2, qcol3, qcol4 = st.columns(4)
+                with qcol1:
+                    st.metric(
+                        "Dense Precision@K", f"{sel_q.get('dense_precision', 0.0):.2f}"
+                    )
+                with qcol2:
+                    st.metric(
+                        "Sparse Precision@K",
+                        f"{sel_q.get('sparse_precision', 0.0):.2f}",
+                    )
+                with qcol3:
+                    st.metric(
+                        "Hybrid Precision@K",
+                        f"{sel_q.get('hybrid_precision', 0.0):.2f}",
+                    )
+                with qcol4:
+                    st.metric("Hybrid NDCG@K", f"{sel_q.get('hybrid_ndcg', 0.0):.2f}")
+
+                st.markdown("**Per-Query Comparison Data:**")
+                st.json(sel_q)
+            else:
+                st.info(
+                    "Run the Comparative Benchmark in Tab 1 first to populate per-query metrics."
+                )
+
+        # --- Tab 3: Reranker Benchmark ---
+        with tab_rerank:
+            st.markdown("#### Cross-Encoder Reranker Status & Latency Benchmark")
+            st.caption("Evaluates CPU inference latency and model configuration.")
+
+            try:
+                r_status_resp = httpx.get(
+                    f"{backend_url}/api/v1/retrieval/reranker/status", timeout=5.0
+                )
+                if r_status_resp.status_code == 200:
+                    r_status = r_status_resp.json()
+                    r1, r2, r3, r4 = st.columns(4)
+                    with r1:
+                        st.metric("Enabled", "Yes" if r_status.get("enabled") else "No")
+                    with r2:
+                        st.metric(
+                            "Initialized",
+                            "Yes" if r_status.get("initialized") else "No (Lazy)",
+                        )
+                    with r3:
+                        st.metric(
+                            "Compute Device", r_status.get("device", "cpu").upper()
+                        )
+                    with r4:
+                        st.metric("Batch Size", str(r_status.get("batch_size", 16)))
+
+                    st.markdown(f"**Configured Model**: `{r_status.get('model_name')}`")
+                    st.markdown(
+                        f"**Status Message**: {r_status.get('message', 'Ready')}"
+                    )
+                else:
+                    st.warning("Could not fetch reranker status from backend.")
+            except Exception as exc:
+                st.warning(f"Backend offline: {exc}")
+
+            st.markdown("---")
+            st.markdown("##### Candidate Over-Fetch & Scoring Mechanics")
+            st.markdown(
+                """
+                - **Candidate Pool**: Hybrid RRF retrieves top 25-50 candidates from combined dense and sparse lists.
+                - **Pair Scoring**: `[(query, candidate_chunk_text), ...]` pairs are scored in mini-batches.
+                - **Rank Refinement**: Candidates are sorted descending by cross-encoder score; top-K are returned.
+                - **Provenance Preservation**: Original RRF scores, dense ranks, and sparse ranks are retained.
+                """
+            )
+
+        # --- Tab 4: Evidence Quality Validator ---
+        with tab_evidence:
+            st.markdown("#### Deterministic Evidence Quality & Source Audit")
+            st.caption(
+                "Validates statutory provenance completeness, SEC archive domains, duplicate passages, and reporting periods."
+            )
+
+            e_mode = st.radio(
+                "Audit Input Mode",
+                ["Test by Natural Language Query", "Test by Chunk IDs"],
+                horizontal=True,
+            )
+
+            if e_mode == "Test by Natural Language Query":
+                ev_query = st.text_input(
+                    "Search Query to Retrieve & Audit",
+                    value="What are Apple's principal supply chain and single source component risks?",
+                )
+                ev_method = st.selectbox(
+                    "Retriever Method", ["hybrid", "dense", "sparse"]
+                )
+                ev_top_k = st.slider("Candidates to Audit", 1, 15, 5)
+
+                if st.button("🛡️ Audit Evidence Set", type="primary"):
+                    with st.spinner(
+                        "Retrieving candidates and auditing evidence provenance..."
+                    ):
+                        try:
+                            ev_payload = {
+                                "query": ev_query,
+                                "retrieval_method": ev_method,
+                                "top_k": ev_top_k,
+                            }
+                            ev_resp = httpx.post(
+                                f"{backend_url}/api/v1/evaluation/evidence/validate",
+                                json=ev_payload,
+                                timeout=30.0,
+                            )
+                            if ev_resp.status_code == 200:
+                                st.session_state["last_evidence_val"] = ev_resp.json()
+                            else:
+                                st.error(
+                                    f"Validation error ({ev_resp.status_code}): {ev_resp.text}"
+                                )
+                        except Exception as exc:
+                            st.error(f"Failed to connect to backend: {exc}")
+
+            else:
+                chunk_ids_raw = st.text_area(
+                    "Enter Chunk IDs (one per line)",
+                    value="0000320193_000032019323000106_ITEM_1A_0001\n0000320193_000032019323000106_ITEM_1A_0002",
+                )
+                if st.button("🛡️ Audit Chunk IDs", type="primary"):
+                    c_ids = [
+                        line.strip()
+                        for line in chunk_ids_raw.splitlines()
+                        if line.strip()
+                    ]
+                    with st.spinner("Auditing chunk IDs against document storage..."):
+                        try:
+                            ev_payload = {"chunk_ids": c_ids}
+                            ev_resp = httpx.post(
+                                f"{backend_url}/api/v1/evaluation/evidence/validate",
+                                json=ev_payload,
+                                timeout=30.0,
+                            )
+                            if ev_resp.status_code == 200:
+                                st.session_state["last_evidence_val"] = ev_resp.json()
+                            else:
+                                st.error(f"Validation error: {ev_resp.text}")
+                        except Exception as exc:
+                            st.error(f"Backend error: {exc}")
+
+            ev_val_data = st.session_state.get("last_evidence_val")
+            if ev_val_data:
+                st.markdown("---")
+                st.markdown("##### Evidence Audit Summary")
+
+                v1, v2, v3, v4 = st.columns(4)
+                with v1:
+                    overall = ev_val_data.get("overall_status", "valid").upper()
+                    st.metric("Audit Status", overall)
+                with v2:
+                    st.metric(
+                        "Total Inspected",
+                        str(ev_val_data.get("total_chunks_inspected", 0)),
+                    )
+                with v3:
+                    st.metric("Fully Valid", str(ev_val_data.get("valid_count", 0)))
+                with v4:
+                    st.metric(
+                        "Warnings Raised", str(ev_val_data.get("warning_count", 0))
+                    )
+
+                # Notes and Temporal alerts
+                notes = ev_val_data.get("summary_notes", [])
+                for note in notes:
+                    if "Multi-period" in note:
+                        st.warning(f"⚠️ {note}")
+                    else:
+                        st.info(f"ℹ️ {note}")
+
+                # Per-Chunk audit table
+                chunk_vals = ev_val_data.get("chunk_validations", [])
+                if chunk_vals:
+                    st.markdown("##### Per-Chunk Provenance Findings")
+                    audit_rows = []
+                    for cv in chunk_vals:
+                        audit_rows.append(
+                            {
+                                "Chunk ID": cv.get("chunk_id"),
+                                "Status": cv.get("status"),
+                                "Provenance Complete": "✅"
+                                if cv.get("provenance_complete")
+                                else "❌",
+                                "SEC Domain Whitelist": "✅"
+                                if cv.get("source_domain_valid")
+                                else "❌",
+                                "Is Duplicate": "⚠️ Yes"
+                                if cv.get("is_duplicate")
+                                else "No",
+                                "Reporting Period": cv.get("reporting_period") or "N/A",
+                                "Warnings": "; ".join(cv.get("warnings", [])) or "None",
+                            }
+                        )
+                    st.table(audit_rows)
+
+    # -------------------------------------------------------------------------
+    # View 5: Agent Architecture
     # -------------------------------------------------------------------------
     elif nav_selection == "Agent Architecture":
         st.markdown("### 🤖 Multi-Agent Architecture Blueprint")
@@ -1648,6 +2040,15 @@ def main() -> None:
             "Max Document Size": f"{settings.MAX_DOCUMENT_SIZE_BYTES / (1024 * 1024):.0f} MB",
             "Chunk Target Size": f"{settings.CHUNK_TARGET_SIZE} chars",
             "Chunk Overlap": f"{settings.CHUNK_OVERLAP} chars",
+            "Reranker Enabled": "Yes" if settings.RERANKER_ENABLED else "No",
+            "Reranker Model": settings.RERANKER_MODEL_NAME,
+            "Reranker Device": settings.RERANKER_DEVICE,
+            "Reranker Batch Size": str(settings.RERANKER_BATCH_SIZE),
+            "Reranker Candidate Count": str(settings.RERANKER_CANDIDATE_COUNT),
+            "Evaluation Dataset": settings.RETRIEVAL_EVALUATION_DATASET,
+            "Evidence Validation Enabled": "Yes"
+            if settings.EVIDENCE_VALIDATION_ENABLED
+            else "No",
         }
 
         st.table([{"Parameter": k, "Value": str(v)} for k, v in config_data.items()])

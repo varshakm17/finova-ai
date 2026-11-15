@@ -312,3 +312,4 @@ Located in `backend/evaluation/retrieval_diagnostics.py`, this suite evaluates m
 - **Exclusive Contribution Metrics**: Quantifies chunks discovered exclusively by dense search vs. exclusively by sparse search.
 - **Rank Shift Analysis**: Tracks how candidate rankings change when moving from individual retriever lists to fused hybrid rank.
 - **Synthetic Query Suite**: 4 standardized SEC disclosure evaluation queries covering risk disclosures, revenue trends, liquidity, and market risks for automated offline regression verification.
+

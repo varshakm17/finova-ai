@@ -1,0 +1,132 @@
+[
+  {
+    "query_id": "EVAL-001",
+    "query": "What are the primary supply chain and component manufacturing risks facing Apple?",
+    "ticker": "AAPL",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_1A",
+    "relevant_chunk_ids": [
+      "0000320193_000032019323000106_ITEM_1A_0001",
+      "0000320193_000032019323000106_ITEM_1A_0002"
+    ],
+    "relevance_grades": {
+      "0000320193_000032019323000106_ITEM_1A_0001": 2,
+      "0000320193_000032019323000106_ITEM_1A_0002": 1
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting Item 1A Risk Factors on outsourced manufacturing dependencies and single-source component risks. Evaluates ranking of supply disruption disclosures."
+  },
+  {
+    "query_id": "EVAL-002",
+    "query": "What factors drove iPhone net sales and services revenue growth year over year?",
+    "ticker": "AAPL",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_7",
+    "relevant_chunk_ids": [
+      "0000320193_000032019323000106_ITEM_7_0001",
+      "0000320193_000032019323000106_ITEM_7_0003"
+    ],
+    "relevance_grades": {
+      "0000320193_000032019323000106_ITEM_7_0001": 2,
+      "0000320193_000032019323000106_ITEM_7_0003": 1
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting Item 7 MD&A segment revenue discussions, product mix shifts, and services gross margins."
+  },
+  {
+    "query_id": "EVAL-003",
+    "query": "What are the company disclosures regarding commercial paper, term debt maturities, and liquidity requirements?",
+    "ticker": "AAPL",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_7",
+    "relevant_chunk_ids": [
+      "0000320193_000032019323000106_ITEM_7_0004",
+      "0000320193_000032019323000106_ITEM_7_0005"
+    ],
+    "relevance_grades": {
+      "0000320193_000032019323000106_ITEM_7_0004": 2,
+      "0000320193_000032019323000106_ITEM_7_0005": 2
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting Item 7 capital resources, working capital facilities, and contractual debt repayment obligations."
+  },
+  {
+    "query_id": "EVAL-004",
+    "query": "Quantitative disclosures about interest rate sensitivity, foreign currency hedges, and market risk exposure",
+    "ticker": "AAPL",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_7A",
+    "relevant_chunk_ids": [
+      "0000320193_000032019323000106_ITEM_7A_0001"
+    ],
+    "relevance_grades": {
+      "0000320193_000032019323000106_ITEM_7A_0001": 2
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting Item 7A quantitative sensitivity models for 100-basis-point interest shifts and foreign currency exchange rate fluctuations."
+  },
+  {
+    "query_id": "EVAL-005",
+    "query": "How does the company describe its principal cloud computing infrastructure, Azure growth, and enterprise software offerings?",
+    "ticker": "MSFT",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_1",
+    "relevant_chunk_ids": [
+      "0000789019_000078901923000010_ITEM_1_0001",
+      "0000789019_000078901923000010_ITEM_1_0002"
+    ],
+    "relevance_grades": {
+      "0000789019_000078901923000010_ITEM_1_0001": 2,
+      "0000789019_000078901923000010_ITEM_1_0002": 1
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting Item 1 Business description covering Microsoft Cloud, Intelligent Cloud segment operations, and commercial software licensing."
+  },
+  {
+    "query_id": "EVAL-006",
+    "query": "Cybersecurity risks, data breaches, and vulnerabilities in IT systems and client privacy protection",
+    "ticker": "MSFT",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_1A",
+    "relevant_chunk_ids": [
+      "0000789019_000078901923000010_ITEM_1A_0003"
+    ],
+    "relevance_grades": {
+      "0000789019_000078901923000010_ITEM_1A_0003": 2
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting Item 1A operational risks related to state-sponsored cyberattacks, cloud service disruptions, and data security compliance."
+  },
+  {
+    "query_id": "EVAL-007",
+    "query": "What are the legal proceedings and regulatory antitrust investigations disclosed by Google Alphabet?",
+    "ticker": "GOOGL",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_1A",
+    "relevant_chunk_ids": [
+      "0001652044_000165204423000016_ITEM_1A_0002"
+    ],
+    "relevance_grades": {
+      "0001652044_000165204423000016_ITEM_1A_0002": 2
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting search distribution agreements, digital advertising scrutiny, and regulatory enforcement proceedings."
+  },
+  {
+    "query_id": "EVAL-008",
+    "query": "Research and development expenditures and technological innovation investments in generative artificial intelligence",
+    "ticker": "GOOGL",
+    "filing_type": "10-K",
+    "section_identifier": "ITEM_7",
+    "relevant_chunk_ids": [
+      "0001652044_000165204423000016_ITEM_7_0002",
+      "0001652044_000165204423000016_ITEM_7_0004"
+    ],
+    "relevance_grades": {
+      "0001652044_000165204423000016_ITEM_7_0002": 2,
+      "0001652044_000165204423000016_ITEM_7_0004": 1
+    },
+    "dataset_type": "synthetic",
+    "notes": "Synthetic fixture targeting Item 7 operating expense drivers, technical infrastructure depreciation, and R&D staffing outlays."
+  }
+]

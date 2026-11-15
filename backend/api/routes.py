@@ -4,6 +4,8 @@ Provides health diagnostics, company identity resolution, filing discovery,
 financial observations, and SEC filing document ingestion & chunking.
 """
 
+import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -21,6 +23,10 @@ from backend.data.sec_client import (
     SECRateLimitError,
 )
 from backend.data.storage import Database
+from backend.evaluation.evidence_report import EvidenceReportGenerator
+from backend.evaluation.evidence_validator import EvidenceQualityValidator
+from backend.evaluation.retrieval_comparison import RetrievalComparator
+from backend.evaluation.retrieval_evaluator import RetrievalEvaluator
 from backend.finance.calculation_models import (
     CalculationReceipt,
     CalculationSummaryResponse,
@@ -34,6 +40,7 @@ from backend.retrieval.bm25_indexing_service import BM25IndexingService
 from backend.retrieval.bm25_search import BM25SearchService
 from backend.retrieval.hybrid_search import HybridSearchService
 from backend.retrieval.indexing_service import IndexingService
+from backend.retrieval.reranker import CrossEncoderReranker
 from backend.retrieval.retrieval_models import (
     BM25IndexingRequest,
     BM25IndexingSummary,
@@ -42,11 +49,18 @@ from backend.retrieval.retrieval_models import (
     BM25SearchRequest,
     BM25SearchResult,
     EmbeddingStatusResponse,
+    EvidenceValidationRequest,
+    EvidenceValidationResult,
     HybridSearchRequest,
     HybridSearchResponse,
     IndexingRequest,
     IndexingSummary,
     IndexStatsResponse,
+    RerankerStatusResponse,
+    RetrievalComparisonRequest,
+    RetrievalComparisonResponse,
+    RetrievalEvaluationReport,
+    RetrievalEvaluationRequest,
     SemanticSearchRequest,
     SemanticSearchResult,
 )
@@ -94,6 +108,28 @@ _hybrid_search_service = HybridSearchService(
     document_storage=_doc_storage,
     settings=_settings,
 )
+_reranker = CrossEncoderReranker(settings=_settings)
+_evaluator = RetrievalEvaluator(settings=_settings)
+_comparator = RetrievalComparator(
+    hybrid_search_service=_hybrid_search_service,
+    semantic_search_service=_semantic_search_service,
+    bm25_search_service=_bm25_search_service,
+    reranker=_reranker,
+    document_storage=_doc_storage,
+    settings=_settings,
+)
+_evidence_validator = EvidenceQualityValidator(
+    document_storage=_doc_storage,
+    settings=_settings,
+)
+_evidence_report_generator = EvidenceReportGenerator(
+    hybrid_search_service=_hybrid_search_service,
+    reranker=_reranker,
+    validator=_evidence_validator,
+    document_storage=_doc_storage,
+    settings=_settings,
+)
+_evaluation_reports: dict[str, RetrievalEvaluationReport] = {}
 
 
 # -----------------------------------------------------------------------------
@@ -1244,3 +1280,269 @@ def hybrid_search(request: HybridSearchRequest) -> HybridSearchResponse:
 def get_bm25_index_stats() -> BM25IndexStatsResponse:
     """Retrieve BM25 index diagnostic statistics."""
     return _bm25_indexing_service.get_index_stats()
+
+
+# ==============================================================================
+# Retrieval Evaluation, Cross-Encoder Reranking & Evidence Quality Endpoints (Session 07)
+# ==============================================================================
+
+
+@router.post(
+    "/evaluation/retrieval/run",
+    response_model=RetrievalEvaluationReport,
+    summary="Run Information Retrieval Evaluation",
+    description="Evaluates a retrieval method against a ground-truth dataset producing standard IR metrics.",
+    tags=["Retrieval Evaluation & Evidence Quality"],
+)
+def run_retrieval_evaluation(
+    request: RetrievalEvaluationRequest,
+) -> RetrievalEvaluationReport:
+    """Execute offline retrieval evaluation on benchmark queries."""
+    dataset_file = (
+        Path(request.dataset_path)
+        if request.dataset_path
+        else Path(_settings.RETRIEVAL_EVALUATION_DATASET)
+    )
+    if not dataset_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evaluation dataset file not found: {dataset_file}",
+        )
+
+    try:
+        queries = _evaluator.load_dataset(dataset_file)
+        if request.ticker_filter:
+            norm_ticker = request.ticker_filter.strip().upper()
+            queries = [
+                q for q in queries if q.ticker and q.ticker.upper() == norm_ticker
+            ]
+
+        if not queries:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No queries found matching filter '{request.ticker_filter}'.",
+            )
+
+        # Define retriever adaptor based on request.retrieval_method
+        method = request.retrieval_method.lower()
+
+        if method == "dense":
+
+            def retriever_adaptor(q, fetch_k):
+                t0 = time.perf_counter()
+                res = _semantic_search_service.search(
+                    query=q.query,
+                    ticker=q.ticker,
+                    filing_type=q.filing_type,
+                    section_identifier=q.section_identifier,
+                    top_k=fetch_k,
+                )
+                return [r.chunk_id for r in res], (time.perf_counter() - t0) * 1000.0
+        elif method == "sparse":
+
+            def retriever_adaptor(q, fetch_k):
+                t0 = time.perf_counter()
+                res = _bm25_search_service.search(
+                    query=q.query,
+                    ticker=q.ticker,
+                    filing_type=q.filing_type,
+                    section_identifier=q.section_identifier,
+                    top_k=fetch_k,
+                )
+                return [r.chunk_id for r in res], (time.perf_counter() - t0) * 1000.0
+        elif method == "hybrid_reranked" or (method == "hybrid" and request.rerank):
+            method = "hybrid_reranked"
+
+            def retriever_adaptor(q, fetch_k):
+                t0 = time.perf_counter()
+                cand_pool = max(fetch_k, _settings.RERANKER_CANDIDATE_COUNT)
+                h_res = _hybrid_search_service.search(
+                    query=q.query,
+                    ticker=q.ticker,
+                    filing_type=q.filing_type,
+                    section_identifier=q.section_identifier,
+                    top_k=cand_pool,
+                )
+                reranked, _ = _reranker.rerank(
+                    query=q.query,
+                    candidates=h_res.results,
+                    top_k=fetch_k,
+                )
+                return [r.chunk_id for r in reranked], (
+                    time.perf_counter() - t0
+                ) * 1000.0
+        else:
+            method = "hybrid"
+
+            def retriever_adaptor(q, fetch_k):
+                t0 = time.perf_counter()
+                h_res = _hybrid_search_service.search(
+                    query=q.query,
+                    ticker=q.ticker,
+                    filing_type=q.filing_type,
+                    section_identifier=q.section_identifier,
+                    top_k=fetch_k,
+                )
+                return [r.chunk_id for r in h_res.results], (
+                    time.perf_counter() - t0
+                ) * 1000.0
+
+        dataset_type = (
+            "curated"
+            if any(q.dataset_type == "curated" for q in queries)
+            else "synthetic"
+        )
+        report = _evaluator.evaluate_retriever(
+            retriever_fn=retriever_adaptor,
+            queries=queries,
+            k=request.top_k,
+            dataset_identifier=dataset_file.name,
+            method_name=method,
+            dataset_type=dataset_type,
+        )
+
+        _evaluation_reports[report.report_id] = report
+        return report
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Error executing retrieval evaluation: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Retrieval evaluation failed: {exc}",
+        ) from exc
+
+
+@router.post(
+    "/evaluation/retrieval/compare",
+    response_model=RetrievalComparisonResponse,
+    summary="Compare Retrieval Methods",
+    description="Runs a fair comparative evaluation across Dense, Sparse, Hybrid, and Reranked search.",
+    tags=["Retrieval Evaluation & Evidence Quality"],
+)
+def compare_retrieval_methods(
+    request: RetrievalComparisonRequest,
+) -> RetrievalComparisonResponse:
+    """Execute fair multi-modal comparison over benchmark queries."""
+    dataset_file = (
+        Path(request.dataset_path)
+        if request.dataset_path
+        else Path(_settings.RETRIEVAL_EVALUATION_DATASET)
+    )
+    if not dataset_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evaluation dataset file not found: {dataset_file}",
+        )
+
+    try:
+        comparison_res = _comparator.compare_methods(
+            dataset_path=dataset_file,
+            top_k=request.top_k,
+            include_reranking=request.include_reranking,
+            ticker_filter=request.ticker_filter,
+        )
+        return comparison_res
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Error comparing retrieval methods: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Retrieval comparison failed: {exc}",
+        ) from exc
+
+
+@router.post(
+    "/evaluation/evidence/validate",
+    response_model=EvidenceValidationResult,
+    summary="Validate Evidence Quality and Provenance",
+    description="Validates statutory metadata completeness, SEC domains, duplicates, and period divergence.",
+    tags=["Retrieval Evaluation & Evidence Quality"],
+)
+def validate_evidence(
+    request: EvidenceValidationRequest,
+) -> EvidenceValidationResult:
+    """Validate retrieved evidence passages for provenance, duplicates, and temporal consistency."""
+    try:
+        candidates_to_validate: list[Any] = []
+
+        if request.query and request.query.strip():
+            # Retrieve fresh candidates
+            method = request.retrieval_method.lower()
+            if method == "dense":
+                candidates_to_validate = _semantic_search_service.search(
+                    query=request.query,
+                    top_k=request.top_k,
+                )
+            elif method == "sparse":
+                candidates_to_validate = _bm25_search_service.search(
+                    query=request.query,
+                    top_k=request.top_k,
+                )
+            else:
+                resp = _hybrid_search_service.search(
+                    query=request.query,
+                    top_k=request.top_k,
+                )
+                candidates_to_validate = resp.results
+
+        elif request.chunk_ids:
+            # Query candidate chunks by ID from storage
+            for c_id in request.chunk_ids:
+                chunk = _doc_storage.get_chunk_with_provenance(c_id)
+                if chunk is not None:
+                    candidates_to_validate.append(chunk)
+                else:
+                    candidates_to_validate.append(
+                        {
+                            "chunk_id": c_id,
+                            "chunk_text": "",
+                            "source_url": "",
+                        }
+                    )
+
+        return _evidence_validator.validate_chunks(candidates_to_validate)
+
+    except Exception as exc:
+        logger.error("Error validating evidence: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Evidence validation failed: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/evaluation/retrieval/reports/{report_id}",
+    response_model=RetrievalEvaluationReport,
+    summary="Get Retrieval Evaluation Report",
+    description="Retrieves a previously computed retrieval evaluation report by its unique report identifier.",
+    tags=["Retrieval Evaluation & Evidence Quality"],
+)
+def get_retrieval_evaluation_report(
+    report_id: str,
+) -> RetrievalEvaluationReport:
+    """Retrieve an evaluation report by ID."""
+    report = _evaluation_reports.get(report_id)
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Retrieval evaluation report '{report_id}' not found.",
+        )
+    return report
+
+
+@router.get(
+    "/retrieval/reranker/status",
+    response_model=RerankerStatusResponse,
+    summary="Get Cross-Encoder Reranker Status",
+    description="Returns configuration, model initialization status, compute device, and benchmark latency.",
+    tags=["Retrieval Evaluation & Evidence Quality"],
+)
+def get_reranker_status() -> RerankerStatusResponse:
+    """Retrieve operational status of the cross-encoder reranker."""
+    return _reranker.get_status()

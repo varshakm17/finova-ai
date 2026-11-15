@@ -87,3 +87,4 @@ def test_financial_tokenizer_safe_stopwords() -> None:
     assert "increase" in tokens
     assert "25%" in tokens
     assert "company" in tokens
+
