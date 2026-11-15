@@ -1,7 +1,8 @@
-"""Finova AI — Minimal Streamlit Frontend Application.
+"""Finova AI — Streamlit Frontend Application.
 
-Provides a clean, professional financial analytics interface with dark navy styling,
-system health indicators, and SEC EDGAR company & financial metric exploration.
+Provides a financial intelligence interface with dark navy styling,
+health diagnostics, SEC filing discovery, XBRL financial metrics,
+and statutory filing HTML ingestion with section-aware chunk inspection.
 """
 
 import sys
@@ -138,14 +139,7 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # Backend Health Verification
 # -----------------------------------------------------------------------------
 def check_backend_health(base_url: str) -> dict[str, Any] | None:
-    """Query backend health check endpoint safely with a brief timeout.
-
-    Args:
-        base_url: Base HTTP address of the FastAPI backend.
-
-    Returns:
-        Dict containing health payload if reachable, or None if unavailable.
-    """
+    """Query backend health check endpoint safely with a brief timeout."""
     try:
         response = httpx.get(f"{base_url}/health", timeout=1.2)
         if response.status_code == 200:
@@ -191,7 +185,7 @@ def main() -> None:
             "Navigation",
             options=[
                 "Overview",
-                "Company Lookup (SEC EDGAR)",
+                "Company Lookup & Ingestion (SEC)",
                 "Research Workspace (Preview)",
                 "Agent Architecture",
                 "Configuration",
@@ -227,9 +221,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 02</div>
+                    <div class="metric-value">Session 03</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        SEC EDGAR ingestion pipeline & SQLite financial storage active.
+                        HTML Ingestion, Section Extractor & Deterministic Text Chunking active.
                     </p>
                 </div>
                 """,
@@ -239,10 +233,10 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">Multi-Agent Roster</div>
-                    <div class="metric-value">6 Agents</div>
+                    <div class="metric-label">Disclosure Sections</div>
+                    <div class="metric-value">4 Items</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Supervisor, Research, Analyst, Calculation, Verification & Report agents.
+                        Item 1 (Business), 1A (Risk), 7 (MD&A), 7A (Market Risk).
                     </p>
                 </div>
                 """,
@@ -252,10 +246,10 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">SEC Pipeline</div>
-                    <div class="metric-value">Live Ingestion</div>
+                    <div class="metric-label">Chunk Provenance</div>
+                    <div class="metric-value">Traceable</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        XBRL company facts, 10-K/10-Q submissions, and metric extraction.
+                        Every chunk maps to CIK, accession number, section, and character offset.
                     </p>
                 </div>
                 """,
@@ -268,27 +262,25 @@ def main() -> None:
             Finova AI is engineered to automate rigorous, evidence-backed corporate financial analysis:
             
             - **Automated SEC EDGAR Retrieval**: Programmatic acquisition of annual (10-K) and quarterly (10-Q) filings.
+            - **Section-Aware Filing Ingestion**: Full HTML parsing, TOC disambiguation, and boundary-aware extraction of MD&A and Risk Factors.
+            - **Deterministic Text Chunking**: Boundary-aware overlapping text chunks preserving paragraph and sentence coherence.
             - **Structured Metric Extraction**: Accurate parsing of Income Statements, Balance Sheets, and Cash Flow statements.
-            - **Deterministic Calculations**: Error-free verification of growth rates, profitability margins, and leverage ratios.
-            - **Multi-Year Comparisons**: Longitudinal trend analysis and cross-company benchmarking.
-            - **RAG-Powered Question Answering**: Hybrid dense and sparse vector retrieval over corporate footnotes and disclosures.
-            - **Hallucination Prevention**: Dedicated verification agent that cross-checks all quantitative claims against primary filing sources.
+            - **Traceable Provenance**: Every chunk and fact traces directly to its source SEC archive accession and document coordinate.
             """
         )
 
         st.info(
-            "📌 **Session 02 Integration Live**: SEC EDGAR integration pipeline is operational. "
-            "Explore company metadata, statutory filings, and extracted XBRL financial metrics in the "
-            "**Company Lookup (SEC EDGAR)** section."
+            "📌 **Session 03 Active**: SEC filing document ingestion, HTML parsing, and section-aware "
+            "chunking are fully operational. Visit **Company Lookup & Ingestion (SEC)** to ingest a 10-K or 10-Q filing."
         )
 
     # -------------------------------------------------------------------------
-    # View 2: Company Lookup (SEC EDGAR) - Session 02 Feature
+    # View 2: Company Lookup & Ingestion (SEC)
     # -------------------------------------------------------------------------
-    elif nav_selection == "Company Lookup (SEC EDGAR)":
-        st.markdown("### 🏢 SEC EDGAR Company & Financial Data Lookup")
+    elif nav_selection == "Company Lookup & Ingestion (SEC)":
+        st.markdown("### 🏢 SEC EDGAR Company Lookup & Document Ingestion")
         st.caption(
-            "Query official SEC EDGAR submissions and XBRL financial facts by stock ticker."
+            "Discover company filings, extract XBRL financial facts, and ingest primary 10-K/10-Q filings into text chunks."
         )
 
         col_search, col_btn = st.columns([3, 1])
@@ -355,46 +347,244 @@ def main() -> None:
                                 unsafe_allow_html=True,
                             )
 
-                            tab_filings, tab_metrics = st.tabs(
-                                ["📄 SEC Filings", "📈 Financial Observations"]
+                            tab_ingest, tab_filings, tab_metrics = st.tabs(
+                                [
+                                    "📥 Ingest Filing & View Chunks",
+                                    "📄 Available SEC Filings",
+                                    "📈 Financial Observations",
+                                ]
                             )
 
-                            # Tab 1: Filings
-                            with tab_filings:
+                            # Tab 1: Filing Ingestion Workflow (Session 03)
+                            with tab_ingest:
+                                st.markdown(
+                                    "#### Ingest Statutory Filing (10-K / 10-Q)"
+                                )
+                                st.caption(
+                                    "Download primary HTML filing document, extract disclosure sections (Item 1A Risk Factors, Item 7 MD&A), and generate boundary-aware text chunks."
+                                )
+
                                 filings_resp = httpx.get(
                                     f"{backend_url}/api/v1/companies/{search_ticker}/filings",
                                     timeout=15.0,
                                 )
-                                if filings_resp.status_code == 200:
-                                    filings_list = filings_resp.json()
-                                    if filings_list:
-                                        table_data = [
-                                            {
-                                                "Form": f.get("form"),
-                                                "Filing Date": f.get("filing_date"),
-                                                "Report Period": f.get("report_date")
-                                                or "—",
-                                                "Accession Number": f.get(
-                                                    "accession_number"
-                                                ),
-                                                "XBRL": "Yes"
-                                                if f.get("is_xbrl")
-                                                else "No",
-                                                "SEC Archive": f.get("url") or "—",
-                                            }
-                                            for f in filings_list[:25]
-                                        ]
-                                        st.dataframe(
-                                            table_data, use_container_width=True
-                                        )
-                                    else:
-                                        st.info(
-                                            "No recent filings found for this company."
-                                        )
-                                else:
-                                    st.warning("Could not load filings metadata.")
+                                filings_data = (
+                                    filings_resp.json()
+                                    if filings_resp.status_code == 200
+                                    else []
+                                )
 
-                            # Tab 2: Financial Observations
+                                # Filter for supported forms (10-K and 10-Q)
+                                eligible_filings = [
+                                    f
+                                    for f in filings_data
+                                    if f.get("form", "").upper()
+                                    in ["10-K", "10-Q", "10-K/A", "10-Q/A"]
+                                ]
+
+                                if not eligible_filings:
+                                    st.info(
+                                        "No eligible 10-K or 10-Q filings found for this company."
+                                    )
+                                else:
+                                    filing_options = {
+                                        f"{f['form']} ({f['filing_date']}) - Period: {f.get('report_date') or 'N/A'} [Accn: {f['accession_number']}]": f
+                                        for f in eligible_filings
+                                    }
+
+                                    col_select, col_force = st.columns([3, 1])
+                                    with col_select:
+                                        selected_label = st.selectbox(
+                                            "Select Filing to Ingest",
+                                            options=list(filing_options.keys()),
+                                            index=0,
+                                        )
+                                    with col_force:
+                                        st.write("")
+                                        st.write("")
+                                        force_refresh = st.checkbox(
+                                            "Force Refresh",
+                                            value=False,
+                                            help="Re-download and re-parse even if previously ingested.",
+                                        )
+
+                                    selected_filing = filing_options[selected_label]
+                                    accn = selected_filing["accession_number"]
+
+                                    if st.button(
+                                        "⚡ Ingest & Chunk Selected Filing",
+                                        type="primary",
+                                        use_container_width=True,
+                                    ):
+                                        with st.spinner(
+                                            f"Ingesting filing {accn} for {search_ticker}..."
+                                        ):
+                                            try:
+                                                ingest_url = f"{backend_url}/api/v1/companies/{search_ticker}/filings/{accn}/ingest"
+                                                ingest_resp = httpx.post(
+                                                    ingest_url,
+                                                    params={
+                                                        "force_refresh": force_refresh
+                                                    },
+                                                    timeout=45.0,
+                                                )
+
+                                                if ingest_resp.status_code == 200:
+                                                    result = ingest_resp.json()
+                                                    st.success(
+                                                        f"Filing {accn} successfully processed! (Status: {result.get('processing_status')})"
+                                                    )
+
+                                                    # Metric summary cards
+                                                    mcol1, mcol2, mcol3, mcol4 = (
+                                                        st.columns(4)
+                                                    )
+                                                    with mcol1:
+                                                        st.metric(
+                                                            "Generated Chunks",
+                                                            result.get(
+                                                                "total_chunks", 0
+                                                            ),
+                                                        )
+                                                    with mcol2:
+                                                        st.metric(
+                                                            "Sections Extracted",
+                                                            len(
+                                                                result.get(
+                                                                    "sections_extracted",
+                                                                    [],
+                                                                )
+                                                            ),
+                                                        )
+                                                    with mcol3:
+                                                        st.metric(
+                                                            "Document Size",
+                                                            f"{result.get('file_size_bytes', 0) / 1024:.1f} KB",
+                                                        )
+                                                    with mcol4:
+                                                        st.metric(
+                                                            "Form Type",
+                                                            result.get(
+                                                                "filing_type", "—"
+                                                            ),
+                                                        )
+
+                                                    # Section badges
+                                                    st.markdown(
+                                                        "**Extracted Sections:**"
+                                                    )
+                                                    sec_badges = " ".join(
+                                                        f'<span class="badge-active">✓ {s}</span>'
+                                                        for s in result.get(
+                                                            "sections_extracted", []
+                                                        )
+                                                    )
+                                                    if result.get("sections_not_found"):
+                                                        sec_badges += " " + " ".join(
+                                                            f'<span class="badge-offline">✗ {s} (not found)</span>'
+                                                            for s in result.get(
+                                                                "sections_not_found",
+                                                                [],
+                                                            )
+                                                        )
+                                                    st.markdown(
+                                                        sec_badges,
+                                                        unsafe_allow_html=True,
+                                                    )
+
+                                                else:
+                                                    st.error(
+                                                        f"Ingestion failed ({ingest_resp.status_code}): {ingest_resp.text}"
+                                                    )
+                                            except httpx.RequestError as exc:
+                                                st.error(
+                                                    f"Network error during ingestion: {exc}"
+                                                )
+
+                                    st.markdown("---")
+
+                                    # Chunk Inspection Section
+                                    st.markdown("#### 🔍 Inspect Document Chunks")
+                                    chunks_resp = httpx.get(
+                                        f"{backend_url}/api/v1/companies/{search_ticker}/documents/{accn}/chunks",
+                                        timeout=15.0,
+                                    )
+                                    if chunks_resp.status_code == 200:
+                                        chunks_list = chunks_resp.json()
+                                        if chunks_list:
+                                            st.caption(
+                                                f"Found {len(chunks_list)} stored chunks for filing `{accn}`:"
+                                            )
+
+                                            # Section filter for inspection
+                                            available_sec_ids = sorted(
+                                                {
+                                                    c["section_identifier"]
+                                                    for c in chunks_list
+                                                }
+                                            )
+                                            selected_sec_filter = st.selectbox(
+                                                "Filter Chunks by Section",
+                                                options=["All Sections"]
+                                                + available_sec_ids,
+                                                index=0,
+                                            )
+
+                                            filtered_chunks = (
+                                                chunks_list
+                                                if selected_sec_filter == "All Sections"
+                                                else [
+                                                    c
+                                                    for c in chunks_list
+                                                    if c["section_identifier"]
+                                                    == selected_sec_filter
+                                                ]
+                                            )
+
+                                            for chk in filtered_chunks[:15]:
+                                                with st.expander(
+                                                    f"Chunk #{chk['chunk_index']} — {chk['section_title']} ({chk['char_count']} chars, offset {chk['start_offset']}-{chk['end_offset']})"
+                                                ):
+                                                    st.markdown(
+                                                        f"**Provenance:** `{chk['ticker']}` | Form: `{chk['filing_type']}` | Accession: `{chk['accession_number']}`"
+                                                    )
+                                                    st.markdown(
+                                                        f"**Source SEC Archive:** [View File]({chk['source_url']})"
+                                                    )
+                                                    st.text_area(
+                                                        "Extracted Text Content",
+                                                        value=chk["chunk_text"],
+                                                        height=180,
+                                                        disabled=True,
+                                                        key=f"chunk_{chk['chunk_id']}",
+                                                    )
+                                        else:
+                                            st.info(
+                                                "Filing has not been ingested yet. Click 'Ingest & Chunk Selected Filing' above."
+                                            )
+
+                            # Tab 2: Available SEC Filings
+                            with tab_filings:
+                                if filings_data:
+                                    table_data = [
+                                        {
+                                            "Form": f.get("form"),
+                                            "Filing Date": f.get("filing_date"),
+                                            "Report Period": f.get("report_date")
+                                            or "—",
+                                            "Accession Number": f.get(
+                                                "accession_number"
+                                            ),
+                                            "XBRL": "Yes" if f.get("is_xbrl") else "No",
+                                            "SEC Archive": f.get("url") or "—",
+                                        }
+                                        for f in filings_data[:25]
+                                    ]
+                                    st.dataframe(table_data, use_container_width=True)
+                                else:
+                                    st.info("No recent filings found for this company.")
+
+                            # Tab 3: Financial Observations
                             with tab_metrics:
                                 fin_resp = httpx.get(
                                     f"{backend_url}/api/v1/companies/{search_ticker}/financials",
@@ -474,7 +664,7 @@ def main() -> None:
                 st.button("Analyze Filing", disabled=True, use_container_width=True)
 
         st.caption(
-            "Note: Advanced multi-agent analysis and report generation will be activated in Sessions 04-06."
+            "Note: Multi-agent orchestration and report synthesis will be activated in Sessions 05-06."
         )
 
         st.markdown("---")
@@ -482,23 +672,19 @@ def main() -> None:
         mcol1, mcol2, mcol3, mcol4 = st.columns(4)
         with mcol1:
             st.metric(
-                label="Total Revenue",
-                value="Extracted in Session 02",
-                delta="10-K/10-Q",
+                label="Total Revenue", value="Extracted (XBRL)", delta="Session 02"
             )
         with mcol2:
             st.metric(
-                label="Operating Income",
-                value="Extracted in Session 02",
-                delta="10-K/10-Q",
+                label="Operating Income", value="Extracted (XBRL)", delta="Session 02"
             )
         with mcol3:
             st.metric(
-                label="Free Cash Flow", value="Planned Session 04", delta="Calc Engine"
+                label="Section Chunks", value="Active (10-K/10-Q)", delta="Session 03"
             )
         with mcol4:
             st.metric(
-                label="Debt-to-Equity", value="Planned Session 04", delta="Calc Engine"
+                label="Free Cash Flow", value="Planned Session 04", delta="Calc Engine"
             )
 
     # -------------------------------------------------------------------------
@@ -574,6 +760,10 @@ def main() -> None:
             "Log Level": settings.LOG_LEVEL,
             "Database URL": settings.DATABASE_URL,
             "SEC User Agent Configured": "Yes" if settings.SEC_USER_AGENT else "No",
+            "Filings Storage Directory": settings.FILINGS_STORAGE_DIR,
+            "Max Document Size": f"{settings.MAX_DOCUMENT_SIZE_BYTES / (1024 * 1024):.0f} MB",
+            "Chunk Target Size": f"{settings.CHUNK_TARGET_SIZE} chars",
+            "Chunk Overlap": f"{settings.CHUNK_OVERLAP} chars",
         }
 
         st.table([{"Parameter": k, "Value": str(v)} for k, v in config_data.items()])

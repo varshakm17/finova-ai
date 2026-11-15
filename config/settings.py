@@ -83,6 +83,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    # SEC Filing Document Ingestion & Chunking (Session 03)
+    FILINGS_STORAGE_DIR: str = Field(
+        default="datasets/filings",
+        description="Local directory for storing downloaded raw SEC filing HTML documents",
+    )
+    MAX_DOCUMENT_SIZE_BYTES: int = Field(
+        default=25 * 1024 * 1024,
+        description="Maximum permitted download size for SEC filing documents (bytes)",
+    )
+    CHUNK_TARGET_SIZE: int = Field(
+        default=3500,
+        description="Target text chunk character size for section-aware chunking",
+    )
+    CHUNK_OVERLAP: int = Field(
+        default=400,
+        description="Character overlap between consecutive chunks",
+    )
+    SUPPORTED_FILING_FORMS: list[str] = Field(
+        default=["10-K", "10-Q", "10-K/A", "10-Q/A"],
+        description="Supported statutory SEC filing types for document ingestion",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

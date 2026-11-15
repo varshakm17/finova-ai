@@ -1,14 +1,18 @@
 """API route definitions for Finova AI.
 
 Provides health diagnostics, company identity resolution, filing discovery,
-and structured financial observation retrieval via SEC EDGAR.
+financial observations, and SEC filing document ingestion & chunking.
 """
+
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from backend.data.company_service import CompanyService, normalize_ticker
 from backend.data.data_normalizer import FinancialObservation
+from backend.data.document_storage import DocumentStorage
+from backend.data.filing_ingestion_service import FilingIngestionService
 from backend.data.financial_extractor import FinancialExtractor
 from backend.data.sec_client import (
     SECClient,
@@ -27,6 +31,12 @@ router = APIRouter()
 _db = Database()
 _company_service = CompanyService()
 _financial_extractor = FinancialExtractor()
+_doc_storage = DocumentStorage(db=_db)
+_ingestion_service = FilingIngestionService(
+    db=_db,
+    document_storage=_doc_storage,
+    company_service=_company_service,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -81,6 +91,73 @@ class FilingMetadataResponse(BaseModel):
     url: str | None = Field(None, description="Direct SEC archive URL")
 
 
+class IngestFilingResponse(BaseModel):
+    """Schema for filing document ingestion result."""
+
+    document_id: str
+    ticker: str
+    cik: str
+    company_name: str
+    accession_number: str
+    filing_type: str
+    filing_date: str
+    report_date: str | None = None
+    processing_status: str
+    sections_extracted: list[str] = Field(default_factory=list)
+    sections_not_found: list[str] = Field(default_factory=list)
+    total_chunks: int = 0
+    document_hash: str = ""
+    file_size_bytes: int = 0
+    warnings: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
+class DocumentSummaryResponse(BaseModel):
+    """Schema for ingested filing document summary."""
+
+    document_id: str
+    cik: str
+    ticker: str
+    company_name: str
+    accession_number: str
+    filing_type: str
+    filing_date: str
+    report_date: str | None = None
+    primary_document: str
+    source_url: str
+    processing_status: str
+    document_hash: str
+    created_at: str
+    updated_at: str
+
+
+class DocumentDetailResponse(DocumentSummaryResponse):
+    """Schema for complete document metadata with sections and chunk metrics."""
+
+    sections: list[dict[str, Any]] = Field(default_factory=list)
+    total_chunks: int = 0
+
+
+class DocumentChunkResponse(BaseModel):
+    """Schema for an individual section-aware text chunk."""
+
+    chunk_id: str
+    document_id: str
+    section_id: str
+    ticker: str
+    accession_number: str
+    filing_type: str
+    section_identifier: str
+    section_title: str
+    chunk_index: int
+    chunk_text: str
+    start_offset: int
+    end_offset: int
+    char_count: int
+    source_url: str
+    created_at: str
+
+
 # -----------------------------------------------------------------------------
 # Diagnostic / Health Endpoints (Session 01 preservation)
 # -----------------------------------------------------------------------------
@@ -103,7 +180,7 @@ def get_health() -> HealthResponse:
 
 
 # -----------------------------------------------------------------------------
-# Company & Filing Endpoints (Session 02)
+# Company & Filing Metadata Endpoints (Session 02)
 # -----------------------------------------------------------------------------
 @router.get(
     "/companies/search",
@@ -158,7 +235,6 @@ def get_company_metadata(ticker: str) -> CompanyMetadataResponse:
     """Retrieve full company metadata, querying SEC submissions if not cached."""
     norm_ticker = normalize_ticker(ticker)
 
-    # 1. Check local database
     existing = _db.get_company_by_ticker(norm_ticker)
     if existing and existing.get("sic"):
         return CompanyMetadataResponse(
@@ -171,7 +247,6 @@ def get_company_metadata(ticker: str) -> CompanyMetadataResponse:
             state_location=existing.get("state_location"),
         )
 
-    # 2. Resolve CIK via company service
     try:
         identity = _company_service.get_company_by_ticker(norm_ticker)
     except SECConfigurationError as exc:
@@ -188,7 +263,6 @@ def get_company_metadata(ticker: str) -> CompanyMetadataResponse:
 
     cik = identity["cik"]
 
-    # 3. Fetch submissions from SEC to get rich business profile
     try:
         sec_client = SECClient()
         submissions = sec_client.get_company_submissions(cik)
@@ -229,7 +303,6 @@ def get_company_metadata(ticker: str) -> CompanyMetadataResponse:
     }
 
     _db.save_company(company_payload)
-
     return CompanyMetadataResponse(**company_payload)
 
 
@@ -249,7 +322,6 @@ def get_company_filings(
     """Retrieve filing metadata for a company."""
     norm_ticker = normalize_ticker(ticker)
 
-    # Resolve company
     identity = _company_service.get_company_by_ticker(norm_ticker)
     if not identity:
         raise HTTPException(
@@ -259,7 +331,6 @@ def get_company_filings(
 
     cik = identity["cik"]
 
-    # Check database cache first
     existing_filings = _db.get_filings(cik=cik, form_type=form_type)
     if existing_filings:
         return [
@@ -279,11 +350,9 @@ def get_company_filings(
             for f in existing_filings
         ]
 
-    # Otherwise fetch live from SEC
     try:
         sec_client = SECClient()
         filings = sec_client.get_company_filings(cik=cik, form_type=form_type)
-        # Ensure company exists in DB to satisfy foreign keys
         _db.save_company({"cik": cik, "ticker": norm_ticker, "name": identity["name"]})
         _db.save_filings(cik, filings)
     except SECConfigurationError as exc:
@@ -346,7 +415,6 @@ def get_company_financials(
 
     cik = identity["cik"]
 
-    # Check if we already have observations in DB
     existing_obs = _db.get_financial_observations(
         ticker_or_cik=norm_ticker,
         start_year=start_year,
@@ -356,7 +424,6 @@ def get_company_financials(
     if existing_obs:
         return existing_obs
 
-    # Otherwise fetch company facts from SEC, extract and persist
     try:
         sec_client = SECClient()
         facts = sec_client.get_company_facts(cik)
@@ -406,7 +473,6 @@ def get_metric_history(
     """Retrieve historical observations for a specific named metric."""
     norm_ticker = normalize_ticker(ticker)
 
-    # Make sure facts are populated
     observations = get_company_financials(
         ticker=norm_ticker,
         start_year=start_year,
@@ -414,7 +480,6 @@ def get_metric_history(
         period_type=period_type,
     )
 
-    # Filter by metric name (case-insensitive)
     target_metric = metric.strip().lower()
     matched = [obs for obs in observations if obs.metric_name.lower() == target_metric]
 
@@ -425,3 +490,199 @@ def get_metric_history(
         )
 
     return matched
+
+
+# -----------------------------------------------------------------------------
+# Filing Document Ingestion & Chunking Endpoints (Session 03)
+# -----------------------------------------------------------------------------
+@router.post(
+    "/companies/{ticker}/filings/{accession_number}/ingest",
+    response_model=IngestFilingResponse,
+    summary="Ingest SEC Filing Document",
+    description="Downloads the primary HTML filing, extracts disclosure sections, and creates text chunks.",
+    tags=["Document Ingestion"],
+)
+def ingest_filing(
+    ticker: str,
+    accession_number: str,
+    force_refresh: bool = Query(
+        False, description="Re-download and re-chunk even if already ingested"
+    ),
+) -> IngestFilingResponse:
+    """Trigger ingestion and section-aware chunking of a selected statutory filing."""
+    clean_ticker = normalize_ticker(ticker)
+    clean_accn = accession_number.strip()
+
+    result = _ingestion_service.ingest_filing(
+        ticker=clean_ticker,
+        accession_number=clean_accn,
+        force_refresh=force_refresh,
+    )
+
+    if result.processing_status == "failed":
+        if "not found" in (result.error or "").lower():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=result.error
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result.error or "Filing ingestion failed.",
+        )
+
+    return IngestFilingResponse(
+        document_id=result.document_id,
+        ticker=result.ticker,
+        cik=result.cik,
+        company_name=result.company_name,
+        accession_number=result.accession_number,
+        filing_type=result.filing_type,
+        filing_date=result.filing_date,
+        report_date=result.report_date,
+        processing_status=result.processing_status,
+        sections_extracted=result.sections_extracted,
+        sections_not_found=result.sections_not_found,
+        total_chunks=result.total_chunks,
+        document_hash=result.document_hash,
+        file_size_bytes=result.file_size_bytes,
+        warnings=result.warnings,
+        error=result.error,
+    )
+
+
+@router.get(
+    "/companies/{ticker}/documents",
+    response_model=list[DocumentSummaryResponse],
+    summary="List Ingested Documents",
+    description="Returns all previously ingested statutory documents for a company.",
+    tags=["Document Ingestion"],
+)
+def list_ingested_documents(
+    ticker: str,
+    filing_type: str | None = Query(
+        None, description="Filter by filing type (e.g., 10-K, 10-Q)"
+    ),
+) -> list[DocumentSummaryResponse]:
+    """List ingested documents for a company."""
+    clean_ticker = normalize_ticker(ticker)
+    identity = _company_service.get_company_by_ticker(clean_ticker)
+    if not identity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Company with ticker '{clean_ticker}' not found.",
+        )
+
+    docs = _doc_storage.list_documents_for_company(
+        ticker_or_cik=clean_ticker, filing_type=filing_type
+    )
+    return [
+        DocumentSummaryResponse(
+            document_id=d["document_id"],
+            cik=d["cik"],
+            ticker=d["ticker"],
+            company_name=d["company_name"],
+            accession_number=d["accession_number"],
+            filing_type=d["filing_type"],
+            filing_date=d["filing_date"],
+            report_date=d.get("report_date"),
+            primary_document=d["primary_document"],
+            source_url=d["source_url"],
+            processing_status=d["processing_status"],
+            document_hash=d["document_hash"],
+            created_at=d["created_at"],
+            updated_at=d["updated_at"],
+        )
+        for d in docs
+    ]
+
+
+@router.get(
+    "/companies/{ticker}/documents/{accession_number}",
+    response_model=DocumentDetailResponse,
+    summary="Get Ingested Document Details",
+    description="Returns detailed processing status, sections, and chunk count for an ingested document.",
+    tags=["Document Ingestion"],
+)
+def get_document_details(
+    ticker: str,
+    accession_number: str,
+) -> DocumentDetailResponse:
+    """Retrieve details, sections, and chunk metrics for an ingested document."""
+    clean_accn = accession_number.strip()
+    doc = _doc_storage.get_document_by_accession(clean_accn)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with accession number '{clean_accn}' not found.",
+        )
+
+    sections = _doc_storage.get_sections_for_document(doc["document_id"])
+    chunks = _doc_storage.get_chunks_for_document(doc["document_id"])
+
+    return DocumentDetailResponse(
+        document_id=doc["document_id"],
+        cik=doc["cik"],
+        ticker=doc["ticker"],
+        company_name=doc["company_name"],
+        accession_number=doc["accession_number"],
+        filing_type=doc["filing_type"],
+        filing_date=doc["filing_date"],
+        report_date=doc.get("report_date"),
+        primary_document=doc["primary_document"],
+        source_url=doc["source_url"],
+        processing_status=doc["processing_status"],
+        document_hash=doc["document_hash"],
+        created_at=doc["created_at"],
+        updated_at=doc["updated_at"],
+        sections=sections,
+        total_chunks=len(chunks),
+    )
+
+
+@router.get(
+    "/companies/{ticker}/documents/{accession_number}/chunks",
+    response_model=list[DocumentChunkResponse],
+    summary="Retrieve Document Chunks",
+    description="Returns stored section-aware chunks with full provenance and optional section filtering.",
+    tags=["Document Ingestion"],
+)
+def get_document_chunks(
+    ticker: str,
+    accession_number: str,
+    section_identifier: str | None = Query(
+        None, description="Filter chunks by section identifier (e.g., ITEM_1A, ITEM_7)"
+    ),
+) -> list[DocumentChunkResponse]:
+    """Retrieve chunks for an ingested document."""
+    clean_accn = accession_number.strip()
+    doc = _doc_storage.get_document_by_accession(clean_accn)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with accession number '{clean_accn}' not found.",
+        )
+
+    chunks = _doc_storage.get_chunks_for_document(
+        document_id=doc["document_id"],
+        section_identifier=section_identifier,
+    )
+
+    return [
+        DocumentChunkResponse(
+            chunk_id=c["chunk_id"],
+            document_id=c["document_id"],
+            section_id=c["section_id"],
+            ticker=c["ticker"],
+            accession_number=c["accession_number"],
+            filing_type=c["filing_type"],
+            section_identifier=c["section_identifier"],
+            section_title=c["section_title"],
+            chunk_index=c["chunk_index"],
+            chunk_text=c["chunk_text"],
+            start_offset=c["start_offset"],
+            end_offset=c["end_offset"],
+            char_count=c["char_count"],
+            source_url=c["source_url"],
+            created_at=c["created_at"],
+        )
+        for c in chunks
+    ]

@@ -78,5 +78,6 @@ desktop.ini
 datasets/cache/
 datasets/sec_edgar/
 datasets/raw/
+datasets/filings/
 notebooks/.ipynb_checkpoints/
 
