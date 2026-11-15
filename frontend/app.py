@@ -226,9 +226,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 08</div>
+                    <div class="metric-value">Session 09</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Evidence-Grounded Financial RAG & LLM Integration operational.
+                        Anti-Hallucination Verification & Claim-Level Validation operational.
                     </p>
                 </div>
                 """,
@@ -238,10 +238,10 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">Multi-Modal Context</div>
-                    <div class="metric-value">Hybrid + Calcs</div>
+                    <div class="metric-label">Claim Verification</div>
+                    <div class="metric-value">Deterministic</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        FAISS Dense + BM25 Sparse + Reranker + Deterministic XBRL Receipts.
+                        Exact numerical tolerances, reporting period audits, contradiction checks.
                     </p>
                 </div>
                 """,
@@ -266,17 +266,17 @@ def main() -> None:
             """
             Finova AI is engineered to automate rigorous, evidence-backed corporate financial analysis:
             
+            - **Anti-Hallucination Verification**: Every sentence and factual claim is extracted, audited against cited SEC filings and deterministic calculation receipts, checking for numeric discrepancies, scale errors, and period mismatches.
             - **Evidence-Grounded Financial RAG**: Answer complex corporate finance queries with statutory passage citations ([E1]) and deterministic calculation receipts ([C1]).
-            - **Anti-Hallucination Guardrails**: Arithmetic calculations are executed strictly by deterministic Python formulas, not LLMs. Insufficient evidence triggers explicit uncertainty declarations.
+            - **Deterministic Metric Engine**: Exact calculation of revenue growth, margins, liquidity, leverage, and free cash flows from structured XBRL facts. Arithmetic calculations are executed strictly by deterministic Python formulas, not LLMs.
             - **Hybrid IR & Reranking**: Reciprocal Rank Fusion (RRF) over FAISS dense vectors and BM25 sparse lexical tokens, refined with Cross-Encoder reranking.
             - **Automated SEC EDGAR Retrieval**: Programmatic acquisition of annual (10-K) and quarterly (10-Q) filings with section-aware chunking.
-            - **Deterministic Metric Engine**: Exact calculation of revenue growth, margins, liquidity, leverage, and free cash flows from structured XBRL facts.
             """
         )
 
         st.info(
-            "📌 **Session 08 Active**: Evidence-grounded financial RAG and LLM integration are fully operational. "
-            "Navigate to **Financial Research Assistant** to ask research questions backed by verified SEC filings."
+            "📌 **Session 09 Active**: Anti-hallucination verification and claim-level evidence validation are fully operational. "
+            "Navigate to **Financial Research Assistant** to ask research questions backed by verified SEC filings with claim audit scorecards."
         )
 
     # -------------------------------------------------------------------------
@@ -1654,8 +1654,11 @@ def main() -> None:
             status_val = ans.get("answer_status", "unknown")
             status_badges = {
                 "answered": '<span class="badge-active">✅ Answered & Verified</span>',
+                "verified": '<span class="badge-active">✅ Answered & Verified</span>',
                 "partially_supported": '<span style="color: #F59E0B; background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 600;">⚠️ Partially Supported</span>',
+                "partially_verified": '<span style="color: #F59E0B; background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 600;">⚠️ Partially Verified</span>',
                 "insufficient_evidence": '<span style="color: #38BDF8; background-color: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 600;">ℹ️ Insufficient Evidence</span>',
+                "verification_rejected": '<span style="color: #EF4444; background-color: rgba(239, 68, 68, 0.2); border: 1px solid #EF4444; padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 700;">🚨 Verification Rejected</span>',
                 "provider_unavailable": '<span class="badge-offline">🔴 LLM Provider Offline</span>',
                 "citation_validation_failed": '<span class="badge-offline">❌ Citation Validation Failed</span>',
                 "generation_failed": '<span class="badge-offline">❌ Generation Failed</span>',
@@ -1686,6 +1689,140 @@ def main() -> None:
                 """,
                 unsafe_allow_html=True,
             )
+
+            # -------------------------------------------------------------
+            # Session 09: Claim-Level Verification & Anti-Hallucination Audit
+            # -------------------------------------------------------------
+            v_run_data = None
+            ans_id = ans.get("answer_id")
+            if ans_id:
+                try:
+                    v_resp = httpx.get(
+                        f"{backend_url}/api/v1/research/answers/{ans_id}/verification",
+                        timeout=5.0,
+                    )
+                    if v_resp.status_code == 200:
+                        v_run_data = v_resp.json()
+                except Exception:
+                    pass
+
+            v_title = "🛡️ Claim-Level Anti-Hallucination Audit"
+            if v_run_data:
+                ov_status = v_run_data.get("overall_status", "unknown")
+                status_icon = {
+                    "verified": "✅ VERIFIED",
+                    "verified_with_warnings": "⚠️ VERIFIED WITH WARNINGS",
+                    "partially_verified": "⚠️ PARTIALLY VERIFIED",
+                    "rejected": "🚨 REJECTED (Contradictions / Unsupported Claims)",
+                    "inconclusive": "❓ INCONCLUSIVE",
+                }.get(ov_status, ov_status.upper())
+                v_title = f"🛡️ Claim-Level Anti-Hallucination Audit — {status_icon}"
+
+            with st.expander(v_title, expanded=True if v_run_data else False):
+                if not v_run_data:
+                    st.info(
+                        "No claim verification audit available for this answer yet."
+                    )
+                    if ans_id and st.button(
+                        "🔍 Run Claim-Level Verification", key="btn_run_verif"
+                    ):
+                        with st.spinner(
+                            "Auditing factual claims against SEC evidence..."
+                        ):
+                            try:
+                                vr = httpx.post(
+                                    f"{backend_url}/api/v1/research/answers/{ans_id}/verify",
+                                    timeout=10.0,
+                                )
+                                if vr.status_code == 200:
+                                    st.success("Verification audit complete!")
+                                    st.rerun()
+                                else:
+                                    st.error(f"Verification failed: {vr.text}")
+                            except Exception as ex:
+                                st.error(f"Error: {ex}")
+                else:
+                    # Summary metric cards
+                    c_col1, c_col2, c_col3, c_col4, c_col5 = st.columns(5)
+                    c_col1.metric("Total Claims", v_run_data.get("total_claims", 0))
+                    c_col2.metric("Supported", v_run_data.get("supported_claims", 0))
+                    c_col3.metric(
+                        "Partially Supported",
+                        v_run_data.get("partially_supported_claims", 0),
+                    )
+                    c_col4.metric(
+                        "Unsupported", v_run_data.get("unsupported_claims", 0)
+                    )
+                    c_col5.metric(
+                        "Contradicted", v_run_data.get("contradicted_claims", 0)
+                    )
+
+                    # Mismatches or Contradictions banner if any
+                    contradictions = v_run_data.get("contradictions", [])
+                    num_mismatches = v_run_data.get("numeric_mismatches", [])
+                    per_mismatches = v_run_data.get("period_mismatches", [])
+
+                    if contradictions:
+                        st.error(
+                            f"🚨 **{len(contradictions)} Contradiction(s) Detected:**"
+                        )
+                        for cd in contradictions:
+                            st.markdown(
+                                f"- **{cd.get('contradiction_type', '').upper()}**: {cd.get('explanation')}"
+                            )
+
+                    if num_mismatches:
+                        st.warning(
+                            f"🔢 **{len(num_mismatches)} Numeric Discrepancy(ies):**"
+                        )
+                        for nm in num_mismatches:
+                            st.markdown(
+                                f"- Claimed `{nm.get('claimed_value')}` vs Evidence `{nm.get('evidence_value')}`: {nm.get('discrepancy_explanation')}"
+                            )
+
+                    if per_mismatches:
+                        st.warning(f"📅 **{len(per_mismatches)} Period Mismatch(es):**")
+                        for pm in per_mismatches:
+                            st.markdown(
+                                f"- Claimed `{pm.get('claimed_period')}` vs Evidence `{pm.get('evidence_period')}`: {pm.get('mismatch_explanation')}"
+                            )
+
+                    st.markdown("##### 📝 Evaluated Claims")
+                    claim_results = v_run_data.get("claim_results", [])
+                    outcome_badges = {
+                        "supported": '<span class="badge-active">✅ Supported</span>',
+                        "partially_supported": '<span style="color: #F59E0B; background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">⚠️ Partially Supported</span>',
+                        "unsupported": '<span class="badge-offline">❌ Unsupported</span>',
+                        "contradicted": '<span style="color: #EF4444; background-color: rgba(239, 68, 68, 0.2); border: 1px solid #EF4444; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">🚨 Contradicted</span>',
+                        "not_verifiable": '<span style="color: #94A3B8; background-color: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.4); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">❓ Not Verifiable</span>',
+                    }
+                    for cr in claim_results:
+                        c_outcome = cr.get("outcome", "unknown")
+                        obadge = outcome_badges.get(
+                            c_outcome, f"<span>{c_outcome}</span>"
+                        )
+                        sup_ids = (
+                            ", ".join(cr.get("supporting_evidence_ids", [])) or "None"
+                        )
+                        conf = cr.get("confidence_score", 0.0)
+                        method = cr.get("verification_method", "deterministic")
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #1E293B; border-left: 4px solid {"#10B981" if c_outcome == "supported" else "#EF4444" if c_outcome in ("unsupported", "contradicted") else "#F59E0B"}; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.6rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                    <span style="font-weight: 600; color: #F8FAFC; font-size: 0.95rem;">{cr.get("claim_text")}</span>
+                                    <div>{obadge}</div>
+                                </div>
+                                <div style="font-size: 0.82rem; color: #94A3B8; margin-top: 0.25rem;">
+                                    <strong>Evidence:</strong> <code>{sup_ids}</code> | <strong>Method:</strong> <code>{method}</code> | <strong>Confidence:</strong> <code>{conf:.2f}</code> (heuristic)
+                                </div>
+                                <div style="font-size: 0.85rem; color: #CBD5E1; margin-top: 0.35rem; font-style: italic;">
+                                    {cr.get("verification_reason")}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
             # Warnings if any
             warnings = ans.get("warnings", [])

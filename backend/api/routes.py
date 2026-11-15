@@ -73,6 +73,7 @@ from backend.retrieval.retrieval_models import (
 )
 from backend.retrieval.semantic_search import SemanticSearchService
 from backend.utils.logger import get_logger
+from backend.verification import VerificationRun, VerificationService
 from config.settings import get_settings
 
 logger = get_logger("routes")
@@ -138,8 +139,10 @@ _evidence_report_generator = EvidenceReportGenerator(
 )
 _evaluation_reports: dict[str, RetrievalEvaluationReport] = {}
 _llm_provider = get_llm_provider(settings=_settings)
+_verification_service = VerificationService(database=_db, settings=_settings)
 _rag_service = RAGService(
     llm_provider=_llm_provider,
+    verification_service=_verification_service,
     database=_db,
     settings=_settings,
 )
@@ -1632,3 +1635,57 @@ def get_llm_status() -> dict[str, Any]:
 def get_research_capabilities() -> RAGCapabilitiesResponse:
     """Retrieve operational capabilities of the financial RAG system."""
     return _rag_service.get_capabilities()
+
+
+# =============================================================================
+# Session 09: Anti-Hallucination & Claim-Level Verification Endpoints
+# =============================================================================
+@router.get(
+    "/research/answers/{answer_id}/verification",
+    response_model=VerificationRun,
+    summary="Get Claim Verification Run for Answer",
+    description="Retrieve the latest claim-level anti-hallucination verification run and audit details for a specific research answer.",
+    tags=["Anti-Hallucination & Verification"],
+)
+def get_answer_verification(answer_id: str) -> VerificationRun:
+    """Fetch the latest verification run for an answer."""
+    run = _verification_service.get_latest_verification_for_answer(answer_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Verification run for answer '{answer_id}' not found.",
+        )
+    return run
+
+
+@router.post(
+    "/research/answers/{answer_id}/verify",
+    response_model=VerificationRun,
+    summary="Trigger Re-Verification of Research Answer",
+    description="Execute an on-demand claim extraction and evidence verification audit on an existing research answer.",
+    tags=["Anti-Hallucination & Verification"],
+)
+def verify_research_answer(answer_id: str) -> VerificationRun:
+    """Execute claim verification on a stored research answer."""
+    answer = _rag_service.get_answer(answer_id)
+    if not answer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research answer '{answer_id}' not found.",
+        )
+    try:
+        run = _verification_service.verify_answer(
+            answer_id=answer.answer_id,
+            question=answer.question,
+            answer_text=answer.answer,
+            retrieved_evidence=answer.retrieved_evidence,
+            calculation_evidence=answer.calculation_evidence,
+            persist=True,
+        )
+        return run
+    except Exception as exc:
+        logger.error("Error running verification for answer %s: %s", answer_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Verification failed: {exc}",
+        ) from exc

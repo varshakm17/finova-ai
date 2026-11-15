@@ -159,6 +159,8 @@ class RAGAnswer(BaseModel):
         "generation_failed",
         "citation_validation_failed",
         "partially_supported",
+        "partially_verified",
+        "verification_rejected",
     ] = Field(..., description="Grounded execution status")
     citations: list[Citation] = Field(
         default_factory=list,
@@ -183,6 +185,14 @@ class RAGAnswer(BaseModel):
     )
     warnings: list[str] = Field(
         default_factory=list, description="Audit, provenance, or context warnings"
+    )
+    verification_run_id: str | None = Field(
+        default=None,
+        description="Associated claim-level verification run identifier",
+    )
+    verification_status: str | None = Field(
+        default=None,
+        description="Aggregate claim verification outcome ('verified', 'partially_verified', 'rejected')",
     )
     created_at: str = Field(
         default_factory=lambda: datetime.now(UTC).isoformat(),
@@ -211,4 +221,12 @@ class RAGCapabilitiesResponse(BaseModel):
     llm_model: str = Field(..., description="Configured LLM model identifier")
     llm_online: bool = Field(
         ..., description="Whether LLM provider is currently reachable"
+    )
+    verification_engine_enabled: bool = Field(
+        default=True,
+        description="Whether claim-level verification is active",
+    )
+    verification_version: str = Field(
+        default="0.1.0",
+        description="Verification engine version",
     )

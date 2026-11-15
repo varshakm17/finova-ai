@@ -234,6 +234,100 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_answers_created_at ON research_answers (created_at);"
             )
 
+            # 6. Verification Runs Table (Session 09)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS verification_runs (
+                    run_id TEXT PRIMARY KEY,
+                    answer_id TEXT NOT NULL,
+                    overall_status TEXT NOT NULL,
+                    total_claims INTEGER NOT NULL,
+                    supported_claims INTEGER NOT NULL,
+                    partially_supported_claims INTEGER NOT NULL,
+                    unsupported_claims INTEGER NOT NULL,
+                    contradicted_claims INTEGER NOT NULL,
+                    not_verifiable_claims INTEGER NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    verified_at TEXT NOT NULL,
+                    verifier_version TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vruns_answer_id ON verification_runs (answer_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vruns_verified_at ON verification_runs (verified_at);"
+            )
+
+            # 7. Answer Claims Table (Session 09)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS answer_claims (
+                    claim_id TEXT NOT NULL,
+                    answer_id TEXT NOT NULL,
+                    claim_text TEXT NOT NULL,
+                    claim_type TEXT NOT NULL,
+                    numeric_values_json TEXT NOT NULL,
+                    mentioned_company TEXT,
+                    mentioned_period TEXT,
+                    citation_ids_json TEXT NOT NULL,
+                    is_verifiable INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (claim_id, answer_id)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_claims_answer_id ON answer_claims (answer_id);"
+            )
+
+            # 8. Claim Verification Results Table (Session 09)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS claim_verification_results (
+                    result_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    claim_id TEXT NOT NULL,
+                    outcome TEXT NOT NULL,
+                    supporting_evidence_json TEXT NOT NULL,
+                    contradicting_evidence_json TEXT NOT NULL,
+                    verification_reason TEXT NOT NULL,
+                    confidence_score REAL NOT NULL,
+                    verification_method TEXT NOT NULL,
+                    numeric_check_json TEXT,
+                    period_check_json TEXT,
+                    contradiction_check_json TEXT,
+                    created_at TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_cvr_run_id ON claim_verification_results (run_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_cvr_claim_id ON claim_verification_results (claim_id);"
+            )
+
+            # 9. Verification Issues Table (Session 09)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS verification_issues (
+                    issue_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    claim_id TEXT,
+                    issue_type TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    source_reference TEXT,
+                    created_at TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_vissues_run_id ON verification_issues (run_id);"
+            )
+
         logger.info("Database initialized successfully at: %s", self.db_path)
 
     def save_company(self, company_data: dict[str, Any]) -> None:
@@ -734,3 +828,238 @@ class Database:
                         r_dict[field_name] = [] if "metadata" not in field_name else {}
                 results.append(r_dict)
             return results
+
+    def save_verification_run(self, run_data: dict[str, Any]) -> None:
+        """Persist a complete answer verification run, claims, and audit details."""
+        run_id = run_data["run_id"]
+        answer_id = run_data["answer_id"]
+        now_iso = run_data.get("verified_at") or datetime.now(UTC).isoformat()
+
+        with self.connection() as conn:
+            # 1. Verification Run Record
+            raw_status = run_data["overall_status"]
+            if hasattr(raw_status, "value"):
+                status_val = raw_status.value
+            else:
+                s_str = str(raw_status)
+                status_val = (
+                    s_str.split(".")[-1].lower() if "." in s_str else s_str.lower()
+                )
+
+            conn.execute(
+                """
+                INSERT INTO verification_runs (
+                    run_id, answer_id, overall_status, total_claims, supported_claims,
+                    partially_supported_claims, unsupported_claims, contradicted_claims,
+                    not_verifiable_claims, warnings_json, verified_at, verifier_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    overall_status = excluded.overall_status,
+                    total_claims = excluded.total_claims,
+                    supported_claims = excluded.supported_claims,
+                    partially_supported_claims = excluded.partially_supported_claims,
+                    unsupported_claims = excluded.unsupported_claims,
+                    contradicted_claims = excluded.contradicted_claims,
+                    not_verifiable_claims = excluded.not_verifiable_claims,
+                    warnings_json = excluded.warnings_json,
+                    verified_at = excluded.verified_at;
+                """,
+                (
+                    run_id,
+                    answer_id,
+                    status_val,
+                    int(run_data.get("total_claims", 0)),
+                    int(run_data.get("supported_claims", 0)),
+                    int(run_data.get("partially_supported_claims", 0)),
+                    int(run_data.get("unsupported_claims", 0)),
+                    int(run_data.get("contradicted_claims", 0)),
+                    int(run_data.get("not_verifiable_claims", 0)),
+                    json.dumps(run_data.get("warnings", [])),
+                    now_iso,
+                    str(run_data.get("verifier_version", "0.1.0")),
+                ),
+            )
+
+            # 2. Claim-level verification results & answer claims
+            for cr in run_data.get("claim_results", []):
+                claim_id = cr["claim_id"]
+                result_id = f"{run_id}_{claim_id}"
+
+                raw_outcome = cr["outcome"]
+                if hasattr(raw_outcome, "value"):
+                    outcome_val = raw_outcome.value
+                else:
+                    o_str = str(raw_outcome)
+                    outcome_val = (
+                        o_str.split(".")[-1].lower() if "." in o_str else o_str.lower()
+                    )
+
+                # Insert/update answer_claims
+                conn.execute(
+                    """
+                    INSERT INTO answer_claims (
+                        claim_id, answer_id, claim_text, claim_type, numeric_values_json,
+                        mentioned_company, mentioned_period, citation_ids_json,
+                        is_verifiable, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(claim_id, answer_id) DO UPDATE SET
+                        claim_text = excluded.claim_text,
+                        claim_type = excluded.claim_type,
+                        numeric_values_json = excluded.numeric_values_json,
+                        citation_ids_json = excluded.citation_ids_json;
+                    """,
+                    (
+                        claim_id,
+                        answer_id,
+                        cr.get("claim_text", ""),
+                        str(cr.get("claim_type", "general_fact")),
+                        json.dumps(cr.get("numeric_values", [])),
+                        cr.get("mentioned_company"),
+                        cr.get("mentioned_period"),
+                        json.dumps(cr.get("citation_ids", [])),
+                        1 if cr.get("is_verifiable", True) else 0,
+                        now_iso,
+                    ),
+                )
+
+                # Insert/update claim_verification_results
+                conn.execute(
+                    """
+                    INSERT INTO claim_verification_results (
+                        result_id, run_id, claim_id, outcome, supporting_evidence_json,
+                        contradicting_evidence_json, verification_reason, confidence_score,
+                        verification_method, numeric_check_json, period_check_json,
+                        contradiction_check_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(result_id) DO UPDATE SET
+                        outcome = excluded.outcome,
+                        verification_reason = excluded.verification_reason,
+                        confidence_score = excluded.confidence_score,
+                        verification_method = excluded.verification_method;
+                    """,
+                    (
+                        result_id,
+                        run_id,
+                        claim_id,
+                        outcome_val,
+                        json.dumps(cr.get("supporting_evidence_ids", [])),
+                        json.dumps(cr.get("contradicting_evidence_ids", [])),
+                        cr.get("verification_reason", ""),
+                        float(cr.get("confidence_score", 1.0)),
+                        str(cr.get("verification_method", "unknown")),
+                        json.dumps(cr.get("numeric_check"))
+                        if cr.get("numeric_check")
+                        else None,
+                        json.dumps(cr.get("period_check"))
+                        if cr.get("period_check")
+                        else None,
+                        json.dumps(cr.get("contradiction_check"))
+                        if cr.get("contradiction_check")
+                        else None,
+                        now_iso,
+                    ),
+                )
+
+    def get_verification_run(self, run_id: str) -> dict[str, Any] | None:
+        """Fetch a complete verification run by run_id with all claim results."""
+        with self.connection() as conn:
+            run_row = conn.execute(
+                "SELECT * FROM verification_runs WHERE run_id = ?;",
+                (run_id.strip(),),
+            ).fetchone()
+            if not run_row:
+                return None
+
+            run_dict = dict(run_row)
+            if "OverallVerificationStatus." in str(run_dict.get("overall_status")):
+                run_dict["overall_status"] = (
+                    str(run_dict["overall_status"]).split(".")[-1].lower()
+                )
+            try:
+                run_dict["warnings"] = json.loads(run_dict.pop("warnings_json", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                run_dict["warnings"] = []
+
+            # Fetch claim results
+            c_rows = conn.execute(
+                """
+                SELECT cvr.*, ac.claim_text, ac.claim_type, ac.mentioned_company,
+                       ac.mentioned_period, ac.citation_ids_json, ac.is_verifiable
+                FROM claim_verification_results cvr
+                LEFT JOIN answer_claims ac ON cvr.claim_id = ac.claim_id AND ac.answer_id = ?
+                WHERE cvr.run_id = ?
+                ORDER BY cvr.claim_id ASC;
+                """,
+                (run_dict["answer_id"], run_id.strip()),
+            ).fetchall()
+
+            claim_results: list[dict[str, Any]] = []
+            for cr in c_rows:
+                c_dict = dict(cr)
+                if "VerificationOutcome." in str(c_dict.get("outcome")):
+                    c_dict["outcome"] = str(c_dict["outcome"]).split(".")[-1].lower()
+                try:
+                    c_dict["supporting_evidence_ids"] = json.loads(
+                        c_dict.pop("supporting_evidence_json", "[]")
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    c_dict["supporting_evidence_ids"] = []
+                try:
+                    c_dict["contradicting_evidence_ids"] = json.loads(
+                        c_dict.pop("contradicting_evidence_json", "[]")
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    c_dict["contradicting_evidence_ids"] = []
+                try:
+                    c_dict["citation_ids"] = json.loads(
+                        c_dict.pop("citation_ids_json", "[]")
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    c_dict["citation_ids"] = []
+
+                for k in ["numeric_check", "period_check", "contradiction_check"]:
+                    raw = c_dict.pop(f"{k}_json", None)
+                    if raw:
+                        try:
+                            c_dict[k] = json.loads(raw)
+                        except (json.JSONDecodeError, TypeError):
+                            c_dict[k] = None
+                    else:
+                        c_dict[k] = None
+
+                c_dict["warnings"] = []
+                claim_results.append(c_dict)
+
+            run_dict["claim_results"] = claim_results
+            run_dict["contradictions"] = [
+                cr["contradiction_check"]
+                for cr in claim_results
+                if cr.get("contradiction_check")
+                and cr["contradiction_check"].get("has_contradiction")
+            ]
+            run_dict["numeric_mismatches"] = [
+                cr["numeric_check"]
+                for cr in claim_results
+                if cr.get("numeric_check") and not cr["numeric_check"].get("matched")
+            ]
+            run_dict["period_mismatches"] = [
+                cr["period_check"]
+                for cr in claim_results
+                if cr.get("period_check")
+                and not cr["period_check"].get("is_consistent")
+            ]
+
+            return run_dict
+
+    def get_latest_verification_for_answer(
+        self, answer_id: str
+    ) -> dict[str, Any] | None:
+        """Fetch the most recent verification run for a given answer_id."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT run_id FROM verification_runs WHERE answer_id = ? ORDER BY verified_at DESC LIMIT 1;",
+                (answer_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            return self.get_verification_run(row["run_id"])

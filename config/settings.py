@@ -249,6 +249,36 @@ class Settings(BaseSettings):
         description="Maximum total character length of context text sent to LLM",
     )
 
+    # Anti-Hallucination & Claim-Level Answer Verification (Session 09)
+    VERIFICATION_ENABLED: bool = Field(
+        default=True,
+        description="Enable post-generation claim-level answer verification",
+    )
+    VERIFICATION_NUMERIC_TOLERANCE_PCT: float = Field(
+        default=1.0,
+        description="Permitted relative percentage tolerance for numeric checks (e.g. 1.0 for 1% difference)",
+    )
+    VERIFICATION_STRICT_PERIODS: bool = Field(
+        default=True,
+        description="Enforce strict matching between claim period and evidence reporting period",
+    )
+    VERIFICATION_SEMANTIC_OVERLAP_THRESHOLD: float = Field(
+        default=0.25,
+        description="Token overlap threshold for deterministic lexical claim verification",
+    )
+    VERIFICATION_MAX_REGENERATION_ATTEMPTS: int = Field(
+        default=1,
+        description="Maximum regeneration attempts if an answer is contradicted or rejected",
+    )
+    VERIFICATION_ENABLE_REGENERATION: bool = Field(
+        default=False,
+        description="Enable automatic draft regeneration when answer verification fails",
+    )
+    VERIFICATION_VERSION: str = Field(
+        default="0.1.0",
+        description="Semantic version of the claim-level verification engine",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from backend.data.document_storage import DocumentStorage
 from backend.data.storage import Database
@@ -27,6 +27,9 @@ from backend.retrieval.hybrid_search import HybridSearchService
 from backend.retrieval.reranker import CrossEncoderReranker
 from backend.utils.logger import get_logger
 from config.settings import Settings, get_settings
+
+if TYPE_CHECKING:
+    from backend.verification.verification_service import VerificationService
 
 logger = get_logger("rag_service")
 
@@ -48,6 +51,7 @@ class RAGService:
         llm_provider: LLMProvider | None = None,
         context_builder: RAGContextBuilder | None = None,
         citation_validator: CitationValidator | None = None,
+        verification_service: VerificationService | None = None,
         database: Database | None = None,
         settings: Settings | None = None,
     ) -> None:
@@ -75,6 +79,15 @@ class RAGService:
             settings=self.settings,
         )
         self.citation_validator = citation_validator or CitationValidator()
+        if verification_service is None:
+            from backend.verification.verification_service import VerificationService
+
+            self.verification_service = VerificationService(
+                database=self.db,
+                settings=self.settings,
+            )
+        else:
+            self.verification_service = verification_service
 
     def ask(self, request: RAGRequest) -> RAGAnswer:
         """Process financial research question through evidence-grounded RAG pipeline.
@@ -169,8 +182,6 @@ class RAGService:
             )
             self._persist_answer(offline_answer, ticker=request.ticker)
             return offline_answer
-            self._persist_answer(offline_answer, ticker=request.ticker)
-            return offline_answer
 
         # 4. Construct Grounding Prompts
         system_prompt, user_prompt = build_rag_prompts(
@@ -244,7 +255,35 @@ class RAGService:
         if gen_resp.metadata:
             metadata.update(gen_resp.metadata)
 
-        # 8. Assemble RAGAnswer Container
+        # 8. Post-Generation Anti-Hallucination & Claim-Level Verification
+        verification_run_id: str | None = None
+        verification_status: str | None = None
+        if self.settings.VERIFICATION_ENABLED:
+            try:
+                v_run = self.verification_service.verify_answer(
+                    answer_id=answer_id,
+                    question=request.question,
+                    answer_text=gen_resp.text.strip(),
+                    retrieved_evidence=context.retrieved_evidence,
+                    calculation_evidence=context.calculation_evidence,
+                    persist=True,
+                )
+                verification_run_id = v_run.run_id
+                verification_status = v_run.overall_status.value
+                if v_run.warnings:
+                    all_warnings.extend(v_run.warnings)
+                if v_run.overall_status.value == "rejected":
+                    answer_status = "verification_rejected"
+                elif (
+                    v_run.overall_status.value == "partially_verified"
+                    and answer_status == "answered"
+                ):
+                    answer_status = "partially_verified"
+            except Exception as exc:
+                logger.warning("Verification failed for answer %s: %s", answer_id, exc)
+                all_warnings.append(f"Verification execution error: {exc}")
+
+        # 9. Assemble RAGAnswer Container
         final_answer = RAGAnswer(
             answer_id=answer_id,
             question=request.question,
@@ -257,10 +296,12 @@ class RAGService:
             provider=prov_name,
             retrieval_method=context.retrieval_method,
             generation_metadata=metadata,
+            verification_run_id=verification_run_id,
+            verification_status=verification_status,
             warnings=all_warnings,
         )
 
-        # 9. Persist to SQLite
+        # 10. Persist to SQLite
         self._persist_answer(final_answer, ticker=request.ticker)
         return final_answer
 
@@ -280,6 +321,8 @@ class RAGService:
             reranker_model=self.settings.RERANKER_MODEL_NAME,
             calculation_engine_enabled=True,
             citation_verification_enabled=True,
+            verification_engine_enabled=self.settings.VERIFICATION_ENABLED,
+            verification_version=self.settings.VERIFICATION_VERSION,
             llm_provider=self.llm_provider.provider_name,
             llm_model=self.llm_provider.model_name,
             llm_online=llm_online,
