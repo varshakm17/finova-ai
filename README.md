@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 01 Foundation](https://img.shields.io/badge/Status-Foundation%20Active-brightgreen.svg)]()
+[![Status: Session 02 SEC Integration](https://img.shields.io/badge/Status-SEC%20Pipeline%20Active-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -34,14 +34,15 @@ Finova AI solves these limitations through an orchestrated multi-agent architect
 
 ---
 
-## 3. Planned Major Features
+## 3. Major Features
 
-1. **SEC EDGAR Client Engine**: Compliant rate-limited ingestion of SEC company facts and full-text filings.
-2. **Multi-Agent Orchestration Graph (LangGraph)**: Coordination across 6 specialized agents (Supervisor, Research, Analyst, Calculation, Verification, Report).
-3. **Deterministic Financial Math Library**: Comprehensive financial formula suite ensuring zero calculation errors.
-4. **Hybrid Sparse + Dense Vector Search**: BM25 keyword matching fused with dense embeddings for high-precision footnote lookup.
-5. **Interactive Research Workspace**: Streamlit-based UI for interactive company benchmarking, filing inspection, and report generation.
-6. **Extensible FastAPI Microservice**: Robust asynchronous REST API exposing all research capabilities.
+1. **SEC EDGAR Client Engine**: Compliant rate-limited ingestion of SEC company facts and full-text filings with automatic backoff retries.
+2. **Company Identification & Ticker Resolution**: In-memory and disk-cached CIK resolution from master SEC directory.
+3. **XBRL Metric Extraction & Temporal Normalization**: Section-aware parsing that separates Annual, Standalone Quarterly, Year-To-Date (YTD), and Point-in-Time Instant values.
+4. **Relational SQLite Financial Store**: Foreign-key backed persistence layer for companies, filings, and canonical financial observations.
+5. **Interactive Streamlit Workspace**: Multi-view dashboard for company lookup, filing inspection, and financial metric tracking.
+6. **Multi-Agent Orchestration Graph (LangGraph)**: *(Planned: Session 05)* 6-agent cooperative state machine.
+7. **Deterministic Financial Math Library**: *(Planned: Session 04)* Calculation receipts ensuring zero arithmetic errors.
 
 ---
 
@@ -54,7 +55,7 @@ Finova AI solves these limitations through an orchestrated multi-agent architect
 - **Data & Computation**: Pandas, NumPy
 - **HTTP & Networking**: Requests, HTTPX
 - **Testing & Quality**: Pytest, Pytest-cov, Ruff
-- **Database (Initial)**: SQLite (Zero external infrastructure dependency)
+- **Database (Initial)**: SQLite with foreign keys enabled (Zero external infrastructure dependency)
 - **Execution Target**: Standard CPU execution (16 GB RAM, no GPU required)
 - **Planned Orchestration**: LangGraph, Local Embeddings, Hybrid BM25
 
@@ -73,7 +74,9 @@ flowchart LR
     G --> H["Evidence-Backed Report"]
 ```
 
-For detailed architectural specifications, agent definitions, and sequence diagrams, refer to [architecture.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/architecture.md).
+For detailed architectural specifications, agent definitions, sequence diagrams, and data ingestion workflows:
+- [architecture.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/architecture.md) — Multi-agent system topology.
+- [sec-data-pipeline.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/sec-data-pipeline.md) — Ingestion pipeline and schema specification.
 
 ---
 
@@ -87,12 +90,17 @@ finova-ai/
 │   ├── main.py                 # FastAPI application factory and entrypoint
 │   ├── api/
 │   │   ├── __init__.py
-│   │   └── routes.py           # API endpoints (including /health)
+│   │   └── routes.py           # REST API endpoints (Health, Companies, Filings, Financials)
+│   ├── data/                   # SEC EDGAR ingestion, normalization, and SQLite storage
+│   │   ├── __init__.py
+│   │   ├── sec_client.py       # Rate-limited SEC EDGAR HTTP client with backoff
+│   │   ├── company_service.py  # Ticker-to-CIK resolution and caching
+│   │   ├── financial_extractor.py # XBRL company facts parser & US-GAAP mapper
+│   │   ├── data_normalizer.py  # Observation schema and period classification
+│   │   └── storage.py          # SQLite relational database engine
 │   ├── agents/                 # (Session 05) Multi-agent implementations
 │   │   └── __init__.py
 │   ├── graph/                  # (Session 05) LangGraph state graphs
-│   │   └── __init__.py
-│   ├── data/                   # (Session 02) SEC EDGAR ingestion & parsing
 │   │   └── __init__.py
 │   ├── retrieval/              # (Session 03) Hybrid RAG pipelines
 │   │   └── __init__.py
@@ -106,27 +114,37 @@ finova-ai/
 │
 ├── frontend/
 │   ├── __init__.py
-│   └── app.py                  # Streamlit application with financial theme
+│   └── app.py                  # Streamlit application with company lookup & analytics
 │
 ├── config/
 │   ├── __init__.py
 │   └── settings.py             # Pydantic Settings configuration loader
 │
 ├── datasets/
-│   └── README.md               # Guidelines for raw filing storage and cache
+│   ├── README.md               # Guidelines for raw filing storage and cache
+│   └── cache/                  # Local cache for SEC ticker directory
 │
 ├── notebooks/
 │   └── .gitkeep                # Exploratory analysis scratchpads
 │
 ├── tests/
 │   ├── __init__.py
-│   └── test_health.py          # Automated test suite (health checks, config)
+│   ├── fixtures/
+│   │   └── sec_mock_data.py    # Mock SEC submissions and facts payloads
+│   ├── test_health.py          # Foundation & health check tests
+│   ├── test_sec_client.py      # SECClient, CIK, and User-Agent validation tests
+│   ├── test_company_service.py # Company lookup and caching tests
+│   ├── test_financial_extractor.py # XBRL extraction & period typing tests
+│   ├── test_storage.py         # SQLite persistence, foreign keys, & upsert tests
+│   └── test_api_endpoints.py   # FastAPI company & financial endpoint tests
 │
 ├── docs/
-│   └── architecture.md         # Detailed architectural documentation
+│   ├── architecture.md         # System architecture specification
+│   └── sec-data-pipeline.md    # SEC data ingestion & retrieval specification
 │
 ├── logs/
-│   └── .gitkeep                # Application runtime logs
+│   ├── .gitkeep
+│   └── finova.log              # Application runtime logs
 │
 ├── .env.example                # Environment variable template
 ├── .gitignore                  # Git exclusions for secrets, venvs, and cache
@@ -138,127 +156,158 @@ finova-ai/
 
 ---
 
-## 7. Windows Installation Instructions
+## 7. SEC EDGAR Integration & Supported Metrics
 
-### Prerequisites
-- Windows 10/11
-- Python 3.11 installed and added to your `PATH`
-- Git
+### Supported Canonical Financial Concepts
+- **Income Statement**: Revenue, Cost of Revenue, Gross Profit, Operating Income, Net Income, Earnings Per Share (Diluted/Basic).
+- **Balance Sheet (Instant)**: Total Assets, Current Assets, Total Liabilities, Current Liabilities, Stockholders' Equity, Cash and Cash Equivalents, Long-Term Debt.
+- **Cash Flow Statement**: Operating Cash Flow, Investing Cash Flow, Financing Cash Flow, Capital Expenditures (Capex).
 
-### 1. Create Virtual Environment
-Open PowerShell in the project directory:
+### Fair-Access Compliance
+- **Declared User-Agent**: Configured via `SEC_USER_AGENT` environment variable. Format: `ApplicationName AdminContact@domain.com`.
+- **Throttling**: Enforces $\le 8$ requests/second.
+- **Exponential Backoff**: Automatic retry for HTTP 429 and 5xx errors.
 
-```powershell
-python -m venv .venv
-```
+---
 
-### 2. Activate Virtual Environment
+## 8. REST API Endpoints & Examples
+
+The FastAPI backend exposes interactive Swagger UI at `http://127.0.0.1:8000/docs`.
+
+### 1. Company Search
+- **Endpoint**: `GET /api/v1/companies/search?ticker=AAPL`
+- **Response**:
+  ```json
+  {
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "name": "Apple Inc."
+  }
+  ```
+
+### 2. Company Metadata
+- **Endpoint**: `GET /api/v1/companies/AAPL`
+- **Response**:
+  ```json
+  {
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "name": "Apple Inc.",
+    "sic": "3571",
+    "sic_description": "Electronic Computers",
+    "fiscal_year_end": "0930",
+    "state_location": "CA"
+  }
+  ```
+
+### 3. Recent SEC Filings
+- **Endpoint**: `GET /api/v1/companies/AAPL/filings?form_type=10-K`
+- **Response**:
+  ```json
+  [
+    {
+      "accession_number": "0000320193-23-000106",
+      "cik": "0000320193",
+      "form": "10-K",
+      "filing_date": "2023-11-03",
+      "report_date": "2023-09-30",
+      "primary_document": "aapl-20230930.htm",
+      "is_xbrl": true,
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm"
+    }
+  ]
+  ```
+
+### 4. Normalized Financial Observations
+- **Endpoint**: `GET /api/v1/companies/AAPL/financials?period_type=annual&start_year=2023`
+- **Response**:
+  ```json
+  [
+    {
+      "company_ticker": "AAPL",
+      "company_cik": "0000320193",
+      "company_name": "Apple Inc.",
+      "metric_name": "Revenue",
+      "statement_type": "Income Statement",
+      "original_tag": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "numeric_value": 383285000000.0,
+      "unit": "USD",
+      "period_start": "2022-10-01",
+      "period_end": "2023-09-30",
+      "period_type": "annual",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "filing_date": "2023-11-03",
+      "filing_type": "10-K",
+      "accession_number": "0000320193-23-000106",
+      "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/"
+    }
+  ]
+  ```
+
+### 5. Metric History
+- **Endpoint**: `GET /api/v1/companies/AAPL/financials/Revenue`
+- **Response**: List of chronological observations specifically for `Revenue`.
+
+---
+
+## 9. Windows Installation & Execution
+
+### 1. Activate Environment
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-*Note: If PowerShell displays an execution policy error, enable local script execution for the current session:*
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
-```
-
-### 3. Install Dependencies
-```powershell
-# Install core runtime and development dependencies
-pip install --upgrade pip
-pip install -r requirements-dev.txt
-```
-
----
-
-## 8. Environment Variable Configuration
-
-Copy the `.env.example` template to `.env`:
-
+### 2. Configure Environment Variables
+Copy `.env.example` to `.env`:
 ```powershell
 Copy-Item .env.example .env
 ```
+Ensure `SEC_USER_AGENT` contains a valid contact email:
+```ini
+SEC_USER_AGENT="FinovaAI-Research/0.1.0 (contact@example.com)"
+```
 
-Key configuration parameters in `.env`:
-
-| Variable | Default Value | Description |
-| :--- | :--- | :--- |
-| `APP_NAME` | `Finova AI` | Name of the application |
-| `APP_ENV` | `development` | Deployment environment (`development`, `staging`, `production`, `test`) |
-| `DEBUG` | `True` | Enable debug logs and hot reload |
-| `HOST` | `127.0.0.1` | Local backend host binding |
-| `PORT` | `8000` | Local backend port |
-| `LOG_LEVEL` | `INFO` | Console & file log threshold (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| `DATABASE_URL`| `sqlite:///./finova.db` | Local SQLite database URL |
-| `SEC_USER_AGENT` | `FinovaAI-Research/0.1.0 (contact@example.com)` | **Required for SEC EDGAR requests**: declare your name/entity and contact email |
-
----
-
-## 9. Execution Instructions
-
-### A. Running the FastAPI Backend
-With the virtual environment activated:
-
+### 3. Run FastAPI Backend
 ```powershell
 uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-- **API Base URL**: `http://127.0.0.1:8000`
-- **Interactive Swagger Documentation**: `http://127.0.0.1:8000/docs`
-- **Alternative ReDoc Documentation**: `http://127.0.0.1:8000/redoc`
-- **Direct Health Check**: `http://127.0.0.1:8000/health`
-
-### B. Running the Streamlit Frontend
-In a separate PowerShell terminal (with `.venv` activated):
-
+### 4. Run Streamlit Frontend
 ```powershell
 streamlit run frontend/app.py
 ```
 
-The Streamlit web interface will open automatically in your browser at:
-`http://localhost:8501`
-
----
-
-## 10. Running Automated Tests
-
-Run the test suite using `pytest`:
-
-```powershell
-pytest
-```
-
-To run with verbose output and coverage reporting:
-
+### 5. Run Automated Tests
 ```powershell
 pytest -v --cov=backend --cov=config
 ```
 
 ---
 
-## 11. Current Implementation Status (Session 01)
+## 10. Implementation Status
 
 - [x] Standardized project repository layout with separation of concerns.
 - [x] Python 3.11 virtual environment configuration.
 - [x] Centralized configuration management using Pydantic Settings (`config/settings.py`).
 - [x] Centralized logging system writing to console and `logs/finova.log` (`backend/utils/logger.py`).
 - [x] Operational FastAPI backend with `/health` and `/api/v1/health` endpoints (`backend/main.py`).
-- [x] Exception handling and OpenAPI / Swagger UI documentation.
-- [x] Minimal Streamlit frontend with dark navy theme and backend connectivity indicator (`frontend/app.py`).
-- [x] Automated test suite verifying health endpoints, config defaults, and logging (`tests/test_health.py`).
-- [x] Comprehensive architecture documentation (`docs/architecture.md`).
-- [x] Strict scope boundary preservation (zero premature agent or scraping implementations).
+- [x] SEC EDGAR Client with User-Agent validation, rate-limiting, and backoff (`backend/data/sec_client.py`).
+- [x] Company identification, ticker normalization, and disk caching (`backend/data/company_service.py`).
+- [x] Financial data extraction for 17 canonical US-GAAP concepts (`backend/data/financial_extractor.py`).
+- [x] Period typing distinguishing Annual, Standalone Quarter, YTD, and Instant (`backend/data/data_normalizer.py`).
+- [x] Relational SQLite storage with foreign keys and unique constraints (`backend/data/storage.py`).
+- [x] REST API endpoints for search, metadata, filings, and financials (`backend/api/routes.py`).
+- [x] Streamlit company and financial metrics lookup UI (`frontend/app.py`).
+- [x] Automated test suite with 32 unit and integration tests passing offline (`tests/`).
+- [x] Comprehensive documentation in `README.md` and `docs/sec-data-pipeline.md`.
 
 ---
 
-## 12. Future Development Roadmap
+## 11. Future Development Roadmap
 
-- **Session 02: SEC EDGAR Ingestion Pipeline**
-  - Rate-limited SEC EDGAR API client.
-  - CIK company lookup and 10-K / 10-Q XBRL parsing.
-  - Local caching layer for raw corporate filings.
 - **Session 03: Hybrid RAG & Financial Document Processing**
-  - Section-aware financial filing chunking.
+  - Section-aware financial filing chunking (Item 1A Risk Factors, Item 7 MD&A).
   - CPU-optimized embedding generation.
   - BM25 + dense hybrid search over filing disclosures.
 - **Session 04: Deterministic Financial Calculation Engine**
@@ -273,7 +322,6 @@ pytest -v --cov=backend --cov=config
 
 ---
 
-## 13. License
+## 12. License
 
 Distributed under the MIT License. See [LICENSE](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/LICENSE) for more details.
-

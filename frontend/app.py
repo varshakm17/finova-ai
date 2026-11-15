@@ -1,7 +1,7 @@
 """Finova AI — Minimal Streamlit Frontend Application.
 
 Provides a clean, professional financial analytics interface with dark navy styling,
-system health indicators, and a placeholder financial research workspace.
+system health indicators, and SEC EDGAR company & financial metric exploration.
 """
 
 import sys
@@ -191,6 +191,7 @@ def main() -> None:
             "Navigation",
             options=[
                 "Overview",
+                "Company Lookup (SEC EDGAR)",
                 "Research Workspace (Preview)",
                 "Agent Architecture",
                 "Configuration",
@@ -202,7 +203,7 @@ def main() -> None:
         st.markdown("**SEC EDGAR Compliance**")
         st.caption(
             "SEC queries require a declared User-Agent. Configure your identifier in `.env` "
-            "prior to launching extraction in future sessions."
+            "prior to making live SEC requests."
         )
 
     # Main Header
@@ -226,9 +227,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 01</div>
+                    <div class="metric-value">Session 02</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Core architectural scaffolding, logging, and FastAPI backend active.
+                        SEC EDGAR ingestion pipeline & SQLite financial storage active.
                     </p>
                 </div>
                 """,
@@ -251,10 +252,10 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">Target Data Source</div>
-                    <div class="metric-value">SEC EDGAR</div>
+                    <div class="metric-label">SEC Pipeline</div>
+                    <div class="metric-value">Live Ingestion</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        10-K & 10-Q annual/quarterly reports for US-listed public companies.
+                        XBRL company facts, 10-K/10-Q submissions, and metric extraction.
                     </p>
                 </div>
                 """,
@@ -276,13 +277,165 @@ def main() -> None:
         )
 
         st.info(
-            "📌 **Engineering Foundation Active**: This interface represents the foundational scaffolding "
-            "(Session 01). Backend endpoints, logging, configuration management, and automated tests are verified. "
-            "Data pipelines and multi-agent graphs will be integrated in subsequent sessions."
+            "📌 **Session 02 Integration Live**: SEC EDGAR integration pipeline is operational. "
+            "Explore company metadata, statutory filings, and extracted XBRL financial metrics in the "
+            "**Company Lookup (SEC EDGAR)** section."
         )
 
     # -------------------------------------------------------------------------
-    # View 2: Research Workspace (Preview)
+    # View 2: Company Lookup (SEC EDGAR) - Session 02 Feature
+    # -------------------------------------------------------------------------
+    elif nav_selection == "Company Lookup (SEC EDGAR)":
+        st.markdown("### 🏢 SEC EDGAR Company & Financial Data Lookup")
+        st.caption(
+            "Query official SEC EDGAR submissions and XBRL financial facts by stock ticker."
+        )
+
+        col_search, col_btn = st.columns([3, 1])
+        with col_search:
+            search_ticker = (
+                st.text_input(
+                    "Company Ticker Symbol",
+                    value="AAPL",
+                    help="Enter a US stock ticker (e.g., AAPL, MSFT, NVDA).",
+                )
+                .strip()
+                .upper()
+            )
+        with col_btn:
+            st.write("")
+            st.write("")
+            search_clicked = st.button(
+                "Query SEC Data", type="primary", use_container_width=True
+            )
+
+        if search_ticker and (search_clicked or "last_searched" in st.session_state):
+            st.session_state["last_searched"] = search_ticker
+
+            if not health_data:
+                st.error(
+                    "⚠️ FastAPI Backend is offline. Please start the backend service using: "
+                    "`uvicorn backend.main:app --port 8000` to query live SEC data."
+                )
+            else:
+                with st.spinner(f"Retrieving SEC data for {search_ticker}..."):
+                    try:
+                        # 1. Company Search / Metadata
+                        meta_resp = httpx.get(
+                            f"{backend_url}/api/v1/companies/{search_ticker}",
+                            timeout=15.0,
+                        )
+
+                        if meta_resp.status_code == 404:
+                            st.warning(
+                                f"Company ticker '{search_ticker}' was not found in SEC EDGAR."
+                            )
+                        elif meta_resp.status_code != 200:
+                            st.error(
+                                f"Error ({meta_resp.status_code}): {meta_resp.text}"
+                            )
+                        else:
+                            company_info = meta_resp.json()
+
+                            # Display Company Profile Card
+                            st.markdown(
+                                f"""
+                                <div class="card">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <h3 style="margin: 0; color: #F8FAFC;">{company_info.get("name")} ({company_info.get("ticker")})</h3>
+                                        <span class="badge-active">CIK: {company_info.get("cik")}</span>
+                                    </div>
+                                    <p style="color: #94A3B8; margin-top: 0.5rem; margin-bottom: 0;">
+                                        Industry: <strong>{company_info.get("sic_description") or "N/A"}</strong> (SIC: {company_info.get("sic") or "N/A"}) | 
+                                        Fiscal Year End: <strong>{company_info.get("fiscal_year_end") or "N/A"}</strong> | 
+                                        Location: <strong>{company_info.get("state_location") or "N/A"}</strong>
+                                    </p>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                            tab_filings, tab_metrics = st.tabs(
+                                ["📄 SEC Filings", "📈 Financial Observations"]
+                            )
+
+                            # Tab 1: Filings
+                            with tab_filings:
+                                filings_resp = httpx.get(
+                                    f"{backend_url}/api/v1/companies/{search_ticker}/filings",
+                                    timeout=15.0,
+                                )
+                                if filings_resp.status_code == 200:
+                                    filings_list = filings_resp.json()
+                                    if filings_list:
+                                        table_data = [
+                                            {
+                                                "Form": f.get("form"),
+                                                "Filing Date": f.get("filing_date"),
+                                                "Report Period": f.get("report_date")
+                                                or "—",
+                                                "Accession Number": f.get(
+                                                    "accession_number"
+                                                ),
+                                                "XBRL": "Yes"
+                                                if f.get("is_xbrl")
+                                                else "No",
+                                                "SEC Archive": f.get("url") or "—",
+                                            }
+                                            for f in filings_list[:25]
+                                        ]
+                                        st.dataframe(
+                                            table_data, use_container_width=True
+                                        )
+                                    else:
+                                        st.info(
+                                            "No recent filings found for this company."
+                                        )
+                                else:
+                                    st.warning("Could not load filings metadata.")
+
+                            # Tab 2: Financial Observations
+                            with tab_metrics:
+                                fin_resp = httpx.get(
+                                    f"{backend_url}/api/v1/companies/{search_ticker}/financials",
+                                    timeout=20.0,
+                                )
+                                if fin_resp.status_code == 200:
+                                    observations = fin_resp.json()
+                                    if observations:
+                                        st.caption(
+                                            f"Showing {len(observations)} normalized observations:"
+                                        )
+                                        obs_data = [
+                                            {
+                                                "Metric": obs.get("metric_name"),
+                                                "Statement": obs.get("statement_type"),
+                                                "Value": f"{obs.get('numeric_value', 0):,.2f}",
+                                                "Unit": obs.get("unit"),
+                                                "Period End": obs.get("period_end"),
+                                                "Period Type": obs.get("period_type"),
+                                                "Form": obs.get("filing_type"),
+                                                "Original XBRL Tag": obs.get(
+                                                    "original_tag"
+                                                ),
+                                            }
+                                            for obs in observations[:50]
+                                        ]
+                                        st.dataframe(obs_data, use_container_width=True)
+                                    else:
+                                        st.info(
+                                            "No financial observations extracted for this company."
+                                        )
+                                else:
+                                    st.warning(
+                                        "Could not extract financial observations."
+                                    )
+
+                    except httpx.RequestError as exc:
+                        st.error(f"Network error querying backend service: {exc}")
+
+    # -------------------------------------------------------------------------
+    # View 3: Research Workspace (Preview)
     # -------------------------------------------------------------------------
     elif nav_selection == "Research Workspace (Preview)":
         st.markdown("### 🔍 Financial Research Workspace (Preview)")
@@ -321,23 +474,35 @@ def main() -> None:
                 st.button("Analyze Filing", disabled=True, use_container_width=True)
 
         st.caption(
-            "Note: Live filing retrieval and agent execution will be activated in Session 02 onwards."
+            "Note: Advanced multi-agent analysis and report generation will be activated in Sessions 04-06."
         )
 
         st.markdown("---")
         st.markdown("#### Target Financial Metrics Layout")
         mcol1, mcol2, mcol3, mcol4 = st.columns(4)
         with mcol1:
-            st.metric(label="Total Revenue (Planned)", value="—", delta="—")
+            st.metric(
+                label="Total Revenue",
+                value="Extracted in Session 02",
+                delta="10-K/10-Q",
+            )
         with mcol2:
-            st.metric(label="Operating Income (Planned)", value="—", delta="—")
+            st.metric(
+                label="Operating Income",
+                value="Extracted in Session 02",
+                delta="10-K/10-Q",
+            )
         with mcol3:
-            st.metric(label="Free Cash Flow (Planned)", value="—", delta="—")
+            st.metric(
+                label="Free Cash Flow", value="Planned Session 04", delta="Calc Engine"
+            )
         with mcol4:
-            st.metric(label="Debt-to-Equity (Planned)", value="—", delta="—")
+            st.metric(
+                label="Debt-to-Equity", value="Planned Session 04", delta="Calc Engine"
+            )
 
     # -------------------------------------------------------------------------
-    # View 3: Agent Architecture
+    # View 4: Agent Architecture
     # -------------------------------------------------------------------------
     elif nav_selection == "Agent Architecture":
         st.markdown("### 🤖 Multi-Agent Architecture Blueprint")
@@ -393,7 +558,7 @@ def main() -> None:
             )
 
     # -------------------------------------------------------------------------
-    # View 4: Configuration
+    # View 5: Configuration
     # -------------------------------------------------------------------------
     elif nav_selection == "Configuration":
         st.markdown("### ⚙️ System Configuration")
