@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 04 Calculations Complete](https://img.shields.io/badge/Status-Calculations%20Engine%20Active-brightgreen.svg)]()
-[![Tests: 116 Passed](https://img.shields.io/badge/Tests-116%20Passed%20(89%25%20cov)-brightgreen.svg)]()
+[![Status: Session 05 Embeddings & Vector Index Complete](https://img.shields.io/badge/Status-Embeddings%20%26%20Vector%20Index%20Active-brightgreen.svg)]()
+[![Tests: 152 Passed](https://img.shields.io/badge/Tests-152%20Passed%20(89%25%20cov)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -88,6 +88,7 @@ For detailed architectural specifications, agent definitions, sequence diagrams,
 - [sec-data-pipeline.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/sec-data-pipeline.md) — Numerical XBRL ingestion pipeline and schema specification.
 - [filing-ingestion.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/filing-ingestion.md) — Document downloading, HTML parsing, section extraction, and chunking specification.
 - [financial-calculation-engine.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/financial-calculation-engine.md) — Deterministic financial arithmetic engine, receipts schema, and API specification.
+- [embeddings-and-vector-indexing.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/embeddings-and-vector-indexing.md) — Local sentence embeddings, persistent FAISS/NumPy indexing, and dense semantic search.
 
 ---
 
@@ -121,13 +122,19 @@ finova-ai/
 │   │   ├── calculation_models.py # Pydantic schemas for receipts, inputs, and requests
 │   │   ├── period_validator.py   # Flow/instant period alignment & unit validation
 │   │   └── calculation_service.py # Multi-period calculation & persistence coordinator
-│   ├── agents/                 # (Session 05) Multi-agent implementations
+│   ├── retrieval/              # Semantic embeddings & persistent vector indexing
+│   │   ├── __init__.py
+│   │   ├── embedding_service.py # Lazy-loading CPU SentenceTransformers (all-MiniLM-L6-v2)
+│   │   ├── indexing_service.py  # Incremental, hash-based chunk indexing coordinator
+│   │   ├── retrieval_models.py  # Pydantic schemas for indexing & semantic search
+│   │   ├── semantic_search.py   # Dense vector search with metadata post-filtering
+│   │   ├── text_preprocessor.py # Financial text cleaning, context prefixing, and SHA-256
+│   │   └── vector_store.py      # Dual vector store backends: FAISS CPU & NumPy
+│   ├── agents/                 # (Session 06) Multi-agent implementations
 │   │   └── __init__.py
-│   ├── graph/                  # (Session 05) LangGraph state graphs
+│   ├── graph/                  # (Session 06) LangGraph state graphs
 │   │   └── __init__.py
-│   ├── retrieval/              # (Session 05) Hybrid RAG retrieval pipelines
-│   │   └── __init__.py
-│   ├── evaluation/             # (Session 06) Benchmarks and quality metrics
+│   ├── evaluation/             # (Session 07) Benchmarks and quality metrics
 │   │   └── __init__.py
 │   └── utils/
 │       ├── __init__.py
@@ -135,7 +142,7 @@ finova-ai/
 │
 ├── frontend/
 │   ├── __init__.py
-│   └── app.py                  # Streamlit application with calculations & receipts viewer
+│   └── app.py                  # Streamlit application with semantic search & indexing UI
 │
 ├── config/
 │   ├── __init__.py
@@ -144,7 +151,8 @@ finova-ai/
 ├── datasets/
 │   ├── README.md               # Guidelines for raw filing storage and cache
 │   ├── cache/                  # Local cache for SEC ticker directory
-│   └── filings/                # Local cache for downloaded SEC HTML filings (git-ignored)
+│   ├── filings/                # Local cache for downloaded SEC HTML filings (git-ignored)
+│   └── indexes/                # Persistent FAISS and NumPy vector indices (git-ignored)
 │
 ├── notebooks/
 │   └── .gitkeep                # Exploratory analysis scratchpads
@@ -171,7 +179,13 @@ finova-ai/
 │   ├── test_period_validator.py # Period alignment, floating calendar, & unit tests
 │   ├── test_calculation_storage.py # SQLite calculation receipts persistence & upsert tests
 │   ├── test_calculation_service.py # Multi-year calculation & edge-case integration tests
-│   └── test_api_calculations.py # FastAPI calculation endpoints & validation tests
+│   ├── test_api_calculations.py # FastAPI calculation endpoints & validation tests
+│   ├── test_text_preprocessor.py # Text cleaning, context prefix, and hashing tests
+│   ├── test_embedding_service.py # Lazy-loading, L2-norm, and mock encoder tests
+│   ├── test_vector_store.py    # FAISS and NumPy vector store persistence & search tests
+│   ├── test_indexing_service.py # Incremental, update, and force-reindex tests
+│   ├── test_semantic_search.py # Dense semantic search & metadata filtering tests
+│   └── test_api_embeddings.py  # FastAPI semantic search & indexing route tests
 │
 ├── docs/
 │   ├── architecture.md         # System architecture specification
@@ -292,6 +306,24 @@ The FastAPI backend exposes interactive Swagger UI at `http://127.0.0.1:8000/doc
 - **Endpoint**: `GET /api/v1/calculations/{calculation_id}`
 - **Response**: Complete verifiable audit receipt with formula, input observations, accession numbers, and SEC archive URLs.
 
+### 8. Trigger Incremental Chunk Indexing
+- **Endpoint**: `POST /api/v1/companies/{ticker}/embeddings/index`
+- **Query / Body Params**: `filing_type` (optional), `accession_number` (optional), `force_reindex` (boolean)
+- **Response**: Summary of chunks discovered, newly indexed, updated, already indexed (skipped), and indexing duration.
+
+### 9. Check Company Embedding Status
+- **Endpoint**: `GET /api/v1/companies/{ticker}/embeddings/status`
+- **Response**: Total chunks, indexed count, pending count, failed count, model name, backend, and last index timestamp.
+
+### 10. Dense Semantic Search
+- **Endpoint**: `POST /api/v1/search/semantic`
+- **Body Params**: `query` (string), `ticker` (optional), `filing_type` (optional), `section_identifier` (optional), `top_k` (default 5), `similarity_threshold` (default 0.30)
+- **Response**: List of scored semantic chunks with full filing provenance, section title, and cosine similarity score.
+
+### 11. Diagnostic Vector Store Statistics
+- **Endpoint**: `GET /api/v1/index/stats`
+- **Response**: Active backend name (`faiss` / `numpy`), vector count, dimension (384), index directory path, and list of indexed tickers.
+
 ---
 
 ## 9. Windows Installation & Execution
@@ -348,24 +380,30 @@ pytest -v --cov=backend --cov=config
 - [x] End-to-end filing ingestion service orchestrator (`backend/data/filing_ingestion_service.py`).
 - [x] FastAPI filing ingestion, document listing, detail, and chunk retrieval endpoints (`backend/api/routes.py`).
 - [x] Streamlit filing selection, ingestion status, section breakdown, and chunk inspector UI (`frontend/app.py`).
-- [x] Automated test suite with 116 unit and integration tests passing offline with 89% coverage (`tests/`).
 - [x] Pure Python deterministic arithmetic calculation engine for 10 financial metrics (`backend/finance/calculation_engine.py`).
 - [x] Strict period alignment validator with 7-day floating fiscal calendar tolerance and unit verification (`backend/finance/period_validator.py`).
 - [x] Verifiable calculation receipts (`CalculationReceipt`) tracking exact formulas and provenance (`backend/finance/calculation_models.py`).
 - [x] Relational persistence in SQLite `financial_calculations` with compound unique constraints (`backend/data/storage.py`).
 - [x] Calculation execution and receipt retrieval REST endpoints (`backend/api/routes.py`).
 - [x] Interactive Streamlit Financial Analysis workspace with summary scorecards and receipts inspector (`frontend/app.py`).
-- [x] Comprehensive documentation in `README.md`, `docs/sec-data-pipeline.md`, `docs/filing-ingestion.md`, and `docs/financial-calculation-engine.md`.
+- [x] CPU-optimized local embeddings with `all-MiniLM-L6-v2` (384 dimensions) and lazy initialization (`backend/retrieval/embedding_service.py`).
+- [x] Financial text preprocessor with context metadata prefixing and dual SHA-256 hash tracking (`backend/retrieval/text_preprocessor.py`).
+- [x] Persistent vector store backends: FAISS CPU (`IndexFlatIP`) and pure NumPy fallback (`backend/retrieval/vector_store.py`).
+- [x] SQLite `chunk_embeddings` schema, foreign keys, and change-detection queries (`backend/data/document_storage.py`).
+- [x] Incremental indexing service skipping unchanged chunks and updating modified chunks (`backend/retrieval/indexing_service.py`).
+- [x] Dense semantic search service with over-fetch candidate filtering, top-k, and threshold cutoffs (`backend/retrieval/semantic_search.py`).
+- [x] REST endpoints for chunk indexing, embedding status, semantic search, and index stats (`backend/api/routes.py`).
+- [x] Streamlit semantic search explorer & indexing control dashboard (`frontend/app.py`).
+- [x] Comprehensive documentation in `README.md`, `docs/sec-data-pipeline.md`, `docs/filing-ingestion.md`, `docs/financial-calculation-engine.md`, and `docs/embeddings-and-vector-indexing.md`.
+- [x] Automated test suite with 152 unit and integration tests passing offline with 89% coverage (`tests/`).
 
 ---
 
 ## 11. Future Development Roadmap
 
-- **Session 05: Hybrid RAG & Vector Embeddings**
-  - CPU-optimized local embeddings over extracted chunks.
-  - BM25 + dense hybrid search with reciprocal rank fusion (RRF).
-- **Session 06: LangGraph Multi-Agent Orchestration**
-  - 6-agent cooperative state graph.
+- **Session 06: Hybrid Search & LangGraph Multi-Agent Orchestration**
+  - BM25 lexical sparse retrieval with reciprocal rank fusion (RRF).
+  - 6-agent cooperative state graph with Supervisor, Research, Analyst, Calculation, Verification, and Report agents.
   - Bidirectional verification and anti-hallucination auditor.
 - **Session 07: Production UI & Full Report Generation**
   - Interactive financial dashboard.

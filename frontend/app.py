@@ -189,6 +189,7 @@ def main() -> None:
             options=[
                 "Overview",
                 "Company Lookup & Ingestion (SEC)",
+                "Semantic Search & Embeddings",
                 "Research Workspace (Preview)",
                 "Agent Architecture",
                 "Configuration",
@@ -350,15 +351,20 @@ def main() -> None:
                                 unsafe_allow_html=True,
                             )
 
-                            tab_ingest, tab_filings, tab_metrics, tab_calculations = (
-                                st.tabs(
-                                    [
-                                        "📥 Ingest Filing & View Chunks",
-                                        "📄 Available SEC Filings",
-                                        "📈 Financial Observations",
-                                        "🧮 Financial Analysis & Calculations",
-                                    ]
-                                )
+                            (
+                                tab_ingest,
+                                tab_filings,
+                                tab_metrics,
+                                tab_calculations,
+                                tab_embeddings,
+                            ) = st.tabs(
+                                [
+                                    "📥 Ingest Filing & View Chunks",
+                                    "📄 Available SEC Filings",
+                                    "📈 Financial Observations",
+                                    "🧮 Financial Analysis & Calculations",
+                                    "🔍 Semantic Search & Embeddings",
+                                ]
                             )
 
                             # Tab 1: Filing Ingestion Workflow (Session 03)
@@ -902,11 +908,336 @@ def main() -> None:
                                                     f"*{un.get('unavailable_reason')}*"
                                                 )
 
+                            # Tab 5: Semantic Search & Embeddings (Session 05)
+                            with tab_embeddings:
+                                st.markdown(
+                                    "#### 🔍 Semantic Embeddings & Persistent Vector Index"
+                                )
+                                st.caption(
+                                    "Generate 384-dimensional dense semantic vector embeddings for document chunks using "
+                                    "sentence-transformers/all-MiniLM-L6-v2, and execute semantic similarity search."
+                                )
+
+                                # Status diagnostics
+                                try:
+                                    emb_stat_resp = httpx.get(
+                                        f"{backend_url}/api/v1/companies/{search_ticker}/embeddings/status",
+                                        timeout=10.0,
+                                    )
+                                    if emb_stat_resp.status_code == 200:
+                                        stat_data = emb_stat_resp.json()
+                                        c_avail, c_idx, c_pend, c_fail = st.columns(4)
+                                        with c_avail:
+                                            st.metric(
+                                                "Total Chunks",
+                                                stat_data.get(
+                                                    "total_available_chunks", 0
+                                                ),
+                                            )
+                                        with c_idx:
+                                            st.metric(
+                                                "Indexed Chunks",
+                                                stat_data.get("indexed_chunks", 0),
+                                            )
+                                        with c_pend:
+                                            st.metric(
+                                                "Pending Embeddings",
+                                                stat_data.get("pending_chunks", 0),
+                                            )
+                                        with c_fail:
+                                            st.metric(
+                                                "Failed Embeddings",
+                                                stat_data.get("failed_chunks", 0),
+                                            )
+
+                                        st.caption(
+                                            f"🤖 Model: `{stat_data.get('active_model')}` | "
+                                            f"📐 Dimension: `{stat_data.get('embedding_dimension')}D` | "
+                                            f"⚡ Vector Backend: `{stat_data.get('active_vector_backend', '').upper()}`"
+                                        )
+                                except (httpx.HTTPError, ValueError):
+                                    st.warning(
+                                        "Could not fetch embedding status from backend."
+                                    )
+
+                                st.markdown("---")
+                                st.markdown("##### ⚡ Generate / Update Vector Index")
+                                idx_c1, idx_c2 = st.columns([3, 1])
+                                with idx_c1:
+                                    force_reindex = st.checkbox(
+                                        "Force Re-Index All Chunks",
+                                        value=False,
+                                        help="Re-embed chunks even if content hash is unchanged.",
+                                        key=f"force_reindex_{search_ticker}",
+                                    )
+                                with idx_c2:
+                                    trigger_index = st.button(
+                                        "⚡ Build Vector Index",
+                                        type="primary",
+                                        use_container_width=True,
+                                        key=f"btn_index_{search_ticker}",
+                                    )
+
+                                if trigger_index:
+                                    with st.spinner(
+                                        f"Generating embeddings and updating vector index for {search_ticker}..."
+                                    ):
+                                        try:
+                                            idx_resp = httpx.post(
+                                                f"{backend_url}/api/v1/companies/{search_ticker}/embeddings/index",
+                                                params={"force_reindex": force_reindex},
+                                                timeout=90.0,
+                                            )
+                                            if idx_resp.status_code == 200:
+                                                res_summary = idx_resp.json()
+                                                st.success(
+                                                    res_summary.get("message")
+                                                    or "Indexing completed!"
+                                                )
+                                                st.rerun()
+                                            else:
+                                                st.error(
+                                                    f"Indexing failed ({idx_resp.status_code}): {idx_resp.text}"
+                                                )
+                                        except httpx.HTTPError as exc:
+                                            st.error(
+                                                f"Error communicating with backend: {exc}"
+                                            )
+
+                                st.markdown("---")
+                                st.markdown("##### 🔎 Dense Semantic Similarity Search")
+                                query_text = st.text_input(
+                                    "Natural Language Query",
+                                    placeholder="e.g. What are the key risk factors affecting international supply chains?",
+                                    key=f"query_{search_ticker}",
+                                )
+                                s_c1, s_c2, s_c3 = st.columns(3)
+                                with s_c1:
+                                    filter_section = st.selectbox(
+                                        "Section Filter",
+                                        options=[
+                                            "All Sections",
+                                            "ITEM_1A",
+                                            "ITEM_7",
+                                            "ITEM_1",
+                                            "ITEM_7A",
+                                        ],
+                                        index=0,
+                                        key=f"filter_sec_{search_ticker}",
+                                    )
+                                with s_c2:
+                                    top_k_val = st.slider(
+                                        "Top K",
+                                        min_value=1,
+                                        max_value=20,
+                                        value=5,
+                                        key=f"topk_{search_ticker}",
+                                    )
+                                with s_c3:
+                                    sim_thresh = st.slider(
+                                        "Similarity Threshold",
+                                        min_value=0.0,
+                                        max_value=1.0,
+                                        value=0.0,
+                                        step=0.05,
+                                        key=f"thresh_{search_ticker}",
+                                    )
+
+                                if st.button(
+                                    "🔍 Search Documents",
+                                    type="secondary",
+                                    key=f"btn_search_{search_ticker}",
+                                ):
+                                    if not query_text or not query_text.strip():
+                                        st.warning("Please enter a search query.")
+                                    else:
+                                        with st.spinner(
+                                            "Searching semantic vector index..."
+                                        ):
+                                            try:
+                                                sec_id = (
+                                                    None
+                                                    if filter_section == "All Sections"
+                                                    else filter_section
+                                                )
+                                                search_payload = {
+                                                    "query": query_text.strip(),
+                                                    "ticker": search_ticker,
+                                                    "section_identifier": sec_id,
+                                                    "top_k": top_k_val,
+                                                    "similarity_threshold": sim_thresh,
+                                                }
+                                                s_resp = httpx.post(
+                                                    f"{backend_url}/api/v1/search/semantic",
+                                                    json=search_payload,
+                                                    timeout=30.0,
+                                                )
+                                                if s_resp.status_code == 200:
+                                                    search_results = s_resp.json()
+                                                    if not search_results:
+                                                        st.info(
+                                                            "No matching chunks found matching criteria."
+                                                        )
+                                                    else:
+                                                        st.markdown(
+                                                            f"Found **{len(search_results)}** relevant chunks:"
+                                                        )
+                                                        for rank, r in enumerate(
+                                                            search_results, start=1
+                                                        ):
+                                                            sim_pct = (
+                                                                r["similarity_score"]
+                                                                * 100
+                                                            )
+                                                            with st.expander(
+                                                                f"#{rank} | Match: {r['similarity_score']:.4f} ({sim_pct:.1f}%) | "
+                                                                f"{r['section_title']} [{r['filing_type']} - {r['accession_number']}]"
+                                                            ):
+                                                                st.markdown(
+                                                                    f"> {r['chunk_text']}"
+                                                                )
+                                                                st.markdown(
+                                                                    f"**Company**: {r['company_name']} (`{r['ticker']}`) | "
+                                                                    f"**Filing Date**: {r['filing_date']} | "
+                                                                    f"**Period End**: {r.get('report_date') or 'N/A'}"
+                                                                )
+                                                                st.markdown(
+                                                                    f"[📄 View Statutory SEC EDGAR Filing]({r['source_url']})"
+                                                                )
+                                                else:
+                                                    st.error(
+                                                        f"Search failed ({s_resp.status_code}): {s_resp.text}"
+                                                    )
+                                            except httpx.HTTPError as exc:
+                                                st.error(f"Search error: {exc}")
+
                     except httpx.RequestError as exc:
                         st.error(f"Network error querying backend service: {exc}")
 
     # -------------------------------------------------------------------------
-    # View 3: Research Workspace (Preview)
+    # View 3: Semantic Search & Embeddings (Session 05)
+    # -------------------------------------------------------------------------
+    elif nav_selection == "Semantic Search & Embeddings":
+        st.markdown("### 🔍 Dense Semantic Search & Vector Embeddings")
+        st.caption(
+            "Execute local CPU dense semantic search across statutory SEC filing chunks using "
+            "sentence-transformers/all-MiniLM-L6-v2 and persistent vector storage."
+        )
+
+        # Vector Index Stats
+        try:
+            stat_resp = httpx.get(f"{backend_url}/api/v1/index/stats", timeout=5.0)
+            if stat_resp.status_code == 200:
+                stats = stat_resp.json()
+                i_c1, i_c2, i_c3, i_c4 = st.columns(4)
+                with i_c1:
+                    st.metric("Total Indexed Vectors", stats.get("index_size", 0))
+                with i_c2:
+                    st.metric(
+                        "Embedding Dimension", f"{stats.get('embedding_dimension')}D"
+                    )
+                with i_c3:
+                    st.metric(
+                        "Vector Backend", str(stats.get("active_backend", "")).upper()
+                    )
+                with i_c4:
+                    st.metric("Model", str(stats.get("model_name", "")).split("/")[-1])
+        except (httpx.HTTPError, ValueError):
+            st.info("Backend index statistics not available.")
+
+        st.markdown("---")
+        st.markdown("#### 🔎 Query SEC Filings")
+        global_query = st.text_input(
+            "Ask a Financial Question or Concept",
+            placeholder="e.g. What are the principal supply chain and manufacturing risks?",
+            key="global_semantic_query",
+        )
+
+        col_t, col_f, col_s, col_k = st.columns(4)
+        with col_t:
+            target_ticker = (
+                st.text_input("Ticker Filter (Optional)", placeholder="e.g. AAPL")
+                .strip()
+                .upper()
+            )
+        with col_f:
+            target_filing = st.selectbox(
+                "Filing Type", options=["All", "10-K", "10-Q"], index=0
+            )
+        with col_s:
+            target_sec = st.selectbox(
+                "Section Filter",
+                options=[
+                    "All Sections",
+                    "ITEM_1A (Risk)",
+                    "ITEM_7 (MD&A)",
+                    "ITEM_1 (Business)",
+                    "ITEM_7A (Market Risk)",
+                ],
+                index=0,
+            )
+        with col_k:
+            global_top_k = st.slider("Top Results", min_value=1, max_value=25, value=5)
+
+        if st.button(
+            "🔍 Execute Semantic Search", type="primary", use_container_width=True
+        ):
+            if not global_query.strip():
+                st.warning("Please enter a question or query.")
+            else:
+                with st.spinner("Executing dense vector similarity search..."):
+                    try:
+                        sec_map = {
+                            "ITEM_1A (Risk)": "ITEM_1A",
+                            "ITEM_7 (MD&A)": "ITEM_7",
+                            "ITEM_1 (Business)": "ITEM_1",
+                            "ITEM_7A (Market Risk)": "ITEM_7A",
+                        }
+                        sec_code = sec_map.get(target_sec)
+                        filing_code = None if target_filing == "All" else target_filing
+
+                        payload = {
+                            "query": global_query.strip(),
+                            "ticker": target_ticker if target_ticker else None,
+                            "filing_type": filing_code,
+                            "section_identifier": sec_code,
+                            "top_k": global_top_k,
+                            "similarity_threshold": 0.0,
+                        }
+
+                        res = httpx.post(
+                            f"{backend_url}/api/v1/search/semantic",
+                            json=payload,
+                            timeout=30.0,
+                        )
+                        if res.status_code == 200:
+                            items = res.json()
+                            if not items:
+                                st.info("No matching document chunks found.")
+                            else:
+                                st.success(f"Retrieved {len(items)} relevant chunks:")
+                                for rank, item in enumerate(items, start=1):
+                                    score_pct = item["similarity_score"] * 100
+                                    with st.expander(
+                                        f"#{rank} | Match: {item['similarity_score']:.4f} ({score_pct:.1f}%) | "
+                                        f"{item['ticker']} - {item['section_title']} ({item['filing_type']})"
+                                    ):
+                                        st.markdown(f"> {item['chunk_text']}")
+                                        st.caption(
+                                            f"**Company**: {item['company_name']} (`CIK {item['cik']}`) | "
+                                            f"**Filing Date**: {item['filing_date']} | "
+                                            f"**Accession**: `{item['accession_number']}`"
+                                        )
+                                        st.markdown(
+                                            f"[📄 View SEC EDGAR Source]({item['source_url']})"
+                                        )
+                        else:
+                            st.error(f"Search failed ({res.status_code}): {res.text}")
+                    except httpx.HTTPError as exc:
+                        st.error(f"Error connecting to backend: {exc}")
+
+    # -------------------------------------------------------------------------
+    # View 4: Research Workspace (Preview)
     # -------------------------------------------------------------------------
     elif nav_selection == "Research Workspace (Preview)":
         st.markdown("### 🔍 Financial Research Workspace (Preview)")

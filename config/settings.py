@@ -105,6 +105,36 @@ class Settings(BaseSettings):
         description="Supported statutory SEC filing types for document ingestion",
     )
 
+    # Semantic Embeddings & Vector Indexing (Session 05)
+    EMBEDDING_MODEL_NAME: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        description="Pretrained sentence embedding model identifier",
+    )
+    EMBEDDING_DEVICE: str = Field(
+        default="cpu",
+        description="Compute device for embedding inference (cpu explicitly)",
+    )
+    EMBEDDING_BATCH_SIZE: int = Field(
+        default=32,
+        description="Batch size for generating embeddings",
+    )
+    EMBEDDING_INDEX_DIR: str = Field(
+        default="datasets/indexes",
+        description="Local directory for storing persistent vector index files",
+    )
+    EMBEDDING_BACKEND: str = Field(
+        default="auto",
+        description="Vector index backend ('auto', 'faiss', or 'numpy')",
+    )
+    EMBEDDING_SIMILARITY_THRESHOLD: float = Field(
+        default=0.0,
+        description="Minimum cosine similarity score threshold for semantic search results",
+    )
+    EMBEDDING_DIMENSION: int = Field(
+        default=384,
+        description="Expected vector dimension for the embedding model",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

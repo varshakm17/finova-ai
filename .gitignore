@@ -79,5 +79,8 @@ datasets/cache/
 datasets/sec_edgar/
 datasets/raw/
 datasets/filings/
+datasets/indexes/
+*.index
+*.npy
 notebooks/.ipynb_checkpoints/
 

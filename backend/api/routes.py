@@ -30,6 +30,16 @@ from backend.finance.calculation_service import (
     ALL_CALCULATION_METRICS,
     CalculationService,
 )
+from backend.retrieval.indexing_service import IndexingService
+from backend.retrieval.retrieval_models import (
+    EmbeddingStatusResponse,
+    IndexingRequest,
+    IndexingSummary,
+    IndexStatsResponse,
+    SemanticSearchRequest,
+    SemanticSearchResult,
+)
+from backend.retrieval.semantic_search import SemanticSearchService
 from backend.utils.logger import get_logger
 from config.settings import get_settings
 
@@ -49,6 +59,15 @@ _ingestion_service = FilingIngestionService(
 _calculation_service = CalculationService(
     db=_db,
     company_service=_company_service,
+)
+_settings = get_settings()
+_indexing_service = IndexingService(
+    document_storage=_doc_storage,
+    settings=_settings,
+)
+_semantic_search_service = SemanticSearchService(
+    document_storage=_doc_storage,
+    settings=_settings,
 )
 
 
@@ -878,3 +897,140 @@ def get_calculation_receipt_by_id(calculation_id: str) -> CalculationReceipt:
             detail=f"Calculation receipt with ID '{clean_id}' not found.",
         )
     return CalculationReceipt(**record)
+
+
+# -----------------------------------------------------------------------------
+# Semantic Embeddings & Vector Indexing Endpoints (Session 05)
+# -----------------------------------------------------------------------------
+@router.post(
+    "/companies/{ticker}/embeddings/index",
+    response_model=IndexingSummary,
+    summary="Index Company Document Chunks",
+    description="Generates semantic embeddings for document chunks of a company and updates the vector index.",
+    tags=["Semantic Search & Embeddings"],
+)
+def index_company_embeddings(
+    ticker: str,
+    payload: IndexingRequest | None = None,
+    filing_type: str | None = Query(
+        None, description="Optional filter by filing type (e.g. '10-K', '10-Q')"
+    ),
+    accession_number: str | None = Query(
+        None, description="Optional filter by accession number"
+    ),
+    force_reindex: bool = Query(
+        False, description="If True, re-indexes even if content hash matches"
+    ),
+) -> IndexingSummary:
+    """Index document chunks for a company into the vector store."""
+    clean_ticker = normalize_ticker(ticker)
+    company = _company_service.get_company_by_ticker(clean_ticker)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Company with ticker '{clean_ticker}' not found.",
+        )
+
+    effective_filing_type = (
+        payload.filing_type if payload and payload.filing_type else filing_type
+    )
+    effective_accn = (
+        payload.accession_number
+        if payload and payload.accession_number
+        else accession_number
+    )
+    effective_force = payload.force_reindex if payload else force_reindex
+
+    try:
+        summary = _indexing_service.index_company_chunks(
+            ticker=clean_ticker,
+            filing_type=effective_filing_type,
+            accession_number=effective_accn,
+            force_reindex=effective_force,
+        )
+        return summary
+    except Exception as exc:
+        logger.error("Error indexing embeddings for %s: %s", clean_ticker, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate embeddings: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/companies/{ticker}/embeddings/status",
+    response_model=EmbeddingStatusResponse,
+    summary="Get Company Embedding Status",
+    description="Returns total available chunks, indexed chunks, pending, and failed status for a company.",
+    tags=["Semantic Search & Embeddings"],
+)
+def get_company_embedding_status(ticker: str) -> EmbeddingStatusResponse:
+    """Retrieve chunk embedding coverage diagnostics for a company."""
+    clean_ticker = normalize_ticker(ticker)
+    company = _company_service.get_company_by_ticker(clean_ticker)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Company with ticker '{clean_ticker}' not found.",
+        )
+
+    return _indexing_service.get_indexing_status(clean_ticker)
+
+
+@router.post(
+    "/search/semantic",
+    response_model=list[SemanticSearchResult],
+    summary="Semantic Similarity Search",
+    description="Executes dense semantic similarity search over indexed SEC filing document chunks.",
+    tags=["Semantic Search & Embeddings"],
+)
+def semantic_search(request: SemanticSearchRequest) -> list[SemanticSearchResult]:
+    """Search filing chunks using dense vector embeddings."""
+    if not request.query or not request.query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Search query cannot be empty or whitespace-only.",
+        )
+
+    clean_ticker = normalize_ticker(request.ticker) if request.ticker else None
+    if clean_ticker:
+        company = _company_service.get_company_by_ticker(clean_ticker)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with ticker '{clean_ticker}' not found.",
+            )
+
+    try:
+        results = _semantic_search_service.search(
+            query=request.query,
+            ticker=clean_ticker,
+            filing_type=request.filing_type,
+            section_identifier=request.section_identifier,
+            top_k=request.top_k,
+            similarity_threshold=request.similarity_threshold,
+        )
+        return results
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Error executing semantic search: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Semantic search failed: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/index/stats",
+    response_model=IndexStatsResponse,
+    summary="Get Vector Index Statistics",
+    description="Returns operational statistics, active backend, and vector index size.",
+    tags=["Semantic Search & Embeddings"],
+)
+def get_vector_index_stats() -> IndexStatsResponse:
+    """Retrieve vector store index statistics."""
+    return _indexing_service.get_index_stats()

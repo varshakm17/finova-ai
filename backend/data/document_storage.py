@@ -116,7 +116,45 @@ class DocumentStorage:
                 "CREATE INDEX IF NOT EXISTS idx_chunks_ticker_sec ON document_chunks (ticker, section_identifier);"
             )
 
-        logger.info("Document and chunk tables verified in database.")
+            # 4. Chunk Embeddings Table (Session 05)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chunk_embeddings (
+                    embedding_id TEXT PRIMARY KEY,
+                    chunk_id TEXT NOT NULL,
+                    document_id TEXT NOT NULL,
+                    ticker TEXT NOT NULL,
+                    accession_number TEXT NOT NULL,
+                    section_identifier TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    model_version TEXT NOT NULL DEFAULT '1.0',
+                    embedding_dimension INTEGER NOT NULL,
+                    embedding_input_hash TEXT NOT NULL,
+                    chunk_text_hash TEXT NOT NULL,
+                    vector_id TEXT NOT NULL,
+                    index_status TEXT NOT NULL DEFAULT 'indexed',
+                    error_message TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (chunk_id) REFERENCES document_chunks (chunk_id) ON DELETE CASCADE,
+                    UNIQUE(chunk_id, model_name)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_embeddings_ticker ON chunk_embeddings (ticker);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_embeddings_chunk ON chunk_embeddings (chunk_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_embeddings_vector ON chunk_embeddings (vector_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_embeddings_status ON chunk_embeddings (index_status);"
+            )
+
+        logger.info("Document, chunk, and embedding tables verified in database.")
 
     def save_document(self, doc_data: dict[str, Any]) -> str:
         """Upsert a document record in documents table.
@@ -359,3 +397,208 @@ class DocumentStorage:
             )
         logger.info("Deleted document %s and cascading children", accession_number)
         return True
+
+    # -------------------------------------------------------------------------
+    # Chunk Retrieval & Embedding Persistence (Session 05)
+    # -------------------------------------------------------------------------
+    def get_chunks_for_ticker(
+        self,
+        ticker: str,
+        filing_type: str | None = None,
+        accession_number: str | None = None,
+        limit: int = 5000,
+    ) -> list[dict[str, Any]]:
+        """Retrieve stored chunks for a company with optional filing type and accession filters."""
+        query = "SELECT * FROM document_chunks WHERE ticker = ?"
+        params: list[Any] = [ticker.strip().upper()]
+
+        if filing_type:
+            query += " AND filing_type = ?"
+            params.append(filing_type.strip().upper())
+
+        if accession_number:
+            query += " AND accession_number = ?"
+            params.append(accession_number.strip())
+
+        query += " ORDER BY accession_number DESC, section_identifier ASC, chunk_index ASC LIMIT ?;"
+        params.append(limit)
+
+        with self.db.connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_chunk_with_provenance(self, chunk_id: str) -> dict[str, Any] | None:
+        """Fetch chunk details joined with document metadata for full filing provenance."""
+        query = """
+            SELECT c.chunk_id, c.document_id, c.section_id, c.ticker, c.accession_number,
+                   c.filing_type, c.section_identifier, c.section_title, c.chunk_index,
+                   c.chunk_text, c.start_offset, c.end_offset, c.char_count, c.source_url,
+                   d.company_name, d.cik, d.filing_date, d.report_date
+            FROM document_chunks c
+            JOIN documents d ON c.document_id = d.document_id
+            WHERE c.chunk_id = ?;
+        """
+        with self.db.connection() as conn:
+            row = conn.execute(query, (chunk_id.strip(),)).fetchone()
+            return dict(row) if row else None
+
+    def save_chunk_embeddings(self, records: list[dict[str, Any]]) -> int:
+        """Upsert chunk embedding metadata records.
+
+        Args:
+            records: List of embedding record dictionaries.
+
+        Returns:
+            int: Number of records saved.
+        """
+        if not records:
+            return 0
+
+        now_iso = datetime.now(UTC).isoformat()
+        rows = [
+            (
+                r["embedding_id"],
+                r["chunk_id"],
+                r["document_id"],
+                r["ticker"].strip().upper(),
+                r["accession_number"],
+                r["section_identifier"],
+                r["model_name"],
+                r.get("model_version", "1.0"),
+                r["embedding_dimension"],
+                r["embedding_input_hash"],
+                r["chunk_text_hash"],
+                r["vector_id"],
+                r.get("index_status", "indexed"),
+                r.get("error_message"),
+                r.get("created_at", now_iso),
+                now_iso,
+            )
+            for r in records
+        ]
+
+        with self.db.connection() as conn:
+            conn.executemany(
+                """
+                INSERT INTO chunk_embeddings (
+                    embedding_id, chunk_id, document_id, ticker, accession_number,
+                    section_identifier, model_name, model_version, embedding_dimension,
+                    embedding_input_hash, chunk_text_hash, vector_id, index_status,
+                    error_message, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(chunk_id, model_name) DO UPDATE SET
+                    embedding_input_hash = excluded.embedding_input_hash,
+                    chunk_text_hash = excluded.chunk_text_hash,
+                    vector_id = excluded.vector_id,
+                    index_status = excluded.index_status,
+                    error_message = excluded.error_message,
+                    updated_at = excluded.updated_at;
+                """,
+                rows,
+            )
+        return len(rows)
+
+    def get_chunk_embedding(
+        self, chunk_id: str, model_name: str
+    ) -> dict[str, Any] | None:
+        """Fetch a specific chunk embedding metadata record."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM chunk_embeddings
+                WHERE chunk_id = ? AND model_name = ?;
+                """,
+                (chunk_id.strip(), model_name.strip()),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_chunk_embeddings_for_ticker(
+        self,
+        ticker: str,
+        model_name: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve embedding metadata records for a company."""
+        query = "SELECT * FROM chunk_embeddings WHERE ticker = ?"
+        params: list[Any] = [ticker.strip().upper()]
+
+        if model_name:
+            query += " AND model_name = ?"
+            params.append(model_name.strip())
+
+        query += " ORDER BY created_at DESC;"
+
+        with self.db.connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_embedding_counts_for_ticker(
+        self,
+        ticker: str,
+        model_name: str,
+    ) -> dict[str, int]:
+        """Compute total chunks, indexed chunks, pending, and failed for a company."""
+        clean_ticker = ticker.strip().upper()
+        clean_model = model_name.strip()
+
+        with self.db.connection() as conn:
+            # 1. Total available chunks
+            total_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM document_chunks WHERE ticker = ?;",
+                (clean_ticker,),
+            ).fetchone()
+            total_chunks = total_row["cnt"] if total_row else 0
+
+            # 2. Status counts from chunk_embeddings
+            status_rows = conn.execute(
+                """
+                SELECT index_status, COUNT(*) as cnt
+                FROM chunk_embeddings
+                WHERE ticker = ? AND model_name = ?
+                GROUP BY index_status;
+                """,
+                (clean_ticker, clean_model),
+            ).fetchall()
+
+            status_map = {r["index_status"]: r["cnt"] for r in status_rows}
+
+            indexed = status_map.get("indexed", 0)
+            failed = status_map.get("failed", 0)
+            pending = max(0, total_chunks - indexed - failed)
+
+            return {
+                "total_available_chunks": total_chunks,
+                "indexed_chunks": indexed,
+                "pending_chunks": pending,
+                "failed_chunks": failed,
+            }
+
+    def get_all_chunk_embeddings(
+        self,
+        model_name: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve all embedding metadata records across all companies."""
+        query = "SELECT * FROM chunk_embeddings"
+        params: list[Any] = []
+
+        if model_name:
+            query += " WHERE model_name = ?"
+            params.append(model_name.strip())
+
+        query += " ORDER BY created_at DESC;"
+
+        with self.db.connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def delete_chunk_embeddings(self, chunk_ids: list[str]) -> int:
+        """Delete embedding records by chunk IDs."""
+        if not chunk_ids:
+            return 0
+
+        placeholders = ",".join("?" for _ in chunk_ids)
+        with self.db.connection() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM chunk_embeddings WHERE chunk_id IN ({placeholders});",
+                chunk_ids,
+            )
+            return cursor.rowcount
