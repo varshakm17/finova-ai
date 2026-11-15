@@ -11,6 +11,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from backend.agents.agent_models import (
+    AgentRunRequest,
+    AgentRunResponse,
+    WorkflowRun,
+)
 from backend.data.company_service import CompanyService, normalize_ticker
 from backend.data.data_normalizer import FinancialObservation
 from backend.data.document_storage import DocumentStorage
@@ -37,6 +42,7 @@ from backend.finance.calculation_service import (
     CalculationService,
 )
 from backend.llm import get_llm_provider
+from backend.orchestration.graph import get_orchestration_engine
 from backend.rag.rag_models import (
     RAGAnswer,
     RAGCapabilitiesResponse,
@@ -1689,3 +1695,58 @@ def verify_research_answer(answer_id: str) -> VerificationRun:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Verification failed: {exc}",
         ) from exc
+
+
+# =============================================================================
+# Session 10: LangGraph Multi-Agent Orchestration Endpoints
+# =============================================================================
+@router.post(
+    "/agents/run",
+    response_model=AgentRunResponse,
+    summary="Execute Multi-Agent Research Workflow",
+    description="Run the LangGraph multi-agent orchestration graph across Supervisor, Research, Financial Analyst, RAG, and Verification agents.",
+    tags=["Multi-Agent Orchestration"],
+)
+def run_agent_workflow(request: AgentRunRequest) -> AgentRunResponse:
+    """Execute multi-agent research workflow on the financial question."""
+    try:
+        engine = get_orchestration_engine()
+        return engine.run(request)
+    except Exception as exc:
+        logger.error("Error executing multi-agent workflow: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Multi-agent workflow execution failed: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/agents/workflows/{request_id}",
+    response_model=WorkflowRun,
+    summary="Get Multi-Agent Workflow Run",
+    description="Retrieve execution details, state transitions, and step timing traces for a specific multi-agent run.",
+    tags=["Multi-Agent Orchestration"],
+)
+def get_agent_workflow(request_id: str) -> WorkflowRun:
+    """Fetch workflow run and step events by request ID."""
+    run_dict = _db.get_workflow_run(request_id)
+    if not run_dict:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow run '{request_id}' not found.",
+        )
+    return WorkflowRun(**run_dict)
+
+
+@router.get(
+    "/agents/workflows",
+    response_model=list[dict[str, Any]],
+    summary="List Recent Agent Workflows",
+    description="Retrieve the most recent multi-agent workflow runs.",
+    tags=["Multi-Agent Orchestration"],
+)
+def list_agent_workflows(
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[dict[str, Any]]:
+    """List recent agent workflow runs."""
+    return _db.list_recent_workflows(limit=limit)

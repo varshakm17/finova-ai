@@ -328,6 +328,59 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_vissues_run_id ON verification_issues (run_id);"
             )
 
+            # 10. Agent Workflows Table (Session 10)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_workflows (
+                    request_id TEXT PRIMARY KEY,
+                    user_question TEXT NOT NULL,
+                    company_ticker TEXT,
+                    intent TEXT NOT NULL,
+                    workflow_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    final_answer TEXT,
+                    verification_status TEXT,
+                    retrieved_evidence_count INTEGER NOT NULL DEFAULT 0,
+                    calculation_receipts_count INTEGER NOT NULL DEFAULT 0,
+                    total_duration_ms REAL NOT NULL DEFAULT 0.0,
+                    error_message TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_aw_created_at ON agent_workflows (created_at);"
+            )
+
+            # 11. Agent Execution Events Table (Session 10)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_execution_events (
+                    event_id TEXT PRIMARY KEY,
+                    request_id TEXT NOT NULL,
+                    step_index INTEGER NOT NULL,
+                    agent_name TEXT NOT NULL,
+                    node_name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    duration_ms REAL NOT NULL,
+                    input_summary TEXT,
+                    output_summary TEXT,
+                    error_message TEXT,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY (request_id) REFERENCES agent_workflows(request_id)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_aee_request_id ON agent_execution_events (request_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_aee_step_index ON agent_execution_events (request_id, step_index);"
+            )
+
         logger.info("Database initialized successfully at: %s", self.db_path)
 
     def save_company(self, company_data: dict[str, Any]) -> None:
@@ -1063,3 +1116,138 @@ class Database:
             if not row:
                 return None
             return self.get_verification_run(row["run_id"])
+
+    # =========================================================================
+    # Session 10: Multi-Agent Workflow & Execution Event Persistence
+    # =========================================================================
+
+    def save_workflow_run(self, data: dict[str, Any]) -> None:
+        """Upsert a multi-agent workflow execution record."""
+        now_iso = datetime.now(UTC).isoformat()
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_workflows (
+                    request_id, user_question, company_ticker, intent, workflow_type,
+                    status, final_answer, verification_status, retrieved_evidence_count,
+                    calculation_receipts_count, total_duration_ms, error_message,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(request_id) DO UPDATE SET
+                    user_question = excluded.user_question,
+                    company_ticker = excluded.company_ticker,
+                    intent = excluded.intent,
+                    workflow_type = excluded.workflow_type,
+                    status = excluded.status,
+                    final_answer = excluded.final_answer,
+                    verification_status = excluded.verification_status,
+                    retrieved_evidence_count = excluded.retrieved_evidence_count,
+                    calculation_receipts_count = excluded.calculation_receipts_count,
+                    total_duration_ms = excluded.total_duration_ms,
+                    error_message = excluded.error_message,
+                    updated_at = excluded.updated_at;
+                """,
+                (
+                    data["request_id"],
+                    data["user_question"],
+                    data.get("company_ticker"),
+                    data.get("intent", "GENERAL_RESEARCH"),
+                    data.get("workflow_type", "default"),
+                    data.get("status", "PENDING"),
+                    data.get("final_answer"),
+                    data.get("verification_status"),
+                    data.get("retrieved_evidence_count", 0),
+                    data.get("calculation_receipts_count", 0),
+                    data.get("total_duration_ms", 0.0),
+                    data.get("error_message"),
+                    data.get("created_at", now_iso),
+                    data.get("updated_at", now_iso),
+                ),
+            )
+
+    def get_workflow_run(self, request_id: str) -> dict[str, Any] | None:
+        """Retrieve a workflow execution record and all its associated events."""
+        with self.connection() as conn:
+            wf_row = conn.execute(
+                "SELECT * FROM agent_workflows WHERE request_id = ?;",
+                (request_id.strip(),),
+            ).fetchone()
+            if not wf_row:
+                return None
+            wf_dict = dict(wf_row)
+            events = self.list_execution_events(request_id)
+            wf_dict["trace_events"] = events
+            return wf_dict
+
+    def list_recent_workflows(self, limit: int = 20) -> list[dict[str, Any]]:
+        """List the most recent workflow runs."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM agent_workflows ORDER BY created_at DESC LIMIT ?;",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def save_execution_event(self, event_data: dict[str, Any]) -> None:
+        """Insert an agent execution step event."""
+        metadata = event_data.get("metadata") or {}
+        meta_json = (
+            json.dumps(metadata) if isinstance(metadata, dict) else str(metadata)
+        )
+
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO agent_execution_events (
+                    event_id, request_id, step_index, agent_name, node_name,
+                    status, start_time, end_time, duration_ms,
+                    input_summary, output_summary, error_message, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                    status = excluded.status,
+                    end_time = excluded.end_time,
+                    duration_ms = excluded.duration_ms,
+                    output_summary = excluded.output_summary,
+                    error_message = excluded.error_message,
+                    metadata_json = excluded.metadata_json;
+                """,
+                (
+                    event_data["event_id"],
+                    event_data["request_id"],
+                    event_data.get("step_index", 0),
+                    event_data.get("agent_name", "UnknownAgent"),
+                    event_data.get("node_name", "unknown_node"),
+                    event_data.get("status", "SUCCESS"),
+                    event_data.get("start_time", datetime.now(UTC).isoformat()),
+                    event_data.get("end_time", datetime.now(UTC).isoformat()),
+                    event_data.get("duration_ms", 0.0),
+                    event_data.get("input_summary"),
+                    event_data.get("output_summary"),
+                    event_data.get("error_message"),
+                    meta_json,
+                ),
+            )
+
+    def list_execution_events(self, request_id: str) -> list[dict[str, Any]]:
+        """List all execution step events for a specific workflow run in order."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM agent_execution_events
+                WHERE request_id = ?
+                ORDER BY step_index ASC, start_time ASC;
+                """,
+                (request_id.strip(),),
+            ).fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                if "metadata_json" in d and d["metadata_json"]:
+                    try:
+                        d["metadata"] = json.loads(d["metadata_json"])
+                    except Exception:
+                        d["metadata"] = {}
+                else:
+                    d["metadata"] = {}
+                result.append(d)
+            return result

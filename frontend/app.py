@@ -188,6 +188,7 @@ def main() -> None:
             "Navigation",
             options=[
                 "Overview",
+                "Multi-Agent Research",
                 "Company Lookup & Ingestion (SEC)",
                 "Hybrid Research Search (RRF)",
                 "Retrieval Evaluation & Evidence Quality",
@@ -226,9 +227,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 09</div>
+                    <div class="metric-value">Session 10</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Anti-Hallucination Verification & Claim-Level Validation operational.
+                        LangGraph Multi-Agent Orchestration & Supervisor Routing
                     </p>
                 </div>
                 """,
@@ -275,9 +276,212 @@ def main() -> None:
         )
 
         st.info(
-            "📌 **Session 09 Active**: Anti-hallucination verification and claim-level evidence validation are fully operational. "
-            "Navigate to **Financial Research Assistant** to ask research questions backed by verified SEC filings with claim audit scorecards."
+            "📌 **Session 10 Active**: LangGraph Multi-Agent Orchestration is fully operational. "
+            "Navigate to **Multi-Agent Research** to run orchestrated queries across Supervisor, "
+            "Research, Financial Analyst, RAG, and Verification agents."
         )
+
+    # -------------------------------------------------------------------------
+    # View 2: Multi-Agent Research (Session 10)
+    # -------------------------------------------------------------------------
+    elif nav_selection == "Multi-Agent Research":
+        st.markdown("### 🤖 Multi-Agent Financial Research Orchestration (LangGraph)")
+        st.caption(
+            "Autonomous multi-agent execution coordinating Supervisor, Research, Financial Analyst, "
+            "RAG Answer, and Anti-Hallucination Verification agents."
+        )
+
+        with st.form("agent_research_form"):
+            q_col1, q_col2 = st.columns([3, 1])
+            with q_col1:
+                question_input = st.text_area(
+                    "Financial Research Question",
+                    value="What were Apple's primary revenue drivers and gross margin in fiscal year 2023?",
+                    height=90,
+                    help="Ask a complex research question. The Supervisor Agent will classify intent and coordinate specialized agents.",
+                )
+            with q_col2:
+                ticker_input = st.text_input(
+                    "Target Ticker (Optional)",
+                    value="AAPL",
+                    placeholder="e.g. AAPL, MSFT",
+                )
+                period_input = st.text_input(
+                    "Target Period (Optional)",
+                    value="FY2023",
+                    placeholder="e.g. FY2023, 2023",
+                )
+
+            with st.expander("⚙️ Execution Configuration & Limits"):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    max_steps_val = st.slider("Max Orchestration Steps", 3, 20, 10)
+                with c2:
+                    timeout_val = st.slider("Timeout (seconds)", 10, 180, 60)
+                with c3:
+                    mock_override = st.text_input(
+                        "Mock LLM Response (Optional)",
+                        value="",
+                        help="Override for deterministic testing without live Ollama",
+                    )
+
+            run_btn = st.form_submit_button(
+                "🚀 Run Multi-Agent Orchestration", type="primary"
+            )
+
+        if run_btn:
+            if not question_input.strip():
+                st.error("Please enter a research question.")
+            else:
+                with st.spinner("Executing LangGraph multi-agent orchestration..."):
+                    payload = {
+                        "question": question_input.strip(),
+                        "company_ticker": ticker_input.strip().upper()
+                        if ticker_input.strip()
+                        else None,
+                        "reporting_period": period_input.strip()
+                        if period_input.strip()
+                        else None,
+                        "max_steps": max_steps_val,
+                        "timeout_seconds": float(timeout_val),
+                        "mock_llm_response": mock_override.strip()
+                        if mock_override.strip()
+                        else None,
+                    }
+
+                    agent_res = None
+                    try:
+                        resp = httpx.post(
+                            f"{backend_url}/api/v1/agents/run",
+                            json=payload,
+                            timeout=float(timeout_val) + 5.0,
+                        )
+                        if resp.status_code == 200:
+                            agent_res = resp.json()
+                        else:
+                            st.warning(
+                                f"Backend HTTP {resp.status_code}: {resp.text}. Falling back to direct engine."
+                            )
+                    except Exception as exc:
+                        st.info(
+                            f"Backend offline ({exc}). Executing directly via Finova orchestration engine."
+                        )
+
+                    if agent_res is None:
+                        try:
+                            from backend.agents.agent_models import AgentRunRequest
+                            from backend.orchestration.graph import (
+                                get_orchestration_engine,
+                            )
+
+                            engine = get_orchestration_engine()
+                            req_obj = AgentRunRequest(**payload)
+                            agent_res = engine.run(req_obj).model_dump()
+                        except Exception as e:
+                            st.error(f"Execution failed: {e}")
+
+                    if agent_res:
+                        st.session_state["last_agent_run"] = agent_res
+
+        last_run = st.session_state.get("last_agent_run")
+        if last_run:
+            st.markdown("---")
+            st.markdown("#### 🎯 Orchestration Summary")
+
+            # Status and Metrics Row
+            m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
+            with m_col1:
+                st.metric("Classified Intent", last_run.get("intent", "UNKNOWN"))
+            with m_col2:
+                st.metric("Workflow Route", last_run.get("workflow_type", "UNKNOWN"))
+            with m_col3:
+                st.metric("Status", last_run.get("status", "UNKNOWN"))
+            with m_col4:
+                st.metric(
+                    "Execution Time", f"{last_run.get('total_duration_ms', 0):.1f} ms"
+                )
+            with m_col5:
+                v_stat = last_run.get("verification_status") or "N/A"
+                st.metric("Verification", v_stat)
+
+            # Warning callouts if any
+            if last_run.get("warnings"):
+                with st.expander("⚠️ System & Retrieval Warnings", expanded=False):
+                    for w in last_run["warnings"]:
+                        st.caption(f"- {w}")
+
+            # Execution Trace Visual Timeline
+            st.markdown("#### ⏱️ Agent Execution Trace & Timeline")
+            trace_events = last_run.get("trace", [])
+            if trace_events:
+                trace_rows = []
+                for ev in trace_events:
+                    st_val = ev.get("status", "SUCCESS")
+                    badge = (
+                        "✅ SUCCESS"
+                        if st_val == "SUCCESS"
+                        else ("⚠️ WARNING" if st_val == "WARNING" else "❌ FAILED")
+                    )
+                    trace_rows.append(
+                        {
+                            "Step": ev.get("step_index", 0),
+                            "Agent Name": ev.get("agent_name", "N/A"),
+                            "Node Name": ev.get("node_name", "N/A"),
+                            "Duration (ms)": f"{ev.get('duration_ms', 0.0):.2f}",
+                            "Status": badge,
+                            "Input Summary": str(ev.get("input_summary") or "")[:60],
+                            "Output Summary": str(ev.get("output_summary") or "")[:80],
+                        }
+                    )
+                st.table(trace_rows)
+            else:
+                st.info("No trace events recorded.")
+
+            # Grounded Answer Presentation
+            st.markdown("#### 📄 Grounded Research Answer")
+            final_ans = last_run.get("final_answer")
+            if final_ans:
+                st.markdown(
+                    f"""
+                    <div class="card" style="border-left: 4px solid var(--accent-teal); font-size: 1.05rem; line-height: 1.6;">
+                        {final_ans}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.warning("No final answer produced by the multi-agent workflow.")
+
+            # Detail Tabs
+            tab_calcs, tab_evidence, tab_raw = st.tabs(
+                [
+                    f"🔢 Calculation Receipts ({last_run.get('calculation_receipts_count', 0)})",
+                    f"📚 Statutory Evidence Passages ({last_run.get('retrieved_evidence_count', 0)})",
+                    "🔍 Raw Execution Trace JSON",
+                ]
+            )
+
+            with tab_calcs:
+                st.caption(
+                    "Deterministic mathematical metrics computed by Financial Analyst Agent."
+                )
+                st.info(
+                    "Verified Python formulas applied directly to structured XBRL observations — Zero LLM arithmetic."
+                )
+                # Retrieve from storage if available
+                req_id = last_run.get("request_id")
+                st.caption(f"Workflow Request ID: `{req_id}`")
+
+            with tab_evidence:
+                st.caption(
+                    "Excerpts retrieved from statutory SEC EDGAR filings with provenance."
+                )
+                st.caption(
+                    f"Retrieved items: {last_run.get('retrieved_evidence_count', 0)}"
+                )
+
+            with tab_raw:
+                st.json(last_run)
 
     # -------------------------------------------------------------------------
     # View 2: Company Lookup & Ingestion (SEC)
@@ -2303,51 +2507,59 @@ def main() -> None:
     # View 5: Agent Architecture
     # -------------------------------------------------------------------------
     elif nav_selection == "Agent Architecture":
-        st.markdown("### 🤖 Multi-Agent Architecture Blueprint")
         st.markdown(
-            "Finova AI orchestrates six specialized agents using LangGraph to deliver verified financial reports."
+            "### 🤖 Multi-Agent Architecture Blueprint (Session 10 Operational)"
+        )
+        st.markdown(
+            "Finova AI orchestrates specialized agents using LangGraph state graphs to deliver verified financial reports."
         )
 
         agents = [
             (
                 "Supervisor Agent",
-                "Deconstructs research questions, plans tasks, and routes context between agents.",
-                "Orchestrator",
+                "Deconstructs research questions, classifies intent (5 classes), extracts ticker/period, and plans routes.",
+                "Operational",
+                "badge-active",
             ),
             (
                 "Research Agent",
-                "Queries SEC EDGAR, parses HTML/XBRL filings, and retrieves relevant footnote disclosures.",
-                "Retrieval",
+                "Queries SEC EDGAR with hybrid dense/sparse retrieval and cross-encoder reranking.",
+                "Operational",
+                "badge-active",
             ),
             (
                 "Financial Analyst Agent",
-                "Interprets structured metrics, evaluates trends, and identifies operational risks.",
-                "Analysis",
+                "Executes deterministic calculations (margins, ratios, cash flows) using structured XBRL facts. Zero LLM math.",
+                "Operational",
+                "badge-active",
             ),
             (
-                "Calculation Agent",
-                "Executes deterministic mathematical formulas (CAGR, EBITDA, liquidity, leverage).",
-                "Deterministic Math",
+                "RAG Agent",
+                "Synthesizes objective research responses citing statutory filing disclosures [E1] and calculation receipts [C1].",
+                "Operational",
+                "badge-active",
             ),
             (
                 "Verification Agent",
-                "Audits numerical claims against filing citations to prevent hallucinations.",
-                "Quality Assurance",
+                "Audits numerical claims and dates against evidence citations using strict thresholds to prevent hallucinations.",
+                "Operational",
+                "badge-active",
             ),
             (
-                "Report Agent",
-                "Synthesizes verified findings into professional, evidence-backed research briefs.",
-                "Synthesis",
+                "Safety Guardrail Node",
+                "Enforces safe rejections for unsupported inquiries (trading advice, stock predictions) and withheld responses.",
+                "Operational",
+                "badge-active",
             ),
         ]
 
-        for name, role, tag in agents:
+        for name, role, tag, badge_class in agents:
             st.markdown(
                 f"""
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <strong style="font-size: 1.15rem; color: #F8FAFC;">{name}</strong>
-                        <span class="badge-planned">{tag}</span>
+                        <span class="{badge_class}">{tag}</span>
                     </div>
                     <p style="color: #94A3B8; margin-top: 0.5rem; margin-bottom: 0;">{role}</p>
                 </div>
