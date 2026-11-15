@@ -1,0 +1,7 @@
+# Development & Testing Dependencies for Finova AI
+-r requirements.txt
+
+pytest>=8.3.0
+pytest-cov>=5.0.0
+ruff>=0.6.0
+
