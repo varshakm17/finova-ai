@@ -189,7 +189,7 @@ def main() -> None:
             options=[
                 "Overview",
                 "Company Lookup & Ingestion (SEC)",
-                "Semantic Search & Embeddings",
+                "Hybrid Research Search (RRF)",
                 "Research Workspace (Preview)",
                 "Agent Architecture",
                 "Configuration",
@@ -951,7 +951,7 @@ def main() -> None:
                                             )
 
                                         st.caption(
-                                            f"🤖 Model: `{stat_data.get('active_model')}` | "
+                                            f"🤖 Dense Model: `{stat_data.get('active_model')}` | "
                                             f"📐 Dimension: `{stat_data.get('embedding_dimension')}D` | "
                                             f"⚡ Vector Backend: `{stat_data.get('active_vector_backend', '').upper()}`"
                                         )
@@ -960,22 +960,45 @@ def main() -> None:
                                         "Could not fetch embedding status from backend."
                                     )
 
+                                # Fetch BM25 status
+                                try:
+                                    bm25_stat_resp = httpx.get(
+                                        f"{backend_url}/api/v1/companies/{search_ticker}/bm25/status",
+                                        timeout=10.0,
+                                    )
+                                    if bm25_stat_resp.status_code == 200:
+                                        bm25_data = bm25_stat_resp.json()
+                                        st.caption(
+                                            f"📚 BM25 Status: `{bm25_data.get('indexed_chunks', 0)}` indexed chunks | "
+                                            f"`{bm25_data.get('total_tokens', 0):,}` tokens | "
+                                            f"Avg Length: `{bm25_data.get('avg_doc_len', 0)}` tokens/chunk"
+                                        )
+                                except (httpx.HTTPError, ValueError):
+                                    pass
+
                                 st.markdown("---")
-                                st.markdown("##### ⚡ Generate / Update Vector Index")
-                                idx_c1, idx_c2 = st.columns([3, 1])
+                                st.markdown("##### ⚡ Generate / Update Indexes")
+                                idx_c1, idx_c2, idx_c3 = st.columns([2, 1, 1])
                                 with idx_c1:
                                     force_reindex = st.checkbox(
                                         "Force Re-Index All Chunks",
                                         value=False,
-                                        help="Re-embed chunks even if content hash is unchanged.",
+                                        help="Re-index chunks even if content hash is unchanged.",
                                         key=f"force_reindex_{search_ticker}",
                                     )
                                 with idx_c2:
                                     trigger_index = st.button(
-                                        "⚡ Build Vector Index",
+                                        "⚡ Build Dense Vector Index",
                                         type="primary",
                                         use_container_width=True,
                                         key=f"btn_index_{search_ticker}",
+                                    )
+                                with idx_c3:
+                                    trigger_bm25_index = st.button(
+                                        "⚡ Build BM25 Sparse Index",
+                                        type="secondary",
+                                        use_container_width=True,
+                                        key=f"btn_bm25_index_{search_ticker}",
                                     )
 
                                 if trigger_index:
@@ -992,12 +1015,38 @@ def main() -> None:
                                                 res_summary = idx_resp.json()
                                                 st.success(
                                                     res_summary.get("message")
-                                                    or "Indexing completed!"
+                                                    or "Dense indexing completed!"
                                                 )
                                                 st.rerun()
                                             else:
                                                 st.error(
                                                     f"Indexing failed ({idx_resp.status_code}): {idx_resp.text}"
+                                                )
+                                        except httpx.HTTPError as exc:
+                                            st.error(
+                                                f"Error communicating with backend: {exc}"
+                                            )
+
+                                if trigger_bm25_index:
+                                    with st.spinner(
+                                        f"Tokenizing and updating BM25 index for {search_ticker}..."
+                                    ):
+                                        try:
+                                            b_resp = httpx.post(
+                                                f"{backend_url}/api/v1/companies/{search_ticker}/bm25/index",
+                                                params={"force_reindex": force_reindex},
+                                                timeout=60.0,
+                                            )
+                                            if b_resp.status_code == 200:
+                                                b_summary = b_resp.json()
+                                                st.success(
+                                                    b_summary.get("message")
+                                                    or "BM25 indexing completed!"
+                                                )
+                                                st.rerun()
+                                            else:
+                                                st.error(
+                                                    f"BM25 indexing failed ({b_resp.status_code}): {b_resp.text}"
                                                 )
                                         except httpx.HTTPError as exc:
                                             st.error(
@@ -1115,45 +1164,87 @@ def main() -> None:
                         st.error(f"Network error querying backend service: {exc}")
 
     # -------------------------------------------------------------------------
-    # View 3: Semantic Search & Embeddings (Session 05)
+    # View 3: Hybrid Research Search (Session 06)
     # -------------------------------------------------------------------------
-    elif nav_selection == "Semantic Search & Embeddings":
-        st.markdown("### 🔍 Dense Semantic Search & Vector Embeddings")
+    elif nav_selection == "Hybrid Research Search (RRF)":
+        st.markdown("### 🔍 Hybrid Financial Research Search")
         st.caption(
-            "Execute local CPU dense semantic search across statutory SEC filing chunks using "
-            "sentence-transformers/all-MiniLM-L6-v2 and persistent vector storage."
+            "Combines Dense Semantic Vector Similarity (sentence-transformers) and Sparse BM25 Lexical Search "
+            "using Reciprocal Rank Fusion (RRF) for explainable, high-precision retrieval over statutory SEC disclosures."
         )
 
-        # Vector Index Stats
-        try:
-            stat_resp = httpx.get(f"{backend_url}/api/v1/index/stats", timeout=5.0)
-            if stat_resp.status_code == 200:
-                stats = stat_resp.json()
-                i_c1, i_c2, i_c3, i_c4 = st.columns(4)
-                with i_c1:
-                    st.metric("Total Indexed Vectors", stats.get("index_size", 0))
-                with i_c2:
-                    st.metric(
-                        "Embedding Dimension", f"{stats.get('embedding_dimension')}D"
+        # Operational Index Diagnostics
+        idx_stat_c1, idx_stat_c2 = st.columns(2)
+        with idx_stat_c1:
+            try:
+                stat_resp = httpx.get(f"{backend_url}/api/v1/index/stats", timeout=5.0)
+                if stat_resp.status_code == 200:
+                    stats = stat_resp.json()
+                    st.markdown(
+                        f"""
+                        <div class="card">
+                            <strong style="color: #00B4D8;">🧠 Dense Vector Index (Session 05)</strong>
+                            <div style="margin-top: 0.4rem; color: #F8FAFC; font-size: 0.95rem;">
+                                <strong>Vectors:</strong> {stats.get("index_size", 0):,} |
+                                <strong>Backend:</strong> {str(stats.get("active_backend", "")).upper()} |
+                                <strong>Dim:</strong> {stats.get("embedding_dimension")}D
+                            </div>
+                            <div style="color: #94A3B8; font-size: 0.8rem; margin-top: 0.2rem;">
+                                Model: {str(stats.get("model_name", "")).split("/")[-1]}
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
-                with i_c3:
-                    st.metric(
-                        "Vector Backend", str(stats.get("active_backend", "")).upper()
+            except (httpx.HTTPError, ValueError):
+                st.info("Dense vector index stats unavailable.")
+
+        with idx_stat_c2:
+            try:
+                bm25_stat_resp = httpx.get(
+                    f"{backend_url}/api/v1/index/bm25/stats", timeout=5.0
+                )
+                if bm25_stat_resp.status_code == 200:
+                    bstats = bm25_stat_resp.json()
+                    st.markdown(
+                        f"""
+                        <div class="card">
+                            <strong style="color: #06D6A0;">📚 BM25 Sparse Index (Session 06)</strong>
+                            <div style="margin-top: 0.4rem; color: #F8FAFC; font-size: 0.95rem;">
+                                <strong>Indexed Chunks:</strong> {bstats.get("total_chunks", 0):,} |
+                                <strong>Vocab:</strong> {bstats.get("vocab_size", 0):,} words
+                            </div>
+                            <div style="color: #94A3B8; font-size: 0.8rem; margin-top: 0.2rem;">
+                                Avg Chunk Length: {bstats.get("avg_doc_len", 0)} tokens | Tokenizer v{bstats.get("tokenizer_version", "1.0.0")}
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
-                with i_c4:
-                    st.metric("Model", str(stats.get("model_name", "")).split("/")[-1])
-        except (httpx.HTTPError, ValueError):
-            st.info("Backend index statistics not available.")
+            except (httpx.HTTPError, ValueError):
+                st.info("BM25 sparse index stats unavailable.")
 
         st.markdown("---")
-        st.markdown("#### 🔎 Query SEC Filings")
+        st.markdown("#### 🔎 Query Disclosures")
+
         global_query = st.text_input(
-            "Ask a Financial Question or Concept",
-            placeholder="e.g. What are the principal supply chain and manufacturing risks?",
-            key="global_semantic_query",
+            "Enter a Financial Question, Keyword, or Disclosure Topic",
+            placeholder="e.g. What risks affect the company's revenue and operating cash-flow?",
+            key="global_hybrid_query",
         )
 
-        col_t, col_f, col_s, col_k = st.columns(4)
+        col_mode, col_t, col_f, col_s = st.columns(4)
+        with col_mode:
+            retrieval_mode = st.selectbox(
+                "Retrieval Mode",
+                options=[
+                    "Hybrid (RRF)",
+                    "Dense Semantic (Vector)",
+                    "Sparse BM25 (Lexical)",
+                ],
+                index=0,
+                help="Hybrid blends vector similarity and keyword search via Reciprocal Rank Fusion.",
+            )
         with col_t:
             target_ticker = (
                 st.text_input("Ticker Filter (Optional)", placeholder="e.g. AAPL")
@@ -1162,79 +1253,260 @@ def main() -> None:
             )
         with col_f:
             target_filing = st.selectbox(
-                "Filing Type", options=["All", "10-K", "10-Q"], index=0
+                "Filing Form", options=["All Forms", "10-K", "10-Q"], index=0
             )
         with col_s:
             target_sec = st.selectbox(
                 "Section Filter",
                 options=[
                     "All Sections",
-                    "ITEM_1A (Risk)",
+                    "ITEM_1A (Risk Factors)",
                     "ITEM_7 (MD&A)",
                     "ITEM_1 (Business)",
                     "ITEM_7A (Market Risk)",
                 ],
                 index=0,
             )
+
+        col_k, col_rrf, _ = st.columns([1, 1, 2])
         with col_k:
             global_top_k = st.slider("Top Results", min_value=1, max_value=25, value=5)
+        with col_rrf:
+            rrf_k = st.slider(
+                "RRF Constant (k)",
+                min_value=10,
+                max_value=100,
+                value=60,
+                step=5,
+                help="Smoothing parameter k in 1 / (k + rank). Standard default: 60.",
+                disabled=(retrieval_mode != "Hybrid (RRF)"),
+            )
 
-        if st.button(
-            "🔍 Execute Semantic Search", type="primary", use_container_width=True
-        ):
+        if st.button("🔍 Execute Search", type="primary", use_container_width=True):
             if not global_query.strip():
-                st.warning("Please enter a question or query.")
+                st.warning("Please enter a question or search query.")
             else:
-                with st.spinner("Executing dense vector similarity search..."):
-                    try:
-                        sec_map = {
-                            "ITEM_1A (Risk)": "ITEM_1A",
-                            "ITEM_7 (MD&A)": "ITEM_7",
-                            "ITEM_1 (Business)": "ITEM_1",
-                            "ITEM_7A (Market Risk)": "ITEM_7A",
-                        }
-                        sec_code = sec_map.get(target_sec)
-                        filing_code = None if target_filing == "All" else target_filing
+                sec_map = {
+                    "ITEM_1A (Risk Factors)": "ITEM_1A",
+                    "ITEM_7 (MD&A)": "ITEM_7",
+                    "ITEM_1 (Business)": "ITEM_1",
+                    "ITEM_7A (Market Risk)": "ITEM_7A",
+                }
+                sec_code = sec_map.get(target_sec)
+                filing_code = None if target_filing == "All Forms" else target_filing
 
-                        payload = {
-                            "query": global_query.strip(),
-                            "ticker": target_ticker if target_ticker else None,
-                            "filing_type": filing_code,
-                            "section_identifier": sec_code,
-                            "top_k": global_top_k,
-                            "similarity_threshold": 0.0,
-                        }
+                # -------------------------------------------------------------
+                # 1. Hybrid Search Execution
+                # -------------------------------------------------------------
+                if retrieval_mode == "Hybrid (RRF)":
+                    with st.spinner(
+                        "Executing hybrid dense-sparse retrieval with RRF..."
+                    ):
+                        try:
+                            payload = {
+                                "query": global_query.strip(),
+                                "ticker": target_ticker if target_ticker else None,
+                                "filing_type": filing_code,
+                                "section_identifier": sec_code,
+                                "top_k": global_top_k,
+                                "rrf_constant": rrf_k,
+                                "dense_limit": 50,
+                                "sparse_limit": 50,
+                            }
+                            res = httpx.post(
+                                f"{backend_url}/api/v1/search/hybrid",
+                                json=payload,
+                                timeout=30.0,
+                            )
+                            if res.status_code == 200:
+                                h_data = res.json()
+                                items = h_data.get("results", [])
+                                diag = h_data.get("diagnostics", {})
+                                warnings = h_data.get("warnings", [])
 
-                        res = httpx.post(
-                            f"{backend_url}/api/v1/search/semantic",
-                            json=payload,
-                            timeout=30.0,
-                        )
-                        if res.status_code == 200:
-                            items = res.json()
-                            if not items:
-                                st.info("No matching document chunks found.")
+                                for w in warnings:
+                                    st.warning(f"⚠️ {w}")
+
+                                if not items:
+                                    st.info("No matching document chunks found.")
+                                else:
+                                    # Diagnostic banner
+                                    status_badge = (
+                                        '<span class="badge-active">Normal Hybrid</span>'
+                                        if h_data.get("status") == "success"
+                                        else '<span class="badge-planned">Degraded Mode</span>'
+                                    )
+                                    st.markdown(
+                                        f"""
+                                        <div style="background-color: #1C2541; padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #334155;">
+                                            {status_badge} &nbsp;
+                                            <strong>Fused Candidates:</strong> {diag.get("total_unique_candidates", 0)} total |
+                                            <strong>Dense Pool:</strong> {diag.get("dense_candidates_count", 0)} |
+                                            <strong>BM25 Pool:</strong> {diag.get("sparse_candidates_count", 0)} |
+                                            <strong>Mutual Overlap:</strong> {diag.get("overlap_candidates_count", 0)} |
+                                            <strong>Duration:</strong> {diag.get("total_duration_seconds", 0):.3f}s
+                                        </div>
+                                        """,
+                                        unsafe_allow_html=True,
+                                    )
+
+                                    for rank, item in enumerate(items, start=1):
+                                        sources = item.get("retrieval_sources", [])
+                                        source_tags: list[str] = []
+                                        if "dense" in sources:
+                                            d_score = item.get("dense_score")
+                                            score_str = (
+                                                f"{d_score:.4f}"
+                                                if d_score is not None
+                                                else "N/A"
+                                            )
+                                            source_tags.append(
+                                                f"Dense Rank #{item.get('dense_rank')} (Score: {score_str})"
+                                            )
+                                        if "sparse" in sources:
+                                            b_score = item.get("bm25_score")
+                                            score_str = (
+                                                f"{b_score:.2f}"
+                                                if b_score is not None
+                                                else "N/A"
+                                            )
+                                            source_tags.append(
+                                                f"BM25 Rank #{item.get('sparse_rank')} (Score: {score_str})"
+                                            )
+
+                                        tag_display = " | ".join(source_tags)
+                                        rrf_str = f"{item['rrf_score']:.6f}"
+
+                                        with st.expander(
+                                            f"#{rank} | RRF Score: {rrf_str} | {item['ticker']} - {item['section_title']} ({item['filing_type']})"
+                                        ):
+                                            st.markdown(
+                                                f"<span style='color: #00B4D8; font-size: 0.85rem;'>🔍 Sources: {tag_display}</span>",
+                                                unsafe_allow_html=True,
+                                            )
+                                            st.markdown(f"> {item['chunk_text']}")
+                                            st.caption(
+                                                f"**Company**: {item['company_name']} (`CIK {item['cik']}`) | "
+                                                f"**Filing Date**: {item['filing_date']} | "
+                                                f"**Accession**: `{item['accession_number']}` | "
+                                                f"**Chunk ID**: `{item['chunk_id']}`"
+                                            )
+                                            st.markdown(
+                                                f"[📄 View Statutory SEC EDGAR Filing]({item['source_url']})"
+                                            )
                             else:
-                                st.success(f"Retrieved {len(items)} relevant chunks:")
-                                for rank, item in enumerate(items, start=1):
-                                    score_pct = item["similarity_score"] * 100
-                                    with st.expander(
-                                        f"#{rank} | Match: {item['similarity_score']:.4f} ({score_pct:.1f}%) | "
-                                        f"{item['ticker']} - {item['section_title']} ({item['filing_type']})"
-                                    ):
-                                        st.markdown(f"> {item['chunk_text']}")
-                                        st.caption(
-                                            f"**Company**: {item['company_name']} (`CIK {item['cik']}`) | "
-                                            f"**Filing Date**: {item['filing_date']} | "
-                                            f"**Accession**: `{item['accession_number']}`"
+                                st.error(
+                                    f"Search failed ({res.status_code}): {res.text}"
+                                )
+                        except httpx.HTTPError as exc:
+                            st.error(f"Error connecting to backend: {exc}")
+
+                # -------------------------------------------------------------
+                # 2. Dense Semantic Search Execution
+                # -------------------------------------------------------------
+                elif retrieval_mode == "Dense Semantic (Vector)":
+                    with st.spinner("Executing dense vector similarity search..."):
+                        try:
+                            payload = {
+                                "query": global_query.strip(),
+                                "ticker": target_ticker if target_ticker else None,
+                                "filing_type": filing_code,
+                                "section_identifier": sec_code,
+                                "top_k": global_top_k,
+                                "similarity_threshold": 0.0,
+                            }
+                            res = httpx.post(
+                                f"{backend_url}/api/v1/search/semantic",
+                                json=payload,
+                                timeout=30.0,
+                            )
+                            if res.status_code == 200:
+                                items = res.json()
+                                if not items:
+                                    st.info("No matching document chunks found.")
+                                else:
+                                    st.success(
+                                        f"Retrieved {len(items)} relevant chunks:"
+                                    )
+                                    for rank, item in enumerate(items, start=1):
+                                        score_pct = item["similarity_score"] * 100
+                                        with st.expander(
+                                            f"#{rank} | Cosine Match: {item['similarity_score']:.4f} ({score_pct:.1f}%) | "
+                                            f"{item['ticker']} - {item['section_title']} ({item['filing_type']})"
+                                        ):
+                                            st.markdown(f"> {item['chunk_text']}")
+                                            st.caption(
+                                                f"**Company**: {item['company_name']} (`CIK {item['cik']}`) | "
+                                                f"**Filing Date**: {item['filing_date']} | "
+                                                f"**Accession**: `{item['accession_number']}`"
+                                            )
+                                            st.markdown(
+                                                f"[📄 View SEC EDGAR Source]({item['source_url']})"
+                                            )
+                            else:
+                                st.error(
+                                    f"Search failed ({res.status_code}): {res.text}"
+                                )
+                        except httpx.HTTPError as exc:
+                            st.error(f"Error connecting to backend: {exc}")
+
+                # -------------------------------------------------------------
+                # 3. Sparse BM25 Search Execution
+                # -------------------------------------------------------------
+                elif retrieval_mode == "Sparse BM25 (Lexical)":
+                    with st.spinner("Executing BM25 lexical keyword search..."):
+                        try:
+                            payload = {
+                                "query": global_query.strip(),
+                                "ticker": target_ticker if target_ticker else None,
+                                "filing_type": filing_code,
+                                "section_identifier": sec_code,
+                                "top_k": global_top_k,
+                            }
+                            res = httpx.post(
+                                f"{backend_url}/api/v1/search/sparse",
+                                json=payload,
+                                timeout=30.0,
+                            )
+                            if res.status_code == 200:
+                                items = res.json()
+                                if not items:
+                                    st.info(
+                                        "No matching document chunks found with query keywords."
+                                    )
+                                else:
+                                    st.success(
+                                        f"Retrieved {len(items)} lexical matches:"
+                                    )
+                                    for rank, item in enumerate(items, start=1):
+                                        matched = item.get("matched_terms", [])
+                                        matched_str = (
+                                            ", ".join(f"`{m}`" for m in matched)
+                                            if matched
+                                            else "N/A"
                                         )
-                                        st.markdown(
-                                            f"[📄 View SEC EDGAR Source]({item['source_url']})"
-                                        )
-                        else:
-                            st.error(f"Search failed ({res.status_code}): {res.text}")
-                    except httpx.HTTPError as exc:
-                        st.error(f"Error connecting to backend: {exc}")
+                                        with st.expander(
+                                            f"#{rank} | BM25 Score: {item['bm25_score']:.2f} | "
+                                            f"{item['ticker']} - {item['section_title']} ({item['filing_type']})"
+                                        ):
+                                            st.markdown(
+                                                f"**Matched Terms:** {matched_str}"
+                                            )
+                                            st.markdown(f"> {item['chunk_text']}")
+                                            st.caption(
+                                                f"**Company**: {item['company_name']} (`CIK {item['cik']}`) | "
+                                                f"**Filing Date**: {item['filing_date']} | "
+                                                f"**Accession**: `{item['accession_number']}`"
+                                            )
+                                            st.markdown(
+                                                f"[📄 View SEC EDGAR Source]({item['source_url']})"
+                                            )
+                            else:
+                                st.error(
+                                    f"Search failed ({res.status_code}): {res.text}"
+                                )
+                        except httpx.HTTPError as exc:
+                            st.error(f"Error connecting to backend: {exc}")
 
     # -------------------------------------------------------------------------
     # View 4: Research Workspace (Preview)

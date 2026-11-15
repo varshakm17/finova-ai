@@ -5,7 +5,7 @@ indexing status diagnostics, semantic similarity search, and vector store statis
 """
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -225,3 +225,328 @@ class ChunkEmbeddingRecord(BaseModel):
     error_message: str | None = None
     created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+# ==============================================================================
+# BM25 Sparse Retrieval Models (Session 06)
+# ==============================================================================
+
+
+class BM25IndexingRequest(BaseModel):
+    """Request payload for triggering BM25 index generation or update."""
+
+    filing_type: str | None = Field(
+        default=None,
+        description="Optional filter by statutory filing type (e.g. '10-K', '10-Q')",
+    )
+    accession_number: str | None = Field(
+        default=None,
+        description="Optional filter by specific SEC accession number",
+    )
+    force_reindex: bool = Field(
+        default=False,
+        description="If True, re-tokenizes and updates chunks even if content hash matches",
+    )
+
+
+class BM25IndexingSummary(BaseModel):
+    """Summary of batch BM25 indexing run."""
+
+    ticker: str | None = Field(
+        default=None,
+        description="Target company ticker, or None if global indexing",
+    )
+    total_discovered: int = Field(
+        ...,
+        description="Total eligible chunks discovered matching criteria",
+    )
+    already_indexed: int = Field(
+        ...,
+        description="Chunks skipped because valid up-to-date BM25 tokens exist",
+    )
+    newly_indexed: int = Field(
+        ...,
+        description="Newly tokenized chunks added to BM25 index and database",
+    )
+    updated_indexed: int = Field(
+        ...,
+        description="Chunks re-tokenized due to text change or force_reindex",
+    )
+    removed: int = Field(
+        default=0,
+        description="Chunks removed from BM25 index that no longer exist in storage",
+    )
+    failed: int = Field(
+        ...,
+        description="Number of chunks that failed tokenization or persistence",
+    )
+    tokenizer_version: str = Field(
+        ...,
+        description="Active BM25 financial tokenizer version",
+    )
+    duration_seconds: float = Field(
+        ...,
+        description="Total elapsed wall-clock processing time in seconds",
+    )
+    message: str | None = Field(
+        default=None,
+        description="Descriptive status message or warning details",
+    )
+
+
+class BM25IndexStatusResponse(BaseModel):
+    """Diagnostics detailing BM25 indexing coverage for a company."""
+
+    ticker: str = Field(..., description="Target company ticker symbol")
+    total_available_chunks: int = Field(
+        ...,
+        description="Total document chunks stored in SQLite for this company",
+    )
+    indexed_chunks: int = Field(
+        ...,
+        description="Total chunks successfully indexed in the BM25 index",
+    )
+    pending_chunks: int = Field(
+        ...,
+        description="Chunks awaiting BM25 indexing",
+    )
+    failed_chunks: int = Field(
+        ...,
+        description="Chunks whose last BM25 attempt recorded an error",
+    )
+    tokenizer_version: str = Field(
+        ...,
+        description="Active tokenizer version identifier",
+    )
+    total_tokens: int = Field(
+        default=0,
+        description="Total tokens indexed across company chunks",
+    )
+    avg_doc_len: float = Field(
+        default=0.0,
+        description="Average token length of indexed chunks for this company",
+    )
+    last_indexed_at: str | None = Field(
+        default=None,
+        description="ISO 8601 timestamp of last index update",
+    )
+
+
+class BM25SearchRequest(BaseModel):
+    """Query parameters for BM25 sparse lexical search over filing chunks."""
+
+    query: str = Field(
+        ...,
+        min_length=1,
+        description="Lexical keyword query, exact phrase, acronym, or financial metric",
+    )
+    ticker: str | None = Field(
+        default=None,
+        description="Optional filter by company ticker (e.g. 'AAPL')",
+    )
+    filing_type: str | None = Field(
+        default=None,
+        description="Optional filter by filing type (e.g. '10-K', '10-Q')",
+    )
+    section_identifier: str | None = Field(
+        default=None,
+        description="Optional filter by section (e.g. 'ITEM_1A', 'ITEM_7')",
+    )
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Maximum number of ranked results to return",
+    )
+
+
+class BM25SearchResult(BaseModel):
+    """Ranked document chunk result from BM25 lexical search."""
+
+    chunk_id: str = Field(..., description="Unique persistent chunk identifier")
+    ticker: str = Field(..., description="Normalized company ticker symbol")
+    company_name: str = Field(..., description="Official registered company title")
+    cik: str = Field(..., description="10-digit zero-padded CIK number")
+    filing_type: str = Field(..., description="Filing type (e.g. '10-K', '10-Q')")
+    filing_date: str = Field(..., description="Filing submission date (YYYY-MM-DD)")
+    report_date: str | None = Field(
+        default=None,
+        description="Filing period end date (YYYY-MM-DD)",
+    )
+    accession_number: str = Field(..., description="SEC EDGAR accession number")
+    section_identifier: str = Field(
+        ...,
+        description="Canonical section identifier (e.g. 'ITEM_1A', 'ITEM_7')",
+    )
+    section_title: str = Field(..., description="Human-readable section title")
+    chunk_text: str = Field(..., description="Original raw text of the chunk")
+    bm25_score: float = Field(
+        ...,
+        description="Raw BM25 Okapi lexical score (higher indicates greater relevance)",
+    )
+    source_url: str = Field(..., description="Direct URL to filing on SEC EDGAR")
+    matched_terms: list[str] = Field(
+        default_factory=list,
+        description="Query terms found in this document chunk",
+    )
+
+
+class BM25IndexStatsResponse(BaseModel):
+    """Operational statistics for the persistent BM25 sparse index."""
+
+    total_chunks: int = Field(
+        ...,
+        description="Number of document chunks currently in the BM25 index",
+    )
+    tokenizer_version: str = Field(
+        ...,
+        description="Active financial tokenizer version",
+    )
+    vocab_size: int = Field(
+        ...,
+        description="Number of distinct terms in the BM25 vocabulary",
+    )
+    avg_doc_len: float = Field(
+        ...,
+        description="Average token length across all indexed chunks",
+    )
+    index_location: str = Field(
+        ...,
+        description="Safe application-level index identifier (no absolute OS paths)",
+    )
+    last_updated_at: str | None = Field(
+        default=None,
+        description="ISO 8601 timestamp of last index modification",
+    )
+    indexed_tickers: list[str] = Field(
+        default_factory=list,
+        description="List of tickers represented in the BM25 index",
+    )
+
+
+# ==============================================================================
+# Hybrid Search & Reciprocal Rank Fusion Models (Session 06)
+# ==============================================================================
+
+
+class HybridSearchRequest(BaseModel):
+    """Query parameters for hybrid dense-sparse retrieval combining vector similarity and BM25."""
+
+    query: str = Field(
+        ...,
+        min_length=1,
+        description="Natural-language question or financial search query",
+    )
+    ticker: str | None = Field(
+        default=None,
+        description="Optional filter by company ticker (e.g. 'AAPL')",
+    )
+    filing_type: str | None = Field(
+        default=None,
+        description="Optional filter by filing type (e.g. '10-K', '10-Q')",
+    )
+    section_identifier: str | None = Field(
+        default=None,
+        description="Optional filter by section (e.g. 'ITEM_1A', 'ITEM_7')",
+    )
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Maximum number of fused results to return",
+    )
+    rrf_constant: int = Field(
+        default=60,
+        ge=1,
+        le=200,
+        description="Reciprocal Rank Fusion smoothing parameter k (standard: 60)",
+    )
+    dense_limit: int = Field(
+        default=50,
+        ge=5,
+        le=200,
+        description="Candidate pool size retrieved from dense semantic search",
+    )
+    sparse_limit: int = Field(
+        default=50,
+        ge=5,
+        le=200,
+        description="Candidate pool size retrieved from BM25 sparse search",
+    )
+
+
+class HybridSearchResult(BaseModel):
+    """Ranked document chunk result combining dense and sparse retrieval with provenance."""
+
+    chunk_id: str = Field(..., description="Unique persistent chunk identifier")
+    ticker: str = Field(..., description="Normalized company ticker symbol")
+    company_name: str = Field(..., description="Official registered company title")
+    cik: str = Field(..., description="10-digit zero-padded CIK number")
+    filing_type: str = Field(..., description="Filing type (e.g. '10-K', '10-Q')")
+    filing_date: str = Field(..., description="Filing submission date (YYYY-MM-DD)")
+    report_date: str | None = Field(
+        default=None,
+        description="Filing period end date (YYYY-MM-DD)",
+    )
+    accession_number: str = Field(..., description="SEC EDGAR accession number")
+    section_identifier: str = Field(
+        ...,
+        description="Canonical section identifier (e.g. 'ITEM_1A', 'ITEM_7')",
+    )
+    section_title: str = Field(..., description="Human-readable section title")
+    chunk_text: str = Field(..., description="Original raw text of the chunk")
+    source_url: str = Field(..., description="Direct URL to filing on SEC EDGAR")
+    dense_rank: int | None = Field(
+        default=None,
+        description="1-based rank in dense semantic search results, if present",
+    )
+    dense_score: float | None = Field(
+        default=None,
+        description="Cosine similarity score from dense search, if present",
+    )
+    sparse_rank: int | None = Field(
+        default=None,
+        description="1-based rank in BM25 sparse search results, if present",
+    )
+    bm25_score: float | None = Field(
+        default=None,
+        description="BM25 lexical score from sparse search, if present",
+    )
+    rrf_score: float = Field(
+        ...,
+        description="Reciprocal Rank Fusion score: sum(1 / (k + rank_r))",
+    )
+    retrieval_sources: list[str] = Field(
+        ...,
+        description="Retriever components that discovered this chunk (e.g. ['dense', 'sparse'])",
+    )
+
+
+class HybridSearchResponse(BaseModel):
+    """Response payload for hybrid search containing ranked results and operational diagnostics."""
+
+    query: str = Field(..., description="Submitted query string")
+    retrieval_mode: str = Field(
+        default="hybrid",
+        description="Execution mode: 'hybrid', 'dense_only', 'sparse_only', or degraded variants",
+    )
+    status: Literal["success", "degraded", "error"] = Field(
+        default="success",
+        description="Execution status indicating normal or degraded hybrid retrieval",
+    )
+    total_results: int = Field(
+        ...,
+        description="Number of final ranked results returned",
+    )
+    results: list[HybridSearchResult] = Field(
+        default_factory=list,
+        description="Ranked list of fused search results in descending RRF order",
+    )
+    diagnostics: dict[str, Any] | None = Field(
+        default=None,
+        description="Operational diagnostics including candidate counts and execution timings",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Diagnostic warnings or degraded-mode notifications",
+    )

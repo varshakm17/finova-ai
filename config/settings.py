@@ -135,6 +135,44 @@ class Settings(BaseSettings):
         description="Expected vector dimension for the embedding model",
     )
 
+    # BM25 Sparse Retrieval & Hybrid Search (Session 06)
+    BM25_INDEX_DIR: str = Field(
+        default="datasets/indexes/bm25",
+        description="Local directory for storing persistent BM25 index and corpus files",
+    )
+    BM25_TOKENIZER_VERSION: str = Field(
+        default="1.0.0",
+        description="Semantic version of the financial BM25 tokenizer",
+    )
+    BM25_DEFAULT_TOP_K: int = Field(
+        default=5,
+        description="Default top-k results for BM25 lexical search",
+    )
+    BM25_K1: float = Field(
+        default=1.5,
+        description="BM25 term frequency saturation parameter k1",
+    )
+    BM25_B: float = Field(
+        default=0.75,
+        description="BM25 document length normalization parameter b",
+    )
+    HYBRID_RRF_CONSTANT: int = Field(
+        default=60,
+        description="Reciprocal Rank Fusion smoothing constant k (standard default 60)",
+    )
+    HYBRID_DENSE_CANDIDATES: int = Field(
+        default=50,
+        description="Over-fetch candidate count for dense semantic search in hybrid mode",
+    )
+    HYBRID_SPARSE_CANDIDATES: int = Field(
+        default=50,
+        description="Over-fetch candidate count for BM25 sparse search in hybrid mode",
+    )
+    HYBRID_DEFAULT_TOP_K: int = Field(
+        default=5,
+        description="Default top-k results for hybrid search",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

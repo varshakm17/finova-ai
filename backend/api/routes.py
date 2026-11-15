@@ -30,9 +30,20 @@ from backend.finance.calculation_service import (
     ALL_CALCULATION_METRICS,
     CalculationService,
 )
+from backend.retrieval.bm25_indexing_service import BM25IndexingService
+from backend.retrieval.bm25_search import BM25SearchService
+from backend.retrieval.hybrid_search import HybridSearchService
 from backend.retrieval.indexing_service import IndexingService
 from backend.retrieval.retrieval_models import (
+    BM25IndexingRequest,
+    BM25IndexingSummary,
+    BM25IndexStatsResponse,
+    BM25IndexStatusResponse,
+    BM25SearchRequest,
+    BM25SearchResult,
     EmbeddingStatusResponse,
+    HybridSearchRequest,
+    HybridSearchResponse,
     IndexingRequest,
     IndexingSummary,
     IndexStatsResponse,
@@ -66,6 +77,20 @@ _indexing_service = IndexingService(
     settings=_settings,
 )
 _semantic_search_service = SemanticSearchService(
+    document_storage=_doc_storage,
+    settings=_settings,
+)
+_bm25_search_service = BM25SearchService(
+    document_storage=_doc_storage,
+    settings=_settings,
+)
+_bm25_indexing_service = BM25IndexingService(
+    document_storage=_doc_storage,
+    settings=_settings,
+)
+_hybrid_search_service = HybridSearchService(
+    semantic_search_service=_semantic_search_service,
+    bm25_search_service=_bm25_search_service,
     document_storage=_doc_storage,
     settings=_settings,
 )
@@ -1034,3 +1059,188 @@ def semantic_search(request: SemanticSearchRequest) -> list[SemanticSearchResult
 def get_vector_index_stats() -> IndexStatsResponse:
     """Retrieve vector store index statistics."""
     return _indexing_service.get_index_stats()
+
+
+# -----------------------------------------------------------------------------
+# BM25 Sparse & Hybrid Search Endpoints (Session 06)
+# -----------------------------------------------------------------------------
+@router.post(
+    "/companies/{ticker}/bm25/index",
+    response_model=BM25IndexingSummary,
+    summary="Index Company Chunks with BM25",
+    description="Tokenizes document chunks for a company and updates the BM25 sparse index.",
+    tags=["BM25 Sparse & Hybrid Search"],
+)
+def index_company_bm25(
+    ticker: str,
+    payload: BM25IndexingRequest | None = None,
+    filing_type: str | None = Query(
+        None, description="Optional filter by filing type (e.g. '10-K', '10-Q')"
+    ),
+    accession_number: str | None = Query(
+        None, description="Optional filter by accession number"
+    ),
+    force_reindex: bool = Query(
+        False, description="If True, re-indexes even if content hash matches"
+    ),
+) -> BM25IndexingSummary:
+    """Index document chunks for a company into the BM25 sparse index."""
+    clean_ticker = normalize_ticker(ticker)
+    company = _company_service.get_company_by_ticker(clean_ticker)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Company with ticker '{clean_ticker}' not found.",
+        )
+
+    effective_filing_type = (
+        payload.filing_type if payload and payload.filing_type else filing_type
+    )
+    effective_accn = (
+        payload.accession_number
+        if payload and payload.accession_number
+        else accession_number
+    )
+    effective_force = payload.force_reindex if payload else force_reindex
+
+    try:
+        summary = _bm25_indexing_service.index_company_chunks(
+            ticker=clean_ticker,
+            filing_type=effective_filing_type,
+            accession_number=effective_accn,
+            force_reindex=effective_force,
+        )
+        return summary
+    except Exception as exc:
+        logger.error("Error indexing BM25 for %s: %s", clean_ticker, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate BM25 index: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/companies/{ticker}/bm25/status",
+    response_model=BM25IndexStatusResponse,
+    summary="Get Company BM25 Index Status",
+    description="Returns available chunks, indexed chunks, token counts, and average document length.",
+    tags=["BM25 Sparse & Hybrid Search"],
+)
+def get_company_bm25_status(ticker: str) -> BM25IndexStatusResponse:
+    """Retrieve BM25 indexing coverage diagnostics for a company."""
+    clean_ticker = normalize_ticker(ticker)
+    company = _company_service.get_company_by_ticker(clean_ticker)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Company with ticker '{clean_ticker}' not found.",
+        )
+
+    return _bm25_indexing_service.get_indexing_status(clean_ticker)
+
+
+@router.post(
+    "/search/sparse",
+    response_model=list[BM25SearchResult],
+    summary="BM25 Lexical Keyword Search",
+    description="Executes BM25Okapi sparse lexical search over indexed SEC filing document chunks.",
+    tags=["BM25 Sparse & Hybrid Search"],
+)
+def sparse_search(request: BM25SearchRequest) -> list[BM25SearchResult]:
+    """Search filing chunks using BM25 lexical keyword matching."""
+    if not request.query or not request.query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Search query cannot be empty or whitespace-only.",
+        )
+
+    clean_ticker = normalize_ticker(request.ticker) if request.ticker else None
+    if clean_ticker:
+        company = _company_service.get_company_by_ticker(clean_ticker)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with ticker '{clean_ticker}' not found.",
+            )
+
+    try:
+        results = _bm25_search_service.search(
+            query=request.query,
+            ticker=clean_ticker,
+            filing_type=request.filing_type,
+            section_identifier=request.section_identifier,
+            top_k=request.top_k,
+        )
+        return results
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Error executing BM25 sparse search: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"BM25 sparse search failed: {exc}",
+        ) from exc
+
+
+@router.post(
+    "/search/hybrid",
+    response_model=HybridSearchResponse,
+    summary="Hybrid Search with Reciprocal Rank Fusion",
+    description="Executes dense semantic and BM25 sparse retrieval and fuses results via RRF.",
+    tags=["BM25 Sparse & Hybrid Search"],
+)
+def hybrid_search(request: HybridSearchRequest) -> HybridSearchResponse:
+    """Execute multi-modal hybrid retrieval with Reciprocal Rank Fusion."""
+    if not request.query or not request.query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Search query cannot be empty or whitespace-only.",
+        )
+
+    clean_ticker = normalize_ticker(request.ticker) if request.ticker else None
+    if clean_ticker:
+        company = _company_service.get_company_by_ticker(clean_ticker)
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with ticker '{clean_ticker}' not found.",
+            )
+
+    try:
+        response = _hybrid_search_service.search(
+            query=request.query,
+            ticker=clean_ticker,
+            filing_type=request.filing_type,
+            section_identifier=request.section_identifier,
+            top_k=request.top_k,
+            rrf_constant=request.rrf_constant,
+            dense_limit=request.dense_limit,
+            sparse_limit=request.sparse_limit,
+        )
+        return response
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Error executing hybrid search: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Hybrid search failed: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/index/bm25/stats",
+    response_model=BM25IndexStatsResponse,
+    summary="Get BM25 Sparse Index Statistics",
+    description="Returns operational statistics, vocabulary size, and chunk counts for BM25.",
+    tags=["BM25 Sparse & Hybrid Search"],
+)
+def get_bm25_index_stats() -> BM25IndexStatsResponse:
+    """Retrieve BM25 index diagnostic statistics."""
+    return _bm25_indexing_service.get_index_stats()

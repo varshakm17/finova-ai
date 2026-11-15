@@ -154,7 +154,42 @@ class DocumentStorage:
                 "CREATE INDEX IF NOT EXISTS idx_embeddings_status ON chunk_embeddings (index_status);"
             )
 
-        logger.info("Document, chunk, and embedding tables verified in database.")
+            # 5. BM25 Sparse Index Metadata Table (Session 06)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS bm25_index_metadata (
+                    index_id TEXT PRIMARY KEY,
+                    chunk_id TEXT NOT NULL,
+                    document_id TEXT NOT NULL,
+                    ticker TEXT NOT NULL,
+                    accession_number TEXT NOT NULL,
+                    section_identifier TEXT NOT NULL,
+                    tokenizer_version TEXT NOT NULL DEFAULT '1.0.0',
+                    content_hash TEXT NOT NULL,
+                    doc_len INTEGER NOT NULL,
+                    index_status TEXT NOT NULL DEFAULT 'indexed',
+                    error_message TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (chunk_id) REFERENCES document_chunks (chunk_id) ON DELETE CASCADE,
+                    UNIQUE(chunk_id, tokenizer_version)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bm25_ticker ON bm25_index_metadata (ticker);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bm25_chunk ON bm25_index_metadata (chunk_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bm25_tok ON bm25_index_metadata (tokenizer_version);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bm25_status ON bm25_index_metadata (index_status);"
+            )
+
+        logger.info("Document, chunk, embedding, and BM25 tables verified in database.")
 
     def save_document(self, doc_data: dict[str, Any]) -> str:
         """Upsert a document record in documents table.
@@ -600,5 +635,176 @@ class DocumentStorage:
             cursor = conn.execute(
                 f"DELETE FROM chunk_embeddings WHERE chunk_id IN ({placeholders});",
                 chunk_ids,
+            )
+            return cursor.rowcount
+
+    # ---------------------------------------------------------
+    # BM25 Sparse Index Metadata Methods (Session 06)
+    # ---------------------------------------------------------
+
+    def save_bm25_metadata(self, records: list[dict[str, Any]]) -> int:
+        """Batch upsert BM25 index metadata records into SQLite.
+
+        Args:
+            records: List of dictionaries matching bm25_index_metadata schema.
+
+        Returns:
+            int: Number of records saved.
+        """
+        if not records:
+            return 0
+
+        now_iso = datetime.now(UTC).isoformat()
+        rows = [
+            (
+                r["index_id"],
+                r["chunk_id"],
+                r["document_id"],
+                r["ticker"].strip().upper(),
+                r["accession_number"],
+                r["section_identifier"],
+                r.get("tokenizer_version", "1.0.0"),
+                r["content_hash"],
+                r.get("doc_len", 0),
+                r.get("index_status", "indexed"),
+                r.get("error_message"),
+                r.get("created_at", now_iso),
+                now_iso,
+            )
+            for r in records
+        ]
+
+        with self.db.connection() as conn:
+            conn.executemany(
+                """
+                INSERT INTO bm25_index_metadata (
+                    index_id, chunk_id, document_id, ticker, accession_number,
+                    section_identifier, tokenizer_version, content_hash, doc_len,
+                    index_status, error_message, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(chunk_id, tokenizer_version) DO UPDATE SET
+                    content_hash = excluded.content_hash,
+                    doc_len = excluded.doc_len,
+                    index_status = excluded.index_status,
+                    error_message = excluded.error_message,
+                    updated_at = excluded.updated_at;
+                """,
+                rows,
+            )
+        return len(rows)
+
+    def get_bm25_metadata_for_chunk(
+        self, chunk_id: str, tokenizer_version: str = "1.0.0"
+    ) -> dict[str, Any] | None:
+        """Fetch a specific BM25 index metadata record."""
+        with self.db.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM bm25_index_metadata
+                WHERE chunk_id = ? AND tokenizer_version = ?;
+                """,
+                (chunk_id.strip(), tokenizer_version.strip()),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_bm25_metadata_for_ticker(
+        self,
+        ticker: str,
+        tokenizer_version: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve BM25 index metadata records for a company."""
+        clean_ticker = ticker.strip().upper()
+        query = "SELECT * FROM bm25_index_metadata WHERE ticker = ?"
+        params: list[Any] = [clean_ticker]
+
+        if tokenizer_version:
+            query += " AND tokenizer_version = ?"
+            params.append(tokenizer_version.strip())
+
+        query += " ORDER BY created_at DESC;"
+
+        with self.db.connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_bm25_counts_for_ticker(
+        self,
+        ticker: str,
+        tokenizer_version: str = "1.0.0",
+    ) -> dict[str, int]:
+        """Get diagnostic summary of chunk indexing counts for BM25."""
+        clean_ticker = ticker.strip().upper()
+        clean_tok = tokenizer_version.strip()
+
+        with self.db.connection() as conn:
+            # 1. Total chunks available
+            tot_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM document_chunks WHERE ticker = ?;",
+                (clean_ticker,),
+            ).fetchone()
+            total_chunks = tot_row["cnt"] if tot_row else 0
+
+            # 2. Status counts from bm25_index_metadata
+            status_rows = conn.execute(
+                """
+                SELECT index_status, COUNT(*) as cnt
+                FROM bm25_index_metadata
+                WHERE ticker = ? AND tokenizer_version = ?
+                GROUP BY index_status;
+                """,
+                (clean_ticker, clean_tok),
+            ).fetchall()
+
+            status_map = {r["index_status"]: r["cnt"] for r in status_rows}
+
+            indexed = status_map.get("indexed", 0)
+            failed = status_map.get("failed", 0)
+            pending = max(0, total_chunks - indexed - failed)
+
+            return {
+                "total_available_chunks": total_chunks,
+                "indexed_chunks": indexed,
+                "pending_chunks": pending,
+                "failed_chunks": failed,
+            }
+
+    def get_all_bm25_metadata(
+        self,
+        tokenizer_version: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve all BM25 index metadata records across all companies."""
+        query = "SELECT * FROM bm25_index_metadata"
+        params: list[Any] = []
+
+        if tokenizer_version:
+            query += " WHERE tokenizer_version = ?"
+            params.append(tokenizer_version.strip())
+
+        query += " ORDER BY created_at DESC;"
+
+        with self.db.connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def delete_bm25_metadata(self, chunk_ids: list[str]) -> int:
+        """Delete BM25 metadata records by chunk IDs."""
+        if not chunk_ids:
+            return 0
+
+        placeholders = ",".join("?" for _ in chunk_ids)
+        with self.db.connection() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM bm25_index_metadata WHERE chunk_id IN ({placeholders});",
+                chunk_ids,
+            )
+            return cursor.rowcount
+
+    def delete_bm25_metadata_for_ticker(self, ticker: str) -> int:
+        """Delete all BM25 metadata records for a given company ticker."""
+        clean_ticker = ticker.strip().upper()
+        with self.db.connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM bm25_index_metadata WHERE ticker = ?;",
+                (clean_ticker,),
             )
             return cursor.rowcount

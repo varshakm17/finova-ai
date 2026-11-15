@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 05 Embeddings & Vector Index Complete](https://img.shields.io/badge/Status-Embeddings%20%26%20Vector%20Index%20Active-brightgreen.svg)]()
-[![Tests: 152 Passed](https://img.shields.io/badge/Tests-152%20Passed%20(89%25%20cov)-brightgreen.svg)]()
+[![Status: Session 06 Hybrid Retrieval Complete](https://img.shields.io/badge/Status-BM25%20%26%20Hybrid%20RRF%20Active-brightgreen.svg)]()
+[![Tests: 184 Passed](https://img.shields.io/badge/Tests-184%20Passed%20(90%25%20cov)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -89,6 +89,7 @@ For detailed architectural specifications, agent definitions, sequence diagrams,
 - [filing-ingestion.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/filing-ingestion.md) — Document downloading, HTML parsing, section extraction, and chunking specification.
 - [financial-calculation-engine.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/financial-calculation-engine.md) — Deterministic financial arithmetic engine, receipts schema, and API specification.
 - [embeddings-and-vector-indexing.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/embeddings-and-vector-indexing.md) — Local sentence embeddings, persistent FAISS/NumPy indexing, and dense semantic search.
+- [hybrid-retrieval.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/hybrid-retrieval.md) — BM25 sparse search, domain-aware financial tokenization, and Reciprocal Rank Fusion (RRF).
 
 ---
 
@@ -122,19 +123,23 @@ finova-ai/
 │   │   ├── calculation_models.py # Pydantic schemas for receipts, inputs, and requests
 │   │   ├── period_validator.py   # Flow/instant period alignment & unit validation
 │   │   └── calculation_service.py # Multi-period calculation & persistence coordinator
-│   ├── retrieval/              # Semantic embeddings & persistent vector indexing
+│   ├── retrieval/              # Multi-modal retrieval pipelines (Dense, Sparse BM25, and Hybrid RRF)
 │   │   ├── __init__.py
+│   │   ├── bm25_indexing_service.py # Incremental BM25 indexer with content hashing
+│   │   ├── bm25_search.py       # FinancialBM25 (smoothed IDF) and domain tokenizer
 │   │   ├── embedding_service.py # Lazy-loading CPU SentenceTransformers (all-MiniLM-L6-v2)
-│   │   ├── indexing_service.py  # Incremental, hash-based chunk indexing coordinator
-│   │   ├── retrieval_models.py  # Pydantic schemas for indexing & semantic search
+│   │   ├── hybrid_search.py     # Reciprocal Rank Fusion blending dense and sparse lists
+│   │   ├── indexing_service.py  # Incremental, hash-based vector indexing coordinator
+│   │   ├── retrieval_models.py  # Pydantic schemas for Dense, BM25, and Hybrid retrieval
 │   │   ├── semantic_search.py   # Dense vector search with metadata post-filtering
 │   │   ├── text_preprocessor.py # Financial text cleaning, context prefixing, and SHA-256
 │   │   └── vector_store.py      # Dual vector store backends: FAISS CPU & NumPy
-│   ├── agents/                 # (Session 06) Multi-agent implementations
+│   ├── evaluation/             # Retrieval diagnostics and evaluation suites
+│   │   ├── __init__.py
+│   │   └── retrieval_diagnostics.py # Overlap metrics, Jaccard ratio, and synthetic benchmark
+│   ├── agents/                 # (Session 07) Multi-agent implementations
 │   │   └── __init__.py
-│   ├── graph/                  # (Session 06) LangGraph state graphs
-│   │   └── __init__.py
-│   ├── evaluation/             # (Session 07) Benchmarks and quality metrics
+│   ├── graph/                  # (Session 07) LangGraph state graphs
 │   │   └── __init__.py
 │   └── utils/
 │       ├── __init__.py
@@ -142,7 +147,7 @@ finova-ai/
 │
 ├── frontend/
 │   ├── __init__.py
-│   └── app.py                  # Streamlit application with semantic search & indexing UI
+│   └── app.py                  # Streamlit application with multi-modal hybrid search workspace
 │
 ├── config/
 │   ├── __init__.py
@@ -152,7 +157,7 @@ finova-ai/
 │   ├── README.md               # Guidelines for raw filing storage and cache
 │   ├── cache/                  # Local cache for SEC ticker directory
 │   ├── filings/                # Local cache for downloaded SEC HTML filings (git-ignored)
-│   └── indexes/                # Persistent FAISS and NumPy vector indices (git-ignored)
+│   └── indexes/                # Persistent vector indexes and BM25 JSON corpus (git-ignored)
 │
 ├── notebooks/
 │   └── .gitkeep                # Exploratory analysis scratchpads
@@ -185,7 +190,13 @@ finova-ai/
 │   ├── test_vector_store.py    # FAISS and NumPy vector store persistence & search tests
 │   ├── test_indexing_service.py # Incremental, update, and force-reindex tests
 │   ├── test_semantic_search.py # Dense semantic search & metadata filtering tests
-│   └── test_api_embeddings.py  # FastAPI semantic search & indexing route tests
+│   ├── test_api_embeddings.py  # FastAPI semantic search & indexing route tests
+│   ├── test_financial_tokenizer.py # Financial token, percentage, currency preservation tests
+│   ├── test_bm25_search.py     # BM25Index persistence, search, and provenance tests
+│   ├── test_bm25_indexing_service.py # Incremental BM25 updates and rebuild tests
+│   ├── test_hybrid_search.py   # Reciprocal Rank Fusion math, degraded-mode, and tie-breaking tests
+│   ├── test_retrieval_diagnostics.py # Overlap metrics, Jaccard ratio, and benchmark suite tests
+│   └── test_api_hybrid_search.py # FastAPI BM25 & hybrid search endpoint tests
 │
 ├── docs/
 │   ├── architecture.md         # System architecture specification
@@ -324,6 +335,29 @@ The FastAPI backend exposes interactive Swagger UI at `http://127.0.0.1:8000/doc
 - **Endpoint**: `GET /api/v1/index/stats`
 - **Response**: Active backend name (`faiss` / `numpy`), vector count, dimension (384), index directory path, and list of indexed tickers.
 
+### 12. Trigger Incremental BM25 Sparse Indexing
+- **Endpoint**: `POST /api/v1/companies/{ticker}/bm25/index`
+- **Query / Body Params**: `filing_type` (optional), `accession_number` (optional), `force_reindex` (boolean)
+- **Response**: Summary of chunks discovered, newly tokenized, updated, already indexed (skipped), and indexing duration.
+
+### 13. Check Company BM25 Index Status
+- **Endpoint**: `GET /api/v1/companies/{ticker}/bm25/status`
+- **Response**: Total chunks, indexed count, pending count, total tokens, average chunk length, and last index timestamp.
+
+### 14. Sparse Lexical Search (BM25)
+- **Endpoint**: `POST /api/v1/search/sparse`
+- **Body Params**: `query` (string), `ticker` (optional), `filing_type` (optional), `section_identifier` (optional), `top_k` (default 5)
+- **Response**: Ranked list of BM25 lexical matches with raw BM25 scores, matched terms list, and full filing provenance.
+
+### 15. Hybrid Search with Reciprocal Rank Fusion (RRF)
+- **Endpoint**: `POST /api/v1/search/hybrid`
+- **Body Params**: `query` (string), `ticker` (optional), `filing_type` (optional), `section_identifier` (optional), `top_k` (default 5), `rrf_constant` (default 60), `dense_limit` (default 50), `sparse_limit` (default 50)
+- **Response**: Fused search results sorted by descending RRF score, individual dense and sparse ranks/scores, retrieval source tags (`["dense", "sparse"]`), and operational diagnostics.
+
+### 16. Diagnostic BM25 Index Statistics
+- **Endpoint**: `GET /api/v1/index/bm25/stats`
+- **Response**: Total chunks, tokenizer version, vocabulary size, average document length, and indexed tickers.
+
 ---
 
 ## 9. Windows Installation & Execution
@@ -394,20 +428,27 @@ pytest -v --cov=backend --cov=config
 - [x] Dense semantic search service with over-fetch candidate filtering, top-k, and threshold cutoffs (`backend/retrieval/semantic_search.py`).
 - [x] REST endpoints for chunk indexing, embedding status, semantic search, and index stats (`backend/api/routes.py`).
 - [x] Streamlit semantic search explorer & indexing control dashboard (`frontend/app.py`).
-- [x] Comprehensive documentation in `README.md`, `docs/sec-data-pipeline.md`, `docs/filing-ingestion.md`, `docs/financial-calculation-engine.md`, and `docs/embeddings-and-vector-indexing.md`.
-- [x] Automated test suite with 152 unit and integration tests passing offline with 89% coverage (`tests/`).
+- [x] Comprehensive documentation in `README.md`, `docs/sec-data-pipeline.md`, `docs/filing-ingestion.md`, `docs/financial-calculation-engine.md`, `docs/embeddings-and-vector-indexing.md`, and `docs/hybrid-retrieval.md`.
+- [x] Financial domain tokenizer preserving currencies, percentages, dates, statutory codes, and hyphenated terms (`backend/retrieval/bm25_search.py`).
+- [x] FinancialBM25 sparse index with Robertson/Lucene smoothed IDF and safe JSON persistence (`backend/retrieval/bm25_search.py`).
+- [x] SQLite `bm25_index_metadata` schema and incremental content-hash change detection (`backend/data/document_storage.py`).
+- [x] Incremental BM25 indexing service supporting company-scoping, filing filters, and rebuilds (`backend/retrieval/bm25_indexing_service.py`).
+- [x] Reciprocal Rank Fusion (RRF) hybrid search engine with deterministic tie-breaking and degraded-mode fault tolerance (`backend/retrieval/hybrid_search.py`).
+- [x] REST endpoints for BM25 indexing, status, lexical search, hybrid RRF search, and sparse stats (`backend/api/routes.py`).
+- [x] Multi-modal Streamlit search workspace supporting Hybrid (RRF), Dense, and BM25 modes with diagnostic metrics (`frontend/app.py`).
+- [x] Diagnostic evaluation suite analyzing candidate overlap, Jaccard similarity, rank shifts, and synthetic benchmark suite (`backend/evaluation/retrieval_diagnostics.py`).
+- [x] Automated test suite with 184 unit and integration tests passing offline with 90% coverage (`tests/`).
 
 ---
 
 ## 11. Future Development Roadmap
 
-- **Session 06: Hybrid Search & LangGraph Multi-Agent Orchestration**
-  - BM25 lexical sparse retrieval with reciprocal rank fusion (RRF).
+- **Session 07: LangGraph Multi-Agent Orchestration & Anti-Hallucination Verification**
   - 6-agent cooperative state graph with Supervisor, Research, Analyst, Calculation, Verification, and Report agents.
-  - Bidirectional verification and anti-hallucination auditor.
-- **Session 07: Production UI & Full Report Generation**
-  - Interactive financial dashboard.
-  - Exportable PDF research briefs with source citations.
+  - Bidirectional verification and anti-hallucination fact auditor cross-checking math and text against SEC citations.
+- **Session 08: Production UI & Full Report Generation**
+  - Interactive multi-agent financial workspace.
+  - Exportable PDF research briefs with source citations and audit receipts.
 
 ---
 
