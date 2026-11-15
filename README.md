@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 03 Ingestion Complete](https://img.shields.io/badge/Status-Filing%20Ingestion%20Active-brightgreen.svg)]()
-[![Tests: 75 Passed](https://img.shields.io/badge/Tests-75%20Passed%20(87%25%20cov)-brightgreen.svg)]()
+[![Status: Session 04 Calculations Complete](https://img.shields.io/badge/Status-Calculations%20Engine%20Active-brightgreen.svg)]()
+[![Tests: 116 Passed](https://img.shields.io/badge/Tests-116%20Passed%20(89%25%20cov)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -47,9 +47,10 @@ Finova AI solves these limitations through an orchestrated multi-agent architect
 6. **Heuristic Section Extraction**: Identifies and extracts canonical Items 1, 1A, 7, and 7A across Form 10-K and 10-Q structures while rejecting Table of Contents false-positives.
 7. **Section-Aware Chunking Engine**: Generates ~3,500-char chunks (~400 overlap) snapping cleanly to paragraph or sentence boundaries with full citation metadata.
 8. **Relational SQLite Store**: Foreign-key backed persistence layer for companies, filings, financial observations, documents, sections, and chunks.
-9. **Interactive Streamlit Workspace**: Multi-view dashboard for company lookup, filing metadata, numerical metric exploration, and document ingestion/chunk inspection.
-10. **Deterministic Financial Math Library**: *(Planned: Session 04)* Calculation receipts ensuring zero arithmetic errors.
-11. **Multi-Agent Orchestration Graph (LangGraph)**: *(Planned: Session 05)* 6-agent cooperative state machine.
+9. **Interactive Streamlit Workspace**: Multi-view dashboard for company lookup, filing metadata, numerical metric exploration, document ingestion/chunk inspection, and deterministic financial calculations.
+10. **Deterministic Financial Math & Calculation Receipts Engine**: Pure Python arithmetic calculation engine computing 10 core financial metrics (Revenue Growth, Margins, Current Ratio, Debt-to-Equity, ROA, ROE, FCF) with zero LLM arithmetic hallucinations.
+11. **Verifiable Audit Receipts**: Complete mathematical transparency tracking formula expressions, input observations, accession numbers, and SEC archive URLs.
+12. **Multi-Agent Orchestration Graph (LangGraph)**: *(Planned: Session 05)* 6-agent cooperative state machine.
 
 ---
 
@@ -86,6 +87,7 @@ For detailed architectural specifications, agent definitions, sequence diagrams,
 - [architecture.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/architecture.md) — Multi-agent system topology.
 - [sec-data-pipeline.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/sec-data-pipeline.md) — Numerical XBRL ingestion pipeline and schema specification.
 - [filing-ingestion.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/filing-ingestion.md) — Document downloading, HTML parsing, section extraction, and chunking specification.
+- [financial-calculation-engine.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/financial-calculation-engine.md) — Deterministic financial arithmetic engine, receipts schema, and API specification.
 
 ---
 
@@ -99,7 +101,7 @@ finova-ai/
 │   ├── main.py                 # FastAPI application factory and entrypoint
 │   ├── api/
 │   │   ├── __init__.py
-│   │   └── routes.py           # REST API endpoints (Health, Companies, Ingestion, Chunks)
+│   │   └── routes.py           # REST API endpoints (Health, Companies, Ingestion, Chunks, Calculations)
 │   ├── data/                   # SEC EDGAR ingestion, document processing, and storage
 │   │   ├── __init__.py
 │   │   ├── sec_client.py       # Rate-limited SEC EDGAR HTTP client with backoff
@@ -113,13 +115,17 @@ finova-ai/
 │   │   ├── financial_extractor.py # XBRL company facts parser & US-GAAP mapper
 │   │   ├── data_normalizer.py  # Observation schema and period classification
 │   │   └── storage.py          # SQLite relational database engine
+│   ├── finance/                # Deterministic financial calculation engine & receipts
+│   │   ├── __init__.py
+│   │   ├── calculation_engine.py # Pure arithmetic methods for all 10 financial metrics
+│   │   ├── calculation_models.py # Pydantic schemas for receipts, inputs, and requests
+│   │   ├── period_validator.py   # Flow/instant period alignment & unit validation
+│   │   └── calculation_service.py # Multi-period calculation & persistence coordinator
 │   ├── agents/                 # (Session 05) Multi-agent implementations
 │   │   └── __init__.py
 │   ├── graph/                  # (Session 05) LangGraph state graphs
 │   │   └── __init__.py
-│   ├── retrieval/              # (Session 04/05) Hybrid RAG retrieval pipelines
-│   │   └── __init__.py
-│   ├── finance/                # (Session 04) Deterministic financial calculation
+│   ├── retrieval/              # (Session 05) Hybrid RAG retrieval pipelines
 │   │   └── __init__.py
 │   ├── evaluation/             # (Session 06) Benchmarks and quality metrics
 │   │   └── __init__.py
@@ -129,7 +135,7 @@ finova-ai/
 │
 ├── frontend/
 │   ├── __init__.py
-│   └── app.py                  # Streamlit application with ingestion and chunk viewer
+│   └── app.py                  # Streamlit application with calculations & receipts viewer
 │
 ├── config/
 │   ├── __init__.py
@@ -160,12 +166,18 @@ finova-ai/
 │   ├── test_chunker.py         # Boundary alignment, overlap, and deterministic tests
 │   ├── test_document_storage.py # Document, section, and chunk persistence tests
 │   ├── test_filing_ingestion_service.py # End-to-end ingestion pipeline tests
-│   └── test_api_ingestion_endpoints.py # FastAPI filing ingestion and chunk routes
+│   ├── test_api_ingestion_endpoints.py # FastAPI filing ingestion and chunk routes
+│   ├── test_calculation_engine.py # Pure formula arithmetic & zero-division tests
+│   ├── test_period_validator.py # Period alignment, floating calendar, & unit tests
+│   ├── test_calculation_storage.py # SQLite calculation receipts persistence & upsert tests
+│   ├── test_calculation_service.py # Multi-year calculation & edge-case integration tests
+│   └── test_api_calculations.py # FastAPI calculation endpoints & validation tests
 │
 ├── docs/
 │   ├── architecture.md         # System architecture specification
 │   ├── sec-data-pipeline.md    # SEC data ingestion & retrieval specification
-│   └── filing-ingestion.md     # Document ingestion, section extraction, and chunking
+│   ├── filing-ingestion.md     # Document ingestion, section extraction, and chunking
+│   └── financial-calculation-engine.md # Deterministic calculation engine & receipts
 │
 ├── logs/
 │   ├── .gitkeep
@@ -242,6 +254,44 @@ The FastAPI backend exposes interactive Swagger UI at `http://127.0.0.1:8000/doc
 - **Endpoint**: `GET /api/v1/companies/AAPL/documents/0000320193-23-000106/chunks?section_identifier=ITEM_1A`
 - **Response**: Section-aware chunks with full provenance and character offsets.
 
+### 5. Trigger Deterministic Financial Calculations
+- **Endpoint**: `POST /api/v1/companies/AAPL/calculations?period_type=annual`
+- **Query / Body Params**: `start_year` (optional), `end_year` (optional), `period_type` (`annual` or `quarterly`), `metrics` (optional list of metric keys)
+- **Response**:
+  ```json
+  {
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "company_name": "Apple Inc.",
+    "period_type": "annual",
+    "total_calculated": 9,
+    "total_unavailable": 1,
+    "total_invalid": 0,
+    "calculations": [
+      {
+        "calculation_id": "0000320193_gross_profit_margin_annual_2023-09-30",
+        "metric_name": "gross_profit_margin",
+        "calculated_value": 44.1311,
+        "unit": "percentage",
+        "period_end": "2023-09-30",
+        "formula_expression": "(Gross Profit / Revenue) * 100",
+        "status": "calculated",
+        "inputs": [ ... ],
+        "warnings": []
+      }
+    ]
+  }
+  ```
+
+### 6. List Stored Calculation Receipts
+- **Endpoint**: `GET /api/v1/companies/AAPL/calculations?period_type=annual`
+- **Query Params**: `metric_name`, `start_year`, `end_year`, `period_type`
+- **Response**: List of persisted `CalculationReceipt` records.
+
+### 7. Get Calculation Receipt by ID
+- **Endpoint**: `GET /api/v1/calculations/{calculation_id}`
+- **Response**: Complete verifiable audit receipt with formula, input observations, accession numbers, and SEC archive URLs.
+
 ---
 
 ## 9. Windows Installation & Execution
@@ -298,16 +348,19 @@ pytest -v --cov=backend --cov=config
 - [x] End-to-end filing ingestion service orchestrator (`backend/data/filing_ingestion_service.py`).
 - [x] FastAPI filing ingestion, document listing, detail, and chunk retrieval endpoints (`backend/api/routes.py`).
 - [x] Streamlit filing selection, ingestion status, section breakdown, and chunk inspector UI (`frontend/app.py`).
-- [x] Automated test suite with 75 unit and integration tests passing offline with 87% coverage (`tests/`).
-- [x] Comprehensive documentation in `README.md`, `docs/sec-data-pipeline.md`, and `docs/filing-ingestion.md`.
+- [x] Automated test suite with 116 unit and integration tests passing offline with 89% coverage (`tests/`).
+- [x] Pure Python deterministic arithmetic calculation engine for 10 financial metrics (`backend/finance/calculation_engine.py`).
+- [x] Strict period alignment validator with 7-day floating fiscal calendar tolerance and unit verification (`backend/finance/period_validator.py`).
+- [x] Verifiable calculation receipts (`CalculationReceipt`) tracking exact formulas and provenance (`backend/finance/calculation_models.py`).
+- [x] Relational persistence in SQLite `financial_calculations` with compound unique constraints (`backend/data/storage.py`).
+- [x] Calculation execution and receipt retrieval REST endpoints (`backend/api/routes.py`).
+- [x] Interactive Streamlit Financial Analysis workspace with summary scorecards and receipts inspector (`frontend/app.py`).
+- [x] Comprehensive documentation in `README.md`, `docs/sec-data-pipeline.md`, `docs/filing-ingestion.md`, and `docs/financial-calculation-engine.md`.
 
 ---
 
 ## 11. Future Development Roadmap
 
-- **Session 04: Deterministic Financial Calculation Engine**
-  - Strict Python implementations of financial ratios and margin formulas.
-  - Execution receipts with line-item traceability.
 - **Session 05: Hybrid RAG & Vector Embeddings**
   - CPU-optimized local embeddings over extracted chunks.
   - BM25 + dense hybrid search with reciprocal rank fusion (RRF).

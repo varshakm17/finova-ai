@@ -17,7 +17,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from backend.utils.logger import get_logger
 from config.settings import get_settings
+
+logger = get_logger("frontend")
 
 # -----------------------------------------------------------------------------
 # Page Configuration & Styling
@@ -347,12 +350,15 @@ def main() -> None:
                                 unsafe_allow_html=True,
                             )
 
-                            tab_ingest, tab_filings, tab_metrics = st.tabs(
-                                [
-                                    "📥 Ingest Filing & View Chunks",
-                                    "📄 Available SEC Filings",
-                                    "📈 Financial Observations",
-                                ]
+                            tab_ingest, tab_filings, tab_metrics, tab_calculations = (
+                                st.tabs(
+                                    [
+                                        "📥 Ingest Filing & View Chunks",
+                                        "📄 Available SEC Filings",
+                                        "📈 Financial Observations",
+                                        "🧮 Financial Analysis & Calculations",
+                                    ]
+                                )
                             )
 
                             # Tab 1: Filing Ingestion Workflow (Session 03)
@@ -620,6 +626,281 @@ def main() -> None:
                                     st.warning(
                                         "Could not extract financial observations."
                                     )
+
+                            # Tab 4: Financial Analysis & Deterministic Calculations (Session 04)
+                            with tab_calculations:
+                                st.markdown(
+                                    "#### Deterministic Financial Calculation Engine"
+                                )
+                                st.caption(
+                                    "Computes verified performance indicators, profitability margins, liquidity ratios, "
+                                    "and cash flow metrics using pure Python arithmetic with transparent calculation receipts."
+                                )
+
+                                c_col1, c_col2, c_col3 = st.columns([1, 1, 2])
+                                with c_col1:
+                                    selected_period_type = st.selectbox(
+                                        "Reporting Scope",
+                                        options=["annual", "quarterly"],
+                                        index=0,
+                                        format_func=lambda x: (
+                                            "Annual (10-K)"
+                                            if x == "annual"
+                                            else "Quarterly (10-Q)"
+                                        ),
+                                    )
+                                with c_col2:
+                                    calc_start_year = st.number_input(
+                                        "Start Year",
+                                        min_value=2015,
+                                        max_value=2030,
+                                        value=2020,
+                                    )
+                                with c_col3:
+                                    calc_end_year = st.number_input(
+                                        "End Year",
+                                        min_value=2015,
+                                        max_value=2030,
+                                        value=2024,
+                                    )
+
+                                metric_options = [
+                                    "revenue_growth",
+                                    "gross_profit_margin",
+                                    "operating_profit_margin",
+                                    "net_profit_margin",
+                                    "current_ratio",
+                                    "debt_to_equity_ratio",
+                                    "long_term_debt_to_equity",
+                                    "return_on_assets",
+                                    "return_on_equity",
+                                    "operating_cash_flow_margin",
+                                    "free_cash_flow",
+                                ]
+                                selected_metrics = st.multiselect(
+                                    "Select Financial Metrics to Compute",
+                                    options=metric_options,
+                                    default=metric_options,
+                                    help="Select one or more canonical metrics to calculate across the specified period range.",
+                                )
+
+                                if st.button(
+                                    "⚡ Calculate Financial Metrics",
+                                    type="primary",
+                                    use_container_width=True,
+                                ):
+                                    with st.spinner(
+                                        "Computing deterministic financial metrics..."
+                                    ):
+                                        try:
+                                            calc_resp = httpx.post(
+                                                f"{backend_url}/api/v1/companies/{search_ticker}/calculations",
+                                                json={
+                                                    "start_year": int(calc_start_year),
+                                                    "end_year": int(calc_end_year),
+                                                    "period_type": selected_period_type,
+                                                    "metrics": selected_metrics,
+                                                },
+                                                timeout=25.0,
+                                            )
+                                            if calc_resp.status_code == 200:
+                                                summary = calc_resp.json()
+                                                st.session_state[
+                                                    f"calculations_{search_ticker}"
+                                                ] = summary
+                                                st.success(
+                                                    f"Completed calculations for {search_ticker}: "
+                                                    f"{summary.get('total_calculated', 0)} calculated, "
+                                                    f"{summary.get('total_unavailable', 0)} unavailable, "
+                                                    f"{summary.get('total_invalid', 0)} invalid inputs."
+                                                )
+                                            else:
+                                                st.error(
+                                                    f"Calculation failed ({calc_resp.status_code}): {calc_resp.text}"
+                                                )
+                                        except httpx.RequestError as exc:
+                                            st.error(
+                                                f"Error communicating with backend: {exc}"
+                                            )
+
+                                # Display stored/cached calculations
+                                current_calcs = st.session_state.get(
+                                    f"calculations_{search_ticker}"
+                                )
+                                if not current_calcs:
+                                    # Fetch existing calculations from database
+                                    try:
+                                        existing_calcs_resp = httpx.get(
+                                            f"{backend_url}/api/v1/companies/{search_ticker}/calculations",
+                                            params={
+                                                "period_type": selected_period_type
+                                            },
+                                            timeout=15.0,
+                                        )
+                                        if (
+                                            existing_calcs_resp.status_code == 200
+                                            and existing_calcs_resp.json()
+                                        ):
+                                            items = existing_calcs_resp.json()
+                                            current_calcs = {
+                                                "calculations": items,
+                                                "total_calculated": sum(
+                                                    1
+                                                    for x in items
+                                                    if x.get("status") == "calculated"
+                                                ),
+                                                "total_unavailable": sum(
+                                                    1
+                                                    for x in items
+                                                    if x.get("status") == "unavailable"
+                                                ),
+                                                "total_invalid": sum(
+                                                    1
+                                                    for x in items
+                                                    if x.get("status")
+                                                    == "invalid_inputs"
+                                                ),
+                                            }
+                                    except (httpx.HTTPError, ValueError) as exc:
+                                        logger.debug(
+                                            "Could not pre-fetch calculations: %s", exc
+                                        )
+
+                                if current_calcs and current_calcs.get("calculations"):
+                                    all_calcs = current_calcs["calculations"]
+
+                                    # Summary scorecards
+                                    m_c1, m_c2, m_c3 = st.columns(3)
+                                    with m_c1:
+                                        st.metric(
+                                            "Metrics Calculated",
+                                            current_calcs.get("total_calculated", 0),
+                                        )
+                                    with m_c2:
+                                        st.metric(
+                                            "Unavailable Metrics",
+                                            current_calcs.get("total_unavailable", 0),
+                                        )
+                                    with m_c3:
+                                        st.metric(
+                                            "Invalid Inputs",
+                                            current_calcs.get("total_invalid", 0),
+                                        )
+
+                                    calculated_list = [
+                                        c
+                                        for c in all_calcs
+                                        if c.get("status") == "calculated"
+                                    ]
+                                    if calculated_list:
+                                        st.markdown("##### Calculated Metrics Summary")
+                                        table_rows = []
+                                        for c in calculated_list:
+                                            val_str = (
+                                                f"{c['calculated_value']:,.2f}%"
+                                                if c["unit"] == "percentage"
+                                                else f"${c['calculated_value']:,.2f}"
+                                                if c["unit"] == "USD"
+                                                else f"{c['calculated_value']:,.4f}"
+                                            )
+                                            table_rows.append(
+                                                {
+                                                    "Period End": c.get("period_end"),
+                                                    "Fiscal Period": f"FY{c.get('fiscal_year', '')} {c.get('fiscal_period', '')}".strip(),
+                                                    "Metric": c.get("formula_name"),
+                                                    "Value": val_str,
+                                                    "Unit": c.get("unit"),
+                                                    "Formula": c.get(
+                                                        "formula_expression"
+                                                    ),
+                                                }
+                                            )
+                                        st.dataframe(
+                                            table_rows, use_container_width=True
+                                        )
+
+                                        # Calculation Receipts Expander
+                                        st.markdown(
+                                            "##### Verifiable Calculation Receipts"
+                                        )
+                                        for idx, c in enumerate(calculated_list[:15]):
+                                            val_display = (
+                                                f"{c['calculated_value']:,.2f}%"
+                                                if c["unit"] == "percentage"
+                                                else f"${c['calculated_value']:,.2f}"
+                                                if c["unit"] == "USD"
+                                                else f"{c['calculated_value']:,.4f}"
+                                            )
+                                            with st.expander(
+                                                f"Receipt: {c.get('formula_name')} [{c.get('period_end')}] — {val_display}"
+                                            ):
+                                                st.markdown(
+                                                    f"**Formula**: `{c.get('formula_expression')}`"
+                                                )
+                                                st.markdown(
+                                                    f"**Calculation ID**: `{c.get('calculation_id')}`"
+                                                )
+                                                st.markdown(
+                                                    f"**Executed At**: `{c.get('calculated_at')}`"
+                                                )
+
+                                                if c.get("warnings"):
+                                                    for w in c["warnings"]:
+                                                        st.info(f"ℹ️ {w}")
+
+                                                if c.get("inputs"):
+                                                    st.markdown(
+                                                        "**Source Input Observations:**"
+                                                    )
+                                                    inputs_table = [
+                                                        {
+                                                            "Input Metric": inp.get(
+                                                                "metric_name"
+                                                            ),
+                                                            "Reported Value": f"{inp.get('value', 0):,}",
+                                                            "Unit": inp.get("unit"),
+                                                            "Period End": inp.get(
+                                                                "period_end"
+                                                            ),
+                                                            "Form": inp.get(
+                                                                "filing_type"
+                                                            )
+                                                            or "—",
+                                                            "Accession": inp.get(
+                                                                "accession_number"
+                                                            )
+                                                            or "—",
+                                                            "Source Link": inp.get(
+                                                                "source_url"
+                                                            )
+                                                            or "—",
+                                                            "Note": inp.get(
+                                                                "normalization_note"
+                                                            )
+                                                            or "—",
+                                                        }
+                                                        for inp in c["inputs"]
+                                                    ]
+                                                    st.dataframe(
+                                                        inputs_table,
+                                                        use_container_width=True,
+                                                    )
+
+                                    # Unavailable metrics section
+                                    unavailable_list = [
+                                        c
+                                        for c in all_calcs
+                                        if c.get("status") != "calculated"
+                                    ]
+                                    if unavailable_list:
+                                        with st.expander(
+                                            f"⚠️ Unavailable or Invalid Metrics ({len(unavailable_list)})"
+                                        ):
+                                            for un in unavailable_list:
+                                                st.markdown(
+                                                    f"- **{un.get('formula_name')}** (`{un.get('period_end')}`): "
+                                                    f"*{un.get('unavailable_reason')}*"
+                                                )
 
                     except httpx.RequestError as exc:
                         st.error(f"Network error querying backend service: {exc}")

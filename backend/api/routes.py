@@ -21,6 +21,15 @@ from backend.data.sec_client import (
     SECRateLimitError,
 )
 from backend.data.storage import Database
+from backend.finance.calculation_models import (
+    CalculationReceipt,
+    CalculationSummaryResponse,
+    TriggerCalculationRequest,
+)
+from backend.finance.calculation_service import (
+    ALL_CALCULATION_METRICS,
+    CalculationService,
+)
 from backend.utils.logger import get_logger
 from config.settings import get_settings
 
@@ -35,6 +44,10 @@ _doc_storage = DocumentStorage(db=_db)
 _ingestion_service = FilingIngestionService(
     db=_db,
     document_storage=_doc_storage,
+    company_service=_company_service,
+)
+_calculation_service = CalculationService(
+    db=_db,
     company_service=_company_service,
 )
 
@@ -686,3 +699,182 @@ def get_document_chunks(
         )
         for c in chunks
     ]
+
+
+# -----------------------------------------------------------------------------
+# Financial Calculation & Analysis Endpoints (Session 04)
+# -----------------------------------------------------------------------------
+@router.post(
+    "/companies/{ticker}/calculations",
+    response_model=CalculationSummaryResponse,
+    summary="Calculate Company Financial Metrics",
+    description="Executes deterministic Python calculations across financial observations for specified periods.",
+    tags=["Financial Calculations"],
+)
+def calculate_company_financial_metrics(
+    ticker: str,
+    payload: TriggerCalculationRequest | None = None,
+    start_year: int | None = Query(
+        None, description="Earliest fiscal year to compute (inclusive)"
+    ),
+    end_year: int | None = Query(
+        None, description="Latest fiscal year to compute (inclusive)"
+    ),
+    period_type: str | None = Query(
+        None, description="Period type filter: 'annual' or 'quarterly'"
+    ),
+    metric: list[str] | None = Query(  # noqa: B008
+        None, description="Optional metric names to filter calculation"
+    ),
+) -> CalculationSummaryResponse:
+    """Trigger deterministic financial calculations for a company."""
+    clean_ticker = normalize_ticker(ticker)
+
+    # Reconcile query parameters and body payload
+    effective_start = (
+        payload.start_year if payload and payload.start_year is not None else start_year
+    )
+    effective_end = (
+        payload.end_year if payload and payload.end_year is not None else end_year
+    )
+    effective_period = (
+        payload.period_type
+        if payload and payload.period_type
+        else period_type or "annual"
+    )
+    effective_metrics = payload.metrics if payload and payload.metrics else metric
+
+    if effective_period not in {"annual", "quarterly"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid period_type '{effective_period}'. Must be 'annual' or 'quarterly'.",
+        )
+
+    if effective_metrics:
+        invalid_metrics = [
+            m
+            for m in effective_metrics
+            if m.lower().strip() not in ALL_CALCULATION_METRICS
+        ]
+        if invalid_metrics:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported metric(s): {', '.join(invalid_metrics)}. Supported: {', '.join(ALL_CALCULATION_METRICS)}",
+            )
+
+    try:
+        summary = _calculation_service.calculate_company_metrics(
+            ticker=clean_ticker,
+            start_year=effective_start,
+            end_year=effective_end,
+            period_type=effective_period,
+            metrics=effective_metrics,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Error executing calculations for %s: %s", clean_ticker, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to execute financial calculations: {exc}",
+        ) from exc
+
+    return summary
+
+
+@router.get(
+    "/companies/{ticker}/calculations",
+    response_model=list[CalculationReceipt],
+    summary="List Calculated Financial Metrics",
+    description="Retrieves stored calculation receipts for a company with optional metric and year filters.",
+    tags=["Financial Calculations"],
+)
+def get_company_calculations(
+    ticker: str,
+    metric_name: str | None = Query(
+        None, description="Filter by metric key (e.g. gross_profit_margin)"
+    ),
+    start_year: int | None = Query(None, description="Filter by earliest fiscal year"),
+    end_year: int | None = Query(None, description="Filter by latest fiscal year"),
+    period_type: str | None = Query(
+        None, description="Filter by period type ('annual' or 'quarterly')"
+    ),
+) -> list[CalculationReceipt]:
+    """Retrieve stored calculation receipts for a company."""
+    clean_ticker = normalize_ticker(ticker)
+    company = _company_service.get_company_by_ticker(clean_ticker)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Company with ticker '{clean_ticker}' not found.",
+        )
+
+    records = _db.get_financial_calculations(
+        ticker_or_cik=clean_ticker,
+        metric_name=metric_name,
+        start_year=start_year,
+        end_year=end_year,
+        period_type=period_type,
+    )
+    return [CalculationReceipt(**r) for r in records]
+
+
+@router.get(
+    "/companies/{ticker}/calculations/{metric_name}",
+    response_model=list[CalculationReceipt],
+    summary="Get Specific Metric History",
+    description="Retrieves chronological calculation receipts for a specific financial indicator.",
+    tags=["Financial Calculations"],
+)
+def get_specific_metric_history(
+    ticker: str,
+    metric_name: str,
+    period_type: str | None = Query(
+        None, description="Filter by period type ('annual' or 'quarterly')"
+    ),
+) -> list[CalculationReceipt]:
+    """Retrieve chronological history for a specific calculated metric."""
+    clean_ticker = normalize_ticker(ticker)
+    clean_metric = metric_name.lower().strip()
+
+    if clean_metric not in ALL_CALCULATION_METRICS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Metric '{metric_name}' is not recognized. Supported: {', '.join(ALL_CALCULATION_METRICS)}",
+        )
+
+    company = _company_service.get_company_by_ticker(clean_ticker)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Company with ticker '{clean_ticker}' not found.",
+        )
+
+    records = _db.get_financial_calculations(
+        ticker_or_cik=clean_ticker,
+        metric_name=clean_metric,
+        period_type=period_type,
+    )
+    return [CalculationReceipt(**r) for r in records]
+
+
+@router.get(
+    "/calculations/{calculation_id}",
+    response_model=CalculationReceipt,
+    summary="Get Calculation Receipt",
+    description="Retrieves a single verifiable calculation receipt with complete formula and input provenance.",
+    tags=["Financial Calculations"],
+)
+def get_calculation_receipt_by_id(calculation_id: str) -> CalculationReceipt:
+    """Retrieve a single calculation receipt by its unique ID."""
+    clean_id = calculation_id.strip()
+    record = _db.get_financial_calculation_by_id(clean_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Calculation receipt with ID '{clean_id}' not found.",
+        )
+    return CalculationReceipt(**record)

@@ -4,6 +4,7 @@ Provides persistent schema management, foreign key relationships,
 upsert transactions, and querying for companies, filings, and financial metrics.
 """
 
+import json
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -165,6 +166,44 @@ class Database:
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_obs_fy ON financial_observations (fiscal_year);"
+            )
+
+            # 4. Financial Calculations Table
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS financial_calculations (
+                    calculation_id TEXT PRIMARY KEY,
+                    cik TEXT NOT NULL,
+                    ticker TEXT NOT NULL,
+                    company_name TEXT NOT NULL,
+                    metric_name TEXT NOT NULL,
+                    calculated_value REAL,
+                    unit TEXT NOT NULL,
+                    period_type TEXT NOT NULL,
+                    period_start TEXT NOT NULL DEFAULT '',
+                    period_end TEXT NOT NULL,
+                    fiscal_year INTEGER,
+                    fiscal_period TEXT,
+                    formula_name TEXT NOT NULL,
+                    formula_expression TEXT NOT NULL,
+                    calculation_status TEXT NOT NULL,
+                    unavailable_reason TEXT,
+                    input_observations_json TEXT NOT NULL,
+                    warnings_json TEXT NOT NULL,
+                    calculated_at TEXT NOT NULL,
+                    FOREIGN KEY (cik) REFERENCES companies (cik) ON DELETE CASCADE,
+                    UNIQUE(cik, metric_name, period_end, period_type, period_start)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_calc_ticker ON financial_calculations (ticker, metric_name);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_calc_cik ON financial_calculations (cik);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_calc_period ON financial_calculations (period_end, period_type);"
             )
 
         logger.info("Database initialized successfully at: %s", self.db_path)
@@ -412,3 +451,153 @@ class Database:
                     )
                 )
             return results
+
+    def save_financial_calculations(self, calculations: list[dict[str, Any]]) -> int:
+        """Upsert calculated financial metrics and receipts into financial_calculations table.
+
+        Args:
+            calculations: List of calculation dictionaries or CalculationReceipt data.
+
+        Returns:
+            int: Number of calculation records saved.
+        """
+        if not calculations:
+            return 0
+
+        records = [
+            (
+                c["calculation_id"],
+                c["cik"],
+                c["ticker"].upper().strip(),
+                c["company_name"],
+                c["metric_name"],
+                c.get("calculated_value"),
+                c["unit"],
+                c["period_type"],
+                c.get("period_start") or "",
+                c["period_end"],
+                c.get("fiscal_year"),
+                c.get("fiscal_period"),
+                c["formula_name"],
+                c["formula_expression"],
+                c["status"]
+                if "status" in c
+                else c.get("calculation_status", "calculated"),
+                c.get("unavailable_reason"),
+                (
+                    json.dumps(c["inputs"])
+                    if "inputs" in c and not isinstance(c["inputs"], str)
+                    else json.dumps(c.get("input_observations", []))
+                    if not isinstance(c.get("input_observations", []), str)
+                    else c.get("input_observations", "[]")
+                ),
+                (
+                    json.dumps(c["warnings"])
+                    if not isinstance(c.get("warnings", []), str)
+                    else c.get("warnings", "[]")
+                ),
+                c.get("calculated_at") or datetime.now(UTC).isoformat(),
+            )
+            for c in calculations
+        ]
+
+        with self.connection() as conn:
+            conn.executemany(
+                """
+                INSERT INTO financial_calculations (
+                    calculation_id, cik, ticker, company_name, metric_name,
+                    calculated_value, unit, period_type, period_start, period_end,
+                    fiscal_year, fiscal_period, formula_name, formula_expression,
+                    calculation_status, unavailable_reason, input_observations_json,
+                    warnings_json, calculated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(cik, metric_name, period_end, period_type, period_start) DO UPDATE SET
+                    calculated_value = excluded.calculated_value,
+                    calculation_status = excluded.calculation_status,
+                    unavailable_reason = excluded.unavailable_reason,
+                    input_observations_json = excluded.input_observations_json,
+                    warnings_json = excluded.warnings_json,
+                    calculated_at = excluded.calculated_at;
+                """,
+                records,
+            )
+        return len(records)
+
+    def get_financial_calculations(
+        self,
+        ticker_or_cik: str,
+        metric_name: str | None = None,
+        start_year: int | None = None,
+        end_year: int | None = None,
+        period_type: str | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Query calculated financial metrics with optional filters."""
+        query = "SELECT * FROM financial_calculations WHERE (ticker = ? OR cik = ?)"
+        params: list[Any] = [ticker_or_cik.upper().strip(), ticker_or_cik.strip()]
+
+        if start_year is not None:
+            query += " AND (fiscal_year >= ? OR substr(period_end, 1, 4) >= ?)"
+            params.extend([start_year, str(start_year)])
+
+        if end_year is not None:
+            query += " AND (fiscal_year <= ? OR substr(period_end, 1, 4) <= ?)"
+            params.extend([end_year, str(end_year)])
+
+        if period_type is not None:
+            query += " AND period_type = ?"
+            params.append(period_type.lower().strip())
+
+        if metric_name is not None:
+            query += " AND lower(metric_name) = lower(?)"
+            params.append(metric_name.strip())
+
+        query += " ORDER BY period_end DESC, metric_name ASC LIMIT ?;"
+        params.append(limit)
+
+        with self.connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            results: list[dict[str, Any]] = []
+            for row in rows:
+                r_dict = dict(row)
+                # Map column name calculation_status to status for API consistency
+                if "calculation_status" in r_dict:
+                    r_dict["status"] = r_dict["calculation_status"]
+                try:
+                    r_dict["inputs"] = json.loads(
+                        r_dict.pop("input_observations_json", "[]")
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    r_dict["inputs"] = []
+                try:
+                    r_dict["warnings"] = json.loads(r_dict.pop("warnings_json", "[]"))
+                except (json.JSONDecodeError, TypeError):
+                    r_dict["warnings"] = []
+                results.append(r_dict)
+            return results
+
+    def get_financial_calculation_by_id(
+        self, calculation_id: str
+    ) -> dict[str, Any] | None:
+        """Fetch a specific calculation receipt by its unique calculation_id."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM financial_calculations WHERE calculation_id = ?;",
+                (calculation_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            r_dict = dict(row)
+            if "calculation_status" in r_dict:
+                r_dict["status"] = r_dict["calculation_status"]
+            try:
+                r_dict["inputs"] = json.loads(
+                    r_dict.pop("input_observations_json", "[]")
+                )
+            except (json.JSONDecodeError, TypeError):
+                r_dict["inputs"] = []
+            try:
+                r_dict["warnings"] = json.loads(r_dict.pop("warnings_json", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                r_dict["warnings"] = []
+            return r_dict
