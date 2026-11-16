@@ -72,6 +72,58 @@ def test_incorrect_url_configuration() -> None:
     with pytest.raises(ValueError, match="Invalid backend URL"):
         resolve_backend_endpoints(custom_url="://missing-scheme")
 
+    # Invalid schemes
+    with pytest.raises(ValueError, match="scheme"):
+        resolve_backend_endpoints(custom_url="ftp://backend:8000")
+
+    with pytest.raises(ValueError, match="scheme"):
+        resolve_backend_endpoints(custom_url="ws://backend:8000")
+
+    # Invalid port numbers
+    with pytest.raises(ValueError, match="port"):
+        resolve_backend_endpoints(custom_url="http://backend:99999")
+
+    with pytest.raises(ValueError, match="port"):
+        resolve_backend_endpoints(custom_url="http://backend:0")
+
+
+def test_url_resolver_edge_cases() -> None:
+    """Verify URL resolver handles empty env vars, query params, fragments, and IPv4 addresses."""
+    # Empty string in custom_url falls back to defaults
+    endpoints_empty = resolve_backend_endpoints(custom_url="   ")
+    assert "127.0.0.1" in endpoints_empty.base_url
+
+    # IPv4 address
+    endpoints_ip = resolve_backend_endpoints(custom_url="http://192.168.1.100:8000")
+    assert endpoints_ip.base_url == "http://192.168.1.100:8000"
+    assert endpoints_ip.api_v1_url == "http://192.168.1.100:8000/api/v1"
+
+    # URL with query parameters and fragments
+    endpoints_query = resolve_backend_endpoints(
+        custom_url="http://backend:8000/api/v1?env=prod&debug=false#top"
+    )
+    assert endpoints_query.base_url == "http://backend:8000"
+    assert endpoints_query.api_v1_url == "http://backend:8000/api/v1"
+
+    # endpoint path segment resolution without duplication
+    assert endpoints_ip.endpoint("health") == "http://192.168.1.100:8000/api/v1/health"
+    assert endpoints_ip.endpoint("/health") == "http://192.168.1.100:8000/api/v1/health"
+    assert (
+        endpoints_ip.endpoint("api/v1/health")
+        == "http://192.168.1.100:8000/api/v1/health"
+    )
+    assert (
+        endpoints_ip.endpoint("/api/v1/health")
+        == "http://192.168.1.100:8000/api/v1/health"
+    )
+    assert endpoints_ip.endpoint("") == "http://192.168.1.100:8000/api/v1"
+    assert endpoints_ip.endpoint("api/v1") == "http://192.168.1.100:8000/api/v1"
+
+    # root_endpoint helper
+    assert endpoints_ip.root_endpoint("health") == "http://192.168.1.100:8000/health"
+    assert endpoints_ip.root_endpoint("/health") == "http://192.168.1.100:8000/health"
+    assert endpoints_ip.root_endpoint("") == "http://192.168.1.100:8000"
+
 
 def test_check_backend_health_success() -> None:
     """Verify successful health response parsing."""

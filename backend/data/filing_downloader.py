@@ -106,11 +106,15 @@ class FilingDownloader:
         self.backoff_factor = backoff_factor
         self.last_request_time: float = 0.0
 
-        # Validate User-Agent configuration (allow placeholder during initialization)
-        validate_user_agent(self.settings.SEC_USER_AGENT, allow_placeholder=True)
+        # Validate User-Agent configuration (allow placeholder or empty during initialization)
+        if self.settings.SEC_USER_AGENT and self.settings.SEC_USER_AGENT.strip():
+            validate_user_agent(self.settings.SEC_USER_AGENT, allow_placeholder=True)
 
+        ua_val = (
+            self.settings.SEC_USER_AGENT.strip() if self.settings.SEC_USER_AGENT else ""
+        )
         self._headers = {
-            "User-Agent": self.settings.SEC_USER_AGENT.strip(),
+            "User-Agent": ua_val,
             "Accept-Encoding": "gzip, deflate",
             "Accept": "text/html,application/xhtml+xml,text/plain,*/*",
         }

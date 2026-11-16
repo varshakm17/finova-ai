@@ -127,7 +127,7 @@ class Settings(BaseSettings):
     # 6. SEC EDGAR Integration & Fair-Access Settings
     # =========================================================================
     SEC_USER_AGENT: str = Field(
-        default="FinovaAI-Research/0.1.0 (contact@example.com)",
+        default="",
         description=(
             "SEC EDGAR User-Agent header in the format: 'ApplicationName AdminContact@domain.com'. "
             "A valid email and identifier must be configured before making requests to SEC EDGAR."
@@ -456,10 +456,15 @@ class Settings(BaseSettings):
                 warnings.append(
                     "CORS wildcard '*' is combined with allow_credentials=True."
                 )
-            if "contact@example.com" in self.SEC_USER_AGENT.lower():
-                warnings.append(
-                    "SEC_USER_AGENT still contains placeholder contact@example.com."
-                )
+            if not self.SEC_USER_AGENT or not self.SEC_USER_AGENT.strip():
+                warnings.append("SEC_USER_AGENT is not configured.")
+            else:
+                from backend.data.sec_client import is_placeholder_user_agent
+
+                if is_placeholder_user_agent(self.SEC_USER_AGENT):
+                    warnings.append(
+                        "SEC_USER_AGENT contains an unconfigured placeholder identity."
+                    )
         return warnings
 
 

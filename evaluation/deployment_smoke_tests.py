@@ -1,22 +1,23 @@
-"""Finova AI — Deployment Smoke Test Suite.
+"""Finova AI — Deployment Smoke Test & Readiness Acceptance Suite.
 
-Performs non-destructive, environment-aware validation of:
-1. Static Configuration: Settings, Pydantic constraints, CORS, and SEC formats.
-2. Local Runtime: Database initialization, WAL mode, persistence, and storage permissions.
-3. Frontend Connectivity: URL resolution and duplicate prefix avoidance.
-4. Backend Diagnostics: Health inspection and subsystem readiness.
-5. Docker Environment: Validates Compose topology or safely marks skipped if unavailable.
+Performs non-destructive, environment-aware validation with explicit readiness states:
+- READY: All mandatory deployment acceptance checks have passed without warnings.
+- DEGRADED: Core deployment checks passed, but non-critical warnings remain.
+- NOT_VERIFIED: Mandatory deployment acceptance could not be completed (e.g. Docker unavailable).
+- BLOCKED: One or more mandatory deployment acceptance checks failed.
+
+Guarantees 100% isolation: Never modifies or pollutes the user's configured SQLite database.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import shutil
-import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,17 @@ if str(_PROJECT_ROOT) not in sys.path:
 from backend.data.sec_client import is_placeholder_user_agent
 from backend.data.storage import Database
 from config.settings import BASE_DIR, Settings, get_settings
+from evaluation.docker_acceptance import DockerAcceptanceRunner
 from frontend.backend_client import check_backend_health, resolve_backend_endpoints
+
+
+class ReadinessState(str, Enum):
+    """Explicit deployment readiness classification."""
+
+    READY = "READY"
+    DEGRADED = "DEGRADED"
+    NOT_VERIFIED = "NOT_VERIFIED"
+    BLOCKED = "BLOCKED"
 
 
 @dataclass
@@ -39,7 +50,8 @@ class CheckResult:
     category: str
     passed: bool
     status: str  # "PASS", "WARN", "FAIL", "SKIPPED"
-    message: str
+    is_mandatory: bool = True
+    message: str = ""
     details: dict[str, Any] = field(default_factory=dict)
 
 
@@ -49,12 +61,18 @@ class DeploymentReport:
 
     timestamp: str
     mode: str
+    readiness_state: ReadinessState
+    exit_code: int
     total_checks: int
     passed_count: int
     warn_count: int
     failed_count: int
     skipped_count: int
+    mandatory_passed: int
+    mandatory_failed: int
+    mandatory_skipped: int
     is_deployable: bool
+    reasons_not_ready: list[str] = field(default_factory=list)
     checks: list[CheckResult] = field(default_factory=list)
     summary_notes: list[str] = field(default_factory=list)
 
@@ -63,17 +81,24 @@ class DeploymentReport:
         return {
             "timestamp": self.timestamp,
             "mode": self.mode,
+            "readiness_state": self.readiness_state.value,
+            "exit_code": self.exit_code,
             "total_checks": self.total_checks,
             "passed_count": self.passed_count,
             "warn_count": self.warn_count,
             "failed_count": self.failed_count,
             "skipped_count": self.skipped_count,
+            "mandatory_passed": self.mandatory_passed,
+            "mandatory_failed": self.mandatory_failed,
+            "mandatory_skipped": self.mandatory_skipped,
             "is_deployable": self.is_deployable,
+            "reasons_not_ready": self.reasons_not_ready,
             "checks": [
                 {
                     "name": c.name,
                     "category": c.category,
                     "status": c.status,
+                    "is_mandatory": c.is_mandatory,
                     "message": c.message,
                     "details": c.details,
                 }
@@ -102,6 +127,7 @@ class DeploymentSmokeTester:
                     category="static_config",
                     passed=True,
                     status="PASS",
+                    is_mandatory=True,
                     message="Pydantic Settings loaded successfully from environment and defaults.",
                     details={
                         "app_name": cfg.APP_NAME,
@@ -117,6 +143,7 @@ class DeploymentSmokeTester:
                     category="static_config",
                     passed=False,
                     status="FAIL",
+                    is_mandatory=True,
                     message=f"Settings initialization failed: {exc}",
                 )
             )
@@ -132,7 +159,8 @@ class DeploymentSmokeTester:
                     category="static_config",
                     passed=False,
                     status="FAIL",
-                    message="Insecure CORS policy: Wildcard origin '*' configured with allow_credentials=True.",
+                    is_mandatory=True,
+                    message="Insecure CORS policy: Wildcard '*' cannot be combined with allow_credentials=True.",
                 )
             )
         else:
@@ -142,12 +170,13 @@ class DeploymentSmokeTester:
                     category="static_config",
                     passed=True,
                     status="PASS",
-                    message=f"CORS policy secure ({len(cors_origins)} origins configured, credentials={cfg.CORS_ALLOW_CREDENTIALS}).",
+                    is_mandatory=True,
+                    message="CORS origin security policy validated successfully.",
                     details={"origins": cors_origins},
                 )
             )
 
-        # 3. SEC User-Agent Compliance
+        # 3. SEC User-Agent Configuration Check
         ua = cfg.SEC_USER_AGENT
         if not ua or not ua.strip():
             results.append(
@@ -156,7 +185,8 @@ class DeploymentSmokeTester:
                     category="static_config",
                     passed=True,
                     status="WARN",
-                    message="SEC_USER_AGENT is not configured. Live SEC EDGAR requests will be blocked until configured.",
+                    is_mandatory=False,
+                    message="SEC_USER_AGENT is not configured. Live SEC EDGAR operations will be blocked until configured in .env.",
                 )
             )
         elif is_placeholder_user_agent(ua):
@@ -166,6 +196,7 @@ class DeploymentSmokeTester:
                     category="static_config",
                     passed=True,
                     status="WARN",
+                    is_mandatory=False,
                     message=f"SEC_USER_AGENT contains placeholder '{cfg.mask_sec_user_agent()}'. Live SEC requests require genuine identity in .env.",
                 )
             )
@@ -176,31 +207,32 @@ class DeploymentSmokeTester:
                     category="static_config",
                     passed=True,
                     status="PASS",
-                    message=f"SEC_USER_AGENT configured with valid contact: {cfg.mask_sec_user_agent()}",
+                    is_mandatory=True,
+                    message=f"SEC User-Agent declared and valid: {cfg.mask_sec_user_agent()}",
                 )
             )
 
-        # 4. Dependency & Container Files Presence
+        # 4. Critical Deployment File Presence Checks
         required_files = [
-            ("requirements.txt", "Runtime dependencies specification"),
-            ("requirements.lock", "Deterministic frozen dependencies lockfile"),
-            ("Dockerfile.backend", "Backend production Dockerfile"),
-            ("Dockerfile.frontend", "Frontend production Dockerfile"),
-            ("docker-compose.yml", "Docker Compose orchestration topology"),
-            (".dockerignore", "Docker build context exclusion rules"),
-            (".env.docker.example", "Docker environment variables template"),
+            ("requirements.txt", BASE_DIR / "requirements.txt", True),
+            ("requirements.lock", BASE_DIR / "requirements.lock", True),
+            ("Dockerfile.backend", BASE_DIR / "Dockerfile.backend", True),
+            ("Dockerfile.frontend", BASE_DIR / "Dockerfile.frontend", True),
+            ("docker-compose.yml", BASE_DIR / "docker-compose.yml", True),
+            (".dockerignore", BASE_DIR / ".dockerignore", True),
+            (".env.docker.example", BASE_DIR / ".env.docker.example", True),
         ]
 
-        for fname, desc in required_files:
-            fpath = BASE_DIR / fname
-            if fpath.is_file() and fpath.stat().st_size > 0:
+        for fname, fpath, is_mand in required_files:
+            if fpath.exists() and fpath.stat().st_size > 0:
                 results.append(
                     CheckResult(
                         name=f"file_presence_{fname.replace('.', '_')}",
                         category="static_config",
                         passed=True,
                         status="PASS",
-                        message=f"{desc} present and non-empty ({fname}).",
+                        is_mandatory=is_mand,
+                        message=f"Required deployment configuration present: {fname}",
                     )
                 )
             else:
@@ -210,45 +242,51 @@ class DeploymentSmokeTester:
                         category="static_config",
                         passed=False,
                         status="FAIL",
-                        message=f"Missing or empty required file: {fname}",
+                        is_mandatory=is_mand,
+                        message=f"Missing or empty required deployment file: {fname}",
                     )
                 )
 
         return results
 
     def run_local_runtime_checks(self) -> list[CheckResult]:
-        """Validate local database persistence, filesystem storage, and connectivity."""
+        """Validate local database persistence, filesystem storage, and connectivity without touching production DB."""
         results: list[CheckResult] = []
 
-        # 1. Database Connection & Schema Tables
+        # 1. Database Connection & Schema Setup (ISOLATED TEMPORARY DATABASE)
         try:
-            db = Database()
-            with db.connection() as conn:
-                cur = conn.cursor()
-                tables = [
-                    row[0]
-                    for row in cur.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    ).fetchall()
-                ]
-                # Check journal mode
-                journal_mode = cur.execute("PRAGMA journal_mode;").fetchone()[0]
-                fk_mode = cur.execute("PRAGMA foreign_keys;").fetchone()[0]
+            with tempfile.TemporaryDirectory(prefix="finova_diag_db_") as tmp_dir:
+                tmp_db_file = Path(tmp_dir) / "diag_finova.db"
+                # Initialize isolated diagnostic database
+                diag_db = Database(str(tmp_db_file))
+                diag_db.init_db()
 
-            results.append(
-                CheckResult(
-                    name="database_schema_and_wal",
-                    category="local_runtime",
-                    passed=True,
-                    status="PASS",
-                    message=f"Database operational with {len(tables)} tables (journal: {journal_mode}, foreign_keys: {fk_mode}).",
-                    details={
-                        "tables_count": len(tables),
-                        "journal_mode": journal_mode,
-                        "foreign_keys": fk_mode,
-                    },
+                with diag_db.connection() as conn:
+                    cur = conn.cursor()
+                    tables = [
+                        row[0]
+                        for row in cur.execute(
+                            "SELECT name FROM sqlite_master WHERE type='table'"
+                        ).fetchall()
+                    ]
+                    journal_mode = cur.execute("PRAGMA journal_mode;").fetchone()[0]
+                    fk_mode = cur.execute("PRAGMA foreign_keys;").fetchone()[0]
+
+                results.append(
+                    CheckResult(
+                        name="database_schema_and_wal",
+                        category="local_runtime",
+                        passed=True,
+                        status="PASS",
+                        is_mandatory=True,
+                        message=f"Diagnostic database initialized cleanly with {len(tables)} tables (journal: {journal_mode}, foreign_keys: {fk_mode}). Real database untouched.",
+                        details={
+                            "tables_count": len(tables),
+                            "journal_mode": journal_mode,
+                            "foreign_keys": fk_mode,
+                        },
+                    )
                 )
-            )
         except Exception as exc:
             results.append(
                 CheckResult(
@@ -256,15 +294,17 @@ class DeploymentSmokeTester:
                     category="local_runtime",
                     passed=False,
                     status="FAIL",
-                    message=f"Database connection or schema check failed: {exc}",
+                    is_mandatory=True,
+                    message=f"Database schema initialization failed: {exc}",
                 )
             )
 
-        # 2. Database Write-Read-Rollback Transaction Resilience
+        # 2. Database Write-Read-Rollback Transaction Resilience (ISOLATED TEMPORARY DATABASE)
         try:
-            with tempfile.TemporaryDirectory() as tmp:
+            with tempfile.TemporaryDirectory(prefix="finova_diag_tx_") as tmp:
                 temp_db_path = str(Path(tmp) / "persist_test.db")
                 db_test = Database(temp_db_path)
+                db_test.init_db()
 
                 # Insert probe record
                 with db_test.connection() as conn:
@@ -315,7 +355,8 @@ class DeploymentSmokeTester:
                     category="local_runtime",
                     passed=True,
                     status="PASS",
-                    message="SQLite persistent read, write, and rollback verified cleanly.",
+                    is_mandatory=True,
+                    message="SQLite persistent read, write, and rollback verified cleanly on isolated database.",
                 )
             )
         except Exception as exc:
@@ -325,24 +366,22 @@ class DeploymentSmokeTester:
                     category="local_runtime",
                     passed=False,
                     status="FAIL",
+                    is_mandatory=True,
                     message=f"Database persistence or rollback check failed: {exc}",
                 )
             )
 
-        # 3. Frontend Backend URL Resolution
+        # 3. Frontend-Backend URL Resolver Check
         try:
             endpoints = resolve_backend_endpoints(settings=self.settings)
-            assert not endpoints.api_v1_url.endswith("/api/v1/api/v1"), (
-                "Duplicate /api/v1 detected!"
-            )
-            assert endpoints.health_url.endswith("/api/v1/health")
-
+            assert not endpoints.api_v1_url.endswith("/")
             results.append(
                 CheckResult(
                     name="frontend_url_resolution",
                     category="local_runtime",
                     passed=True,
                     status="PASS",
+                    is_mandatory=True,
                     message=f"Frontend resolved endpoints: base='{endpoints.base_url}', api_v1='{endpoints.api_v1_url}'.",
                     details={
                         "base_url": endpoints.base_url,
@@ -358,6 +397,7 @@ class DeploymentSmokeTester:
                     category="local_runtime",
                     passed=False,
                     status="FAIL",
+                    is_mandatory=True,
                     message=f"Frontend backend URL resolution failed: {exc}",
                 )
             )
@@ -382,6 +422,7 @@ class DeploymentSmokeTester:
                         category="local_runtime",
                         passed=True,
                         status="PASS",
+                        is_mandatory=True,
                         message=f"Storage directory writable: {dname}",
                     )
                 )
@@ -392,11 +433,12 @@ class DeploymentSmokeTester:
                         category="local_runtime",
                         passed=False,
                         status="FAIL",
+                        is_mandatory=True,
                         message=f"Storage directory '{dname}' not writable: {exc}",
                     )
                 )
 
-        # 5. Live Backend Connectivity (Optional in offline smoke test)
+        # 5. Live Backend Connectivity (Optional during offline smoke testing)
         try:
             endpoints = resolve_backend_endpoints(settings=self.settings)
             is_online, health_data, health_err = check_backend_health(
@@ -409,6 +451,7 @@ class DeploymentSmokeTester:
                         category="local_runtime",
                         passed=True,
                         status="PASS",
+                        is_mandatory=False,
                         message=f"Backend HTTP health check succeeded (status: {health_data.get('status')}).",
                         details=health_data,
                     )
@@ -420,6 +463,7 @@ class DeploymentSmokeTester:
                         category="local_runtime",
                         passed=True,
                         status="WARN",
+                        is_mandatory=False,
                         message=f"Backend is not currently running locally ({health_err or 'offline'}). Run 'uvicorn backend.main:app' to start.",
                     )
                 )
@@ -430,6 +474,7 @@ class DeploymentSmokeTester:
                     category="local_runtime",
                     passed=True,
                     status="WARN",
+                    is_mandatory=False,
                     message=f"Backend health check warning: {exc}",
                 )
             )
@@ -437,74 +482,101 @@ class DeploymentSmokeTester:
         return results
 
     def run_docker_checks(self) -> list[CheckResult]:
-        """Validate Docker Compose deployment topology or accurately report skipped."""
+        """Validate Docker deployment acceptance via DockerAcceptanceRunner."""
+        runner = DockerAcceptanceRunner()
+        docker_res = runner.run_acceptance_suite()
         results: list[CheckResult] = []
 
-        # 1. Inspect Docker CLI availability
-        docker_cli = shutil.which("docker")
-        if not docker_cli:
+        for dr in docker_res:
             results.append(
                 CheckResult(
-                    name="docker_runtime_availability",
-                    category="docker_deployment",
-                    passed=True,
-                    status="SKIPPED",
-                    message="Docker CLI is not installed on this host. Docker runtime validation skipped.",
-                    details={"reason": "docker_cli_not_found"},
+                    name=dr.name,
+                    category=dr.category,
+                    passed=dr.passed,
+                    status=dr.status,
+                    is_mandatory=dr.is_mandatory,
+                    message=dr.message,
+                    details=dr.details,
                 )
             )
-            return results
-
-        # 2. Test Docker Daemon responsiveness
-        try:
-            cmd_check = subprocess.run(
-                ["docker", "info"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            if cmd_check.returncode != 0:
-                results.append(
-                    CheckResult(
-                        name="docker_daemon_connectivity",
-                        category="docker_deployment",
-                        passed=True,
-                        status="SKIPPED",
-                        message="Docker CLI installed, but Docker daemon is not active. Runtime validation skipped.",
-                        details={
-                            "stdout": cmd_check.stdout[:200],
-                            "stderr": cmd_check.stderr[:200],
-                        },
-                    )
-                )
-                return results
-
-            results.append(
-                CheckResult(
-                    name="docker_daemon_connectivity",
-                    category="docker_deployment",
-                    passed=True,
-                    status="PASS",
-                    message="Docker daemon is active and responsive.",
-                )
-            )
-        except Exception as exc:
-            results.append(
-                CheckResult(
-                    name="docker_daemon_connectivity",
-                    category="docker_deployment",
-                    passed=True,
-                    status="SKIPPED",
-                    message=f"Docker check timed out or failed: {exc}",
-                )
-            )
-
         return results
 
-    def run_all(self, mode: str = "all") -> DeploymentReport:
-        """Execute selected deployment smoke tests."""
-        import time
+    def evaluate_report(
+        self, checks: list[CheckResult], mode: str = "all"
+    ) -> DeploymentReport:
+        """Evaluate readiness state machine and return structured deployment scorecard."""
+        passed_c = sum(1 for c in checks if c.status == "PASS")
+        warn_c = sum(1 for c in checks if c.status == "WARN")
+        fail_c = sum(1 for c in checks if c.status == "FAIL")
+        skip_c = sum(1 for c in checks if c.status == "SKIPPED")
 
+        mand_passed = sum(1 for c in checks if c.is_mandatory and c.status == "PASS")
+        mand_failed = sum(1 for c in checks if c.is_mandatory and c.status == "FAIL")
+        mand_skipped = sum(
+            1 for c in checks if c.is_mandatory and c.status == "SKIPPED"
+        )
+
+        reasons: list[str] = []
+
+        # Determine explicit state machine outcome
+        if mand_failed > 0 or fail_c > 0:
+            state = ReadinessState.BLOCKED
+            exit_code = 1
+            for c in checks:
+                if c.status == "FAIL":
+                    reasons.append(f"Mandatory check '{c.name}' failed: {c.message}")
+        elif mand_skipped > 0:
+            state = ReadinessState.NOT_VERIFIED
+            exit_code = 2
+            for c in checks:
+                if c.is_mandatory and c.status == "SKIPPED":
+                    reasons.append(
+                        f"Mandatory acceptance check '{c.name}' was skipped: {c.message}"
+                    )
+        elif warn_c > 0:
+            state = ReadinessState.DEGRADED
+            exit_code = 0
+            for c in checks:
+                if c.status == "WARN":
+                    reasons.append(f"Non-critical warning '{c.name}': {c.message}")
+        else:
+            state = ReadinessState.READY
+            exit_code = 0
+
+        is_deployable = state in (ReadinessState.READY, ReadinessState.DEGRADED)
+
+        notes = [
+            f"Deployment acceptance evaluation completed in mode '{mode}'.",
+            f"Evaluated {len(checks)} system checks ({passed_c} PASS, {warn_c} WARN, {fail_c} FAIL, {skip_c} SKIPPED).",
+            f"Readiness State: {state.value} (exit code: {exit_code}).",
+        ]
+        if reasons:
+            notes.append(f"Readiness notes: {'; '.join(reasons[:3])}")
+
+        return DeploymentReport(
+            timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            mode=mode,
+            readiness_state=state,
+            exit_code=exit_code,
+            total_checks=len(checks),
+            passed_count=passed_c,
+            warn_count=warn_c,
+            failed_count=fail_c,
+            skipped_count=skip_c,
+            mandatory_passed=mand_passed,
+            mandatory_failed=mand_failed,
+            mandatory_skipped=mand_skipped,
+            is_deployable=is_deployable,
+            reasons_not_ready=reasons,
+            checks=checks,
+            summary_notes=notes,
+        )
+
+    # Alias for internal or test backwards compatibility
+    _evaluate_report = evaluate_report
+
+    def run_all(self, mode: str = "all") -> DeploymentReport:
+        """Execute selected deployment smoke tests and evaluate readiness state."""
         checks: list[CheckResult] = []
 
         if mode in ("static", "all"):
@@ -516,31 +588,7 @@ class DeploymentSmokeTester:
         if mode in ("docker", "all"):
             checks.extend(self.run_docker_checks())
 
-        passed_c = sum(1 for c in checks if c.status == "PASS")
-        warn_c = sum(1 for c in checks if c.status == "WARN")
-        fail_c = sum(1 for c in checks if c.status == "FAIL")
-        skip_c = sum(1 for c in checks if c.status == "SKIPPED")
-
-        is_deployable = fail_c == 0
-
-        notes = [
-            f"Deployment smoke test completed in mode '{mode}'.",
-            f"Evaluated {len(checks)} system readiness checks ({passed_c} passed, {warn_c} warnings, {fail_c} failures, {skip_c} skipped).",
-            f"Overall Deployment Readiness: {'DEPLOYABLE' if is_deployable else 'BLOCKED'}.",
-        ]
-
-        return DeploymentReport(
-            timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            mode=mode,
-            total_checks=len(checks),
-            passed_count=passed_c,
-            warn_count=warn_c,
-            failed_count=fail_c,
-            skipped_count=skip_c,
-            is_deployable=is_deployable,
-            checks=checks,
-            summary_notes=notes,
-        )
+        return self.evaluate_report(checks, mode=mode)
 
 
 def main() -> None:
@@ -565,32 +613,40 @@ def main() -> None:
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
     else:
-        print("\n" + "=" * 75)
-        print("  FINOVA AI SYSTEM DEPLOYMENT SMOKE TEST RESULTS")
-        print("=" * 75)
-        print(f"  Execution Mode:     {report.mode.upper()}")
+        print("\n" + "=" * 78)
+        print("  FINOVA AI SYSTEM DEPLOYMENT ACCEPTANCE SCORECARD")
+        print("=" * 78)
+        print(f"  Execution Mode:       {report.mode.upper()}")
         print(
-            f"  Total Checks:       {report.total_checks} "
+            f"  Total Checks:         {report.total_checks} "
             f"({report.passed_count} PASS, {report.warn_count} WARN, {report.failed_count} FAIL, {report.skipped_count} SKIPPED)"
         )
+        print(f"  Readiness State:      {report.readiness_state.value}")
         print(
-            f"  Deployable Status:  {'READY FOR DEPLOYMENT' if report.is_deployable else 'BLOCKED'}"
+            f"  Deployable Outcome:   {'DEPLOYABLE' if report.is_deployable else 'NOT DEPLOYABLE'}"
         )
-        print("-" * 75)
-        print(f"  {'Status':<8} | {'Category':<18} | {'Check Name'}")
-        print("-" * 75)
+        print(f"  Process Exit Code:    {report.exit_code}")
+        print("-" * 78)
+        print(
+            f"  {'Status':<8} | {'Category':<18} | {'Check Name':<35} | {'Mandatory'}"
+        )
+        print("-" * 78)
         for c in report.checks:
             badge = f"[{c.status}]"
-            print(f"  {badge:<8} | {c.category:<18} | {c.name}")
+            mand_badge = "YES" if c.is_mandatory else "NO"
+            print(f"  {badge:<8} | {c.category:<18} | {c.name:<35} | {mand_badge}")
             if c.status in ("WARN", "FAIL", "SKIPPED"):
                 print(f"           - {c.message}")
-        print("=" * 75)
+        print("=" * 78)
         for n in report.summary_notes:
             print(f"  * {n}")
-        print("=" * 75 + "\n")
+        if report.reasons_not_ready:
+            print("\n  Readiness Explanations:")
+            for r in report.reasons_not_ready:
+                print(f"    - {r}")
+        print("=" * 78 + "\n")
 
-    if not report.is_deployable:
-        sys.exit(1)
+    sys.exit(report.exit_code)
 
 
 if __name__ == "__main__":

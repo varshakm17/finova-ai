@@ -43,6 +43,9 @@ def test_validate_user_agent() -> None:
     with pytest.raises(SECConfigurationError, match="placeholder"):
         validate_user_agent("AcmeCorp Financial Data admincontact@domain.com")
 
+    with pytest.raises(SECConfigurationError, match="placeholder"):
+        validate_user_agent("FinovaAI-Research/0.1.0 (test@test.com)")
+
     # Missing / empty
     with pytest.raises(SECConfigurationError, match="SEC_USER_AGENT is not configured"):
         validate_user_agent("")
@@ -55,6 +58,49 @@ def test_validate_user_agent() -> None:
         SECConfigurationError, match="does not contain a valid contact email"
     ):
         validate_user_agent("FinovaAI Generic Bot")
+
+    # Empty email in parentheses
+    with pytest.raises(
+        SECConfigurationError, match="does not contain a valid contact email"
+    ):
+        validate_user_agent("FinovaAI/1.0 ()")
+
+    # Invalid email structure
+    with pytest.raises(
+        SECConfigurationError, match="does not contain a valid contact email"
+    ):
+        validate_user_agent("FinovaAI/1.0 (invalid-email-address)")
+
+
+def test_offline_startup_without_sec_identity() -> None:
+    """Verify application services and clients instantiate cleanly in offline mode without SEC identity."""
+    empty_settings = Settings(SEC_USER_AGENT="")
+    # Instantiating SECClient in offline mode must succeed
+    client = SECClient(settings=empty_settings, allow_placeholder=True)
+    assert client.settings.SEC_USER_AGENT == ""
+
+    # Instantiating with placeholder must also succeed in offline mode
+    placeholder_settings = Settings(SEC_USER_AGENT="Finova/1.0 (contact@example.com)")
+    client_ph = SECClient(settings=placeholder_settings, allow_placeholder=True)
+    assert "example.com" in client_ph.settings.SEC_USER_AGENT
+
+
+def test_live_sec_request_blocked_without_valid_identity() -> None:
+    """Verify live outbound SEC HTTP operations are blocked if identity is unconfigured or a placeholder."""
+    # Empty identity
+    empty_client = SECClient(
+        settings=Settings(SEC_USER_AGENT=""), allow_placeholder=True
+    )
+    with pytest.raises(SECConfigurationError, match="SEC_USER_AGENT is not configured"):
+        empty_client._request("https://data.sec.gov/submissions/CIK0000320193.json")
+
+    # Placeholder identity
+    ph_client = SECClient(
+        settings=Settings(SEC_USER_AGENT="Finova/1.0 (contact@example.com)"),
+        allow_placeholder=True,
+    )
+    with pytest.raises(SECConfigurationError, match="placeholder"):
+        ph_client._request("https://data.sec.gov/submissions/CIK0000320193.json")
 
 
 def test_sec_client_get_company_tickers_mocked() -> None:

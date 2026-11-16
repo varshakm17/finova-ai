@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from backend.api.middleware import RequestBodyLimitMiddleware
 from backend.api.routes import router as api_router
 from backend.data.sec_client import is_placeholder_user_agent
 from backend.data.storage import Database
@@ -143,23 +144,18 @@ def create_application(custom_settings: Settings | None = None) -> FastAPI:
     )
 
     # -------------------------------------------------------------------------
-    # Security Headers & Body Limit Middleware
+    # Request Payload Size Enforcement (ASGI Layer)
+    # -------------------------------------------------------------------------
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_bytes=settings.MAX_REQUEST_BODY_BYTES,
+    )
+
+    # -------------------------------------------------------------------------
+    # Security Response Headers Middleware
     # -------------------------------------------------------------------------
     @app.middleware("http")
-    async def security_and_limit_middleware(request: Request, call_next) -> Response:
-        # Check payload size limit
-        content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > settings.MAX_REQUEST_BODY_BYTES:
-            return JSONResponse(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                content={
-                    "error": True,
-                    "status_code": 413,
-                    "message": f"Request body exceeds maximum permitted size of {settings.MAX_REQUEST_BODY_BYTES} bytes.",
-                    "path": request.url.path,
-                },
-            )
-
+    async def security_headers_middleware(request: Request, call_next) -> Response:
         response: Response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"

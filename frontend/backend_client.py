@@ -45,13 +45,22 @@ class BackendEndpoints:
 
     def endpoint(self, path: str) -> str:
         """Construct full URL for a specific endpoint path without duplicate /api/v1 segments."""
-        clean_path = path.strip()
-        if not clean_path.startswith("/"):
-            clean_path = f"/{clean_path}"
+        clean_path = path.strip().lstrip("/")
+        if clean_path.startswith("api/v1/"):
+            clean_path = clean_path[len("api/v1/") :]
+        elif clean_path == "api/v1":
+            clean_path = ""
 
-        if clean_path.startswith("/api/v1"):
-            return f"{self.base_url}{clean_path}"
-        return f"{self.api_v1_url}{clean_path}"
+        if clean_path:
+            return f"{self.api_v1_url}/{clean_path}"
+        return self.api_v1_url
+
+    def root_endpoint(self, path: str = "") -> str:
+        """Construct full URL relative to base_url without api_v1 prefix."""
+        clean_path = path.strip().lstrip("/")
+        if clean_path:
+            return f"{self.base_url}/{clean_path}"
+        return self.base_url
 
 
 def resolve_backend_endpoints(
@@ -102,16 +111,34 @@ def resolve_backend_endpoints(
             f"Invalid backend URL: '{raw_url}'. A valid hostname or IP address is required."
         )
 
-    if not clean_raw.startswith(("http://", "https://")):
-        url = f"http://{clean_raw.rstrip('/')}"
-    else:
+    # Check scheme if explicitly specified
+    if "://" in clean_raw:
+        scheme_part = clean_raw.split("://", 1)[0].lower()
+        if scheme_part not in ("http", "https"):
+            raise ValueError(
+                f"Invalid backend URL scheme: '{scheme_part}'. Only 'http' and 'https' are supported."
+            )
         url = clean_raw.rstrip("/")
+    else:
+        url = f"http://{clean_raw.rstrip('/')}"
 
     parsed = urlparse(url)
     if not parsed.netloc or not parsed.hostname:
         raise ValueError(
             f"Invalid backend URL: '{raw_url}'. A valid hostname or IP address is required."
         )
+
+    # Validate port range if specified
+    try:
+        port_num = parsed.port
+        if port_num is not None and not (1 <= port_num <= 65535):
+            raise ValueError(
+                f"Invalid backend URL port: {port_num}. Port must be between 1 and 65535."
+            )
+    except ValueError as err:
+        raise ValueError(
+            f"Invalid backend URL: '{raw_url}'. Invalid port specification: {err}"
+        ) from err
 
     # Detect if URL already includes /api/v1 (or variant)
     path = parsed.path.rstrip("/")

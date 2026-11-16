@@ -76,16 +76,26 @@ PLACEHOLDER_EMAILS = {
     "your-email@example.com",
     "email@domain.com",
     "sample@samplecompany.com",
+    "admin@samplecompany.com",
+    "test@test.com",
+    "user@domain.com",
+    "admin@domain.com",
 }
 
 PLACEHOLDER_DOMAINS = {
     "example.com",
     "example.org",
     "example.net",
+    "example.edu",
     "domain.com",
     "sample.com",
     "samplecompany.com",
     "yourdomain.com",
+    "test.com",
+    "test.org",
+    "test.net",
+    "placeholder.com",
+    "invalid.com",
 }
 
 
@@ -183,13 +193,17 @@ class SECClient:
         self.last_request_time: float = 0.0
         self.allow_placeholder = allow_placeholder
 
-        # Validate User-Agent upon instantiation
-        validate_user_agent(
-            self.settings.SEC_USER_AGENT, allow_placeholder=allow_placeholder
-        )
+        # Validate User-Agent upon instantiation if configured
+        if self.settings.SEC_USER_AGENT and self.settings.SEC_USER_AGENT.strip():
+            validate_user_agent(
+                self.settings.SEC_USER_AGENT, allow_placeholder=allow_placeholder
+            )
 
+        ua_val = (
+            self.settings.SEC_USER_AGENT.strip() if self.settings.SEC_USER_AGENT else ""
+        )
         self._headers = {
-            "User-Agent": self.settings.SEC_USER_AGENT.strip(),
+            "User-Agent": ua_val,
             "Accept-Encoding": "gzip, deflate",
             "Accept": "application/json, text/plain, */*",
         }

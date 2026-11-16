@@ -5,7 +5,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Status: Production Launch Ready](https://img.shields.io/badge/Status-Production%20Launch%20Ready-brightgreen.svg)]()
-[![Tests: 440+ Passed](https://img.shields.io/badge/Tests-440%2B%20Passed%20(100%25%20offline)-brightgreen.svg)]()
+[![Tests: 460+ Passed](https://img.shields.io/badge/Tests-460%2B%20Passed%20(100%25%20offline)-brightgreen.svg)]()
 [![Hardware: CPU Only](https://img.shields.io/badge/Hardware-CPU%20Only%20(16GB%20RAM)-informational.svg)]()
 
 Finova AI is a production-grade, multi-agent corporate financial research system designed to retrieve, analyze, verify, and synthesize evidence-backed financial intelligence from statutory SEC EDGAR filings (Forms 10-K and 10-Q).
@@ -149,11 +149,12 @@ docker compose logs -f
 Finova AI enforces strict reproducible verification via automated CLI suites:
 
 ```powershell
-# 1. Run Complete Offline Test Suite (440+ tests passing offline)
+# 1. Run Complete Offline Test Suite (460+ tests passing offline)
 pytest
 
-# 2. Run Deployment Smoke Tests (Static, Local, Docker)
+# 2. Run Deployment Acceptance & Readiness Suite (Static, Local, Docker)
 python evaluation/deployment_smoke_tests.py --mode static
+python evaluation/deployment_smoke_tests.py --mode local
 
 # 3. Run Demo Scenarios & Generate Executive Briefs
 python -m evaluation.demo_scenarios.demo_scenarios --scenario all

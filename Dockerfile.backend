@@ -15,10 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install runtime Python dependencies (strictly exclude development tools)
-COPY requirements.txt ./
+# Install runtime Python dependencies from exact pinned lockfile
+COPY requirements.lock ./
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.lock
 
 # Create application user and required persistent storage directories
 RUN useradd -m -u 1000 appuser && \
