@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import io
+import os
 import subprocess
+import sys
+import threading
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
 import yaml
 
 from evaluation.docker_acceptance import (
     PROJECT_ROOT,
     DockerAcceptanceRunner,
+    generate_frontend_connectivity_probe,
     validate_host_ports,
 )
 
@@ -247,6 +257,279 @@ def test_frontend_backend_connectivity_failure() -> None:
         assert res.passed is False
         assert res.status == "FAIL"
         assert "could not communicate" in res.message
+
+
+class DummyHTTPResponse:
+    """Simulated urllib HTTP response for in-process probe testing."""
+
+    def __init__(self, status: int, body: bytes):
+        self._status = status
+        self._body = body
+
+    def getcode(self) -> int:
+        return self._status
+
+    def read(self) -> bytes:
+        return self._body
+
+
+def execute_probe_in_process(
+    probe_code: str,
+    env: dict[str, str],
+    mock_urlopen_side_effect: Any = None,
+    mock_response: Any = None,
+) -> tuple[int, str, str, list[urllib.request.Request]]:
+    """Execute the exact generated probe code in-process, capturing exit code, output, and outgoing requests."""
+    captured_requests: list[urllib.request.Request] = []
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
+    exit_code = 0
+
+    def fake_urlopen(req: urllib.request.Request | str, timeout: float = 5):
+        if isinstance(req, str):
+            req = urllib.request.Request(req)
+        captured_requests.append(req)
+        if mock_urlopen_side_effect:
+            if callable(mock_urlopen_side_effect):
+                return mock_urlopen_side_effect(req, timeout=timeout)
+            raise mock_urlopen_side_effect
+        return mock_response
+
+    with (
+        patch.dict(os.environ, env, clear=True),
+        patch("sys.stdout", stdout_buf),
+        patch("sys.stderr", stderr_buf),
+        patch("urllib.request.urlopen", side_effect=fake_urlopen),
+    ):
+        compiled = compile(probe_code, "<frontend_probe>", "exec")
+        try:
+            exec(compiled, {"__name__": "__main__"})
+        except SystemExit as exc:
+            exit_code = (
+                exc.code
+                if isinstance(exc.code, int)
+                else (0 if exc.code is None else 1)
+            )
+
+    return exit_code, stdout_buf.getvalue(), stderr_buf.getvalue(), captured_requests
+
+
+def test_probe_compiles_successfully() -> None:
+    """Verify that generate_frontend_connectivity_probe() produces syntactically valid Python that compiles."""
+    probe_code = generate_frontend_connectivity_probe()
+    assert isinstance(probe_code, str)
+    assert len(probe_code) > 0
+
+    compiled = compile(probe_code, "<frontend_probe>", "exec")
+    assert compiled is not None
+
+
+def test_invalid_syntax_rejected() -> None:
+    """Verify that invalid syntax arrangements (such as semicolon preceding compound with statement) fail compilation."""
+    invalid_script = "import os; x = 1; with open('nonexistent') as f: pass"
+    with pytest.raises(SyntaxError):
+        compile(invalid_script, "<invalid_string>", "exec")
+
+
+def test_probe_execution_success() -> None:
+    """Verify that the generated probe executes cleanly and reports CONNECTIVITY_OK when backend is healthy."""
+    probe_code = generate_frontend_connectivity_probe()
+    response = DummyHTTPResponse(
+        200, b'{"status": "healthy", "service": "finova-backend"}'
+    )
+    env = {"BACKEND_API_URL": "http://backend:8000/api/v1"}
+
+    code, stdout, stderr, reqs = execute_probe_in_process(
+        probe_code, env=env, mock_response=response
+    )
+
+    assert code == 0
+    assert "CONNECTIVITY_OK:http://backend:8000/api/v1" in stdout
+    assert stderr == ""
+    assert len(reqs) == 1
+    assert reqs[0].full_url == "http://backend:8000/api/v1/health"
+
+
+def test_probe_execution_missing_backend_api_url() -> None:
+    """Verify probe exits with code 1 and logs clear error when BACKEND_API_URL is missing or empty."""
+    probe_code = generate_frontend_connectivity_probe()
+
+    # Empty string
+    code1, stdout1, stderr1, _ = execute_probe_in_process(
+        probe_code, env={"BACKEND_API_URL": ""}
+    )
+    assert code1 == 1
+    assert "ERROR: BACKEND_API_URL environment variable is missing or empty" in stderr1
+    assert stdout1 == ""
+
+    # Missing from env entirely
+    code2, stdout2, stderr2, _ = execute_probe_in_process(probe_code, env={})
+    assert code2 == 1
+    assert "ERROR: BACKEND_API_URL environment variable is missing or empty" in stderr2
+
+
+def test_probe_execution_unsuccessful_http_response() -> None:
+    """Verify probe exits with code 1 when backend returns an unsuccessful HTTP status."""
+    probe_code = generate_frontend_connectivity_probe()
+    http_error = urllib.error.HTTPError(
+        url="http://backend:8000/api/v1/health",
+        code=503,
+        msg="Service Unavailable",
+        hdrs={},
+        fp=io.BytesIO(b"Service Unavailable"),
+    )
+    env = {"BACKEND_API_URL": "http://backend:8000/api/v1"}
+
+    code, stdout, stderr, _ = execute_probe_in_process(
+        probe_code, env=env, mock_urlopen_side_effect=http_error
+    )
+    assert code == 1
+    assert (
+        "HTTP ERROR: Received status 503 from http://backend:8000/api/v1/health"
+        in stderr
+    )
+    assert stdout == ""
+
+
+def test_probe_execution_network_url_error() -> None:
+    """Verify probe exits with code 1 and logs network details when backend cannot be reached."""
+    probe_code = generate_frontend_connectivity_probe()
+    url_error = urllib.error.URLError("Name or service not known")
+    env = {"BACKEND_API_URL": "http://backend:8000/api/v1"}
+
+    code, stdout, stderr, _ = execute_probe_in_process(
+        probe_code, env=env, mock_urlopen_side_effect=url_error
+    )
+    assert code == 1
+    assert "NETWORK ERROR: Failed to reach backend" in stderr
+    assert "Name or service not known" in stderr
+    assert stdout == ""
+
+
+def test_probe_execution_malformed_json() -> None:
+    """Verify probe exits with code 1 when backend returns non-JSON content."""
+    probe_code = generate_frontend_connectivity_probe()
+    response = DummyHTTPResponse(200, b"<html><body>502 Bad Gateway</body></html>")
+    env = {"BACKEND_API_URL": "http://backend:8000/api/v1"}
+
+    code, stdout, stderr, _ = execute_probe_in_process(
+        probe_code, env=env, mock_response=response
+    )
+    assert code == 1
+    assert "JSON ERROR: Malformed JSON payload received" in stderr
+    assert stdout == ""
+
+
+def test_probe_execution_backend_status_not_healthy() -> None:
+    """Verify probe exits with code 1 when backend payload status is not healthy."""
+    probe_code = generate_frontend_connectivity_probe()
+    env = {"BACKEND_API_URL": "http://backend:8000/api/v1"}
+
+    # Case A: status == "degraded"
+    resp_degraded = DummyHTTPResponse(
+        200, b'{"status": "degraded", "reasons": ["high load"]}'
+    )
+    code_deg, _, stderr_deg, _ = execute_probe_in_process(
+        probe_code, env=env, mock_response=resp_degraded
+    )
+    assert code_deg == 1
+    assert (
+        "HEALTH ERROR: Backend status is 'degraded', expected \"healthy\"" in stderr_deg
+    )
+
+    # Case B: status == "unhealthy"
+    resp_unhealthy = DummyHTTPResponse(200, b'{"status": "unhealthy"}')
+    code_unh, _, stderr_unh, _ = execute_probe_in_process(
+        probe_code, env=env, mock_response=resp_unhealthy
+    )
+    assert code_unh == 1
+    assert (
+        "HEALTH ERROR: Backend status is 'unhealthy', expected \"healthy\""
+        in stderr_unh
+    )
+
+
+def test_probe_url_construction_and_trailing_slash_normalization() -> None:
+    """Verify that various forms of BACKEND_API_URL are cleanly normalized to /health."""
+    probe_code = generate_frontend_connectivity_probe()
+    response = DummyHTTPResponse(200, b'{"status": "healthy"}')
+
+    variants = [
+        ("http://backend:8000/api/v1", "http://backend:8000/api/v1/health"),
+        ("http://backend:8000/api/v1/", "http://backend:8000/api/v1/health"),
+        ("http://backend:8000/api/v1/health", "http://backend:8000/api/v1/health"),
+        ("http://backend:8000/api/v1/health/", "http://backend:8000/api/v1/health"),
+    ]
+
+    for input_url, expected_health_url in variants:
+        code, stdout, stderr, reqs = execute_probe_in_process(
+            probe_code, env={"BACKEND_API_URL": input_url}, mock_response=response
+        )
+        assert code == 0, f"Failed for {input_url}: {stderr}"
+        assert len(reqs) == 1
+        assert reqs[0].full_url == expected_health_url
+
+
+def test_probe_subprocess_real_server_execution() -> None:
+    """Verify generated probe executes successfully in a real standalone Python subprocess."""
+
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path == "/api/v1/health":
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"status": "healthy", "service": "finova-backend"}')
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def log_message(self, format: str, *args: Any) -> None:
+            pass  # Suppress logging in test output
+
+    server = HTTPServer(("127.0.0.1", 0), HealthHandler)
+    server_port = server.server_port
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+
+    try:
+        probe_code = generate_frontend_connectivity_probe()
+        env = os.environ.copy()
+        env["BACKEND_API_URL"] = f"http://127.0.0.1:{server_port}/api/v1"
+
+        res = subprocess.run(
+            [sys.executable, "-c", probe_code],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        assert res.returncode == 0
+        assert f"CONNECTIVITY_OK:http://127.0.0.1:{server_port}/api/v1" in res.stdout
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_probe_subprocess_missing_env_error() -> None:
+    """Verify generated probe fails in a real standalone Python subprocess when BACKEND_API_URL is missing."""
+    probe_code = generate_frontend_connectivity_probe()
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+    }
+
+    res = subprocess.run(
+        [sys.executable, "-c", probe_code],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert res.returncode == 1
+    assert "ERROR: BACKEND_API_URL environment variable is missing" in res.stderr
 
 
 def test_persistence_write_failure() -> None:
@@ -563,3 +846,137 @@ def test_cleanup_failure_reported_as_warning() -> None:
         assert cleanup_res is not None
         assert cleanup_res.status == "WARN"
         assert cleanup_res.passed is False
+
+
+def test_acceptance_sequence_frontend_health_before_connectivity() -> None:
+    """Verify run_acceptance_suite() executes frontend health check before internal connectivity check."""
+    runner = DockerAcceptanceRunner(project_name="finova-acc-seqtest")
+    runner.docker_cli = "/usr/bin/docker"
+
+    with (
+        patch("subprocess.run") as mock_sub,
+        patch.object(runner, "_run_compose_cmd") as mock_compose,
+        patch(
+            "evaluation.docker_acceptance.validate_host_ports",
+            return_value=(True, "Ports available"),
+        ),
+        patch("httpx.get") as mock_http,
+    ):
+        mock_sub.return_value = subprocess.CompletedProcess(
+            args=["docker", "info"],
+            returncode=0,
+            stdout="Server Version: 24.0.5\n",
+            stderr="",
+        )
+        mock_http.return_value = MagicMock(
+            status_code=200, json=lambda: {"status": "healthy"}
+        )
+
+        def side_effect(args, **kwargs):
+            if "id" in args:
+                return 0, "1000\n", "", None
+            if "python" in args and "-c" in args:
+                return 0, "CONNECTIVITY_OK:http://backend:8000/api/v1\n", "", None
+            return 0, "ok", "", None
+
+        mock_compose.side_effect = side_effect
+
+        results = runner.run_acceptance_suite()
+        names = [r.name for r in results]
+
+        assert "docker_frontend_health_check" in names
+        assert "docker_frontend_backend_connectivity" in names
+
+        frontend_health_idx = names.index("docker_frontend_health_check")
+        connectivity_idx = names.index("docker_frontend_backend_connectivity")
+        assert frontend_health_idx < connectivity_idx, (
+            f"Frontend health check (idx {frontend_health_idx}) must precede connectivity probe (idx {connectivity_idx})"
+        )
+
+
+def test_connectivity_failure_is_mandatory_fail_and_triggers_cleanup() -> None:
+    """Verify that a connectivity failure is marked mandatory FAIL and triggers project cleanup in finally."""
+    runner = DockerAcceptanceRunner(project_name="finova-acc-connfail")
+    runner.docker_cli = "/usr/bin/docker"
+
+    down_called: list[bool] = []
+
+    with (
+        patch("subprocess.run") as mock_sub,
+        patch.object(runner, "_run_compose_cmd") as mock_compose,
+        patch(
+            "evaluation.docker_acceptance.validate_host_ports",
+            return_value=(True, "Ports available"),
+        ),
+        patch("httpx.get") as mock_http,
+    ):
+        mock_sub.return_value = subprocess.CompletedProcess(
+            args=["docker", "info"], returncode=0, stdout="", stderr=""
+        )
+        mock_http.return_value = MagicMock(
+            status_code=200, json=lambda: {"status": "healthy"}
+        )
+
+        def side_effect(args, **kwargs):
+            if "down" in args:
+                down_called.append(True)
+                return 0, "down ok", "", None
+            if "id" in args:
+                return 0, "1000\n", "", None
+            if "python" in args and "-c" in args:
+                return 1, "", "NETWORK ERROR: Name or service not known", None
+            return 0, "", "", None
+
+        mock_compose.side_effect = side_effect
+
+        results = runner.run_acceptance_suite()
+        conn_res = next(
+            (r for r in results if r.name == "docker_frontend_backend_connectivity"),
+            None,
+        )
+        assert conn_res is not None
+        assert conn_res.passed is False
+        assert conn_res.status == "FAIL"
+        assert conn_res.is_mandatory is True
+
+        # Ensure persistence check was not reached
+        persistence_res = next(
+            (r for r in results if r.name == "docker_data_volume_persistence"),
+            None,
+        )
+        assert persistence_res is None
+
+        # Ensure cleanup executed in finally block
+        cleanup_res = next(
+            (r for r in results if r.name == "docker_environment_cleanup"),
+            None,
+        )
+        assert cleanup_res is not None
+        assert len(down_called) == 1
+
+
+def test_compose_project_name_propagation_in_probe() -> None:
+    """Verify that the connectivity probe command is executed within the runner's isolated project scope."""
+    runner = DockerAcceptanceRunner(project_name="finova-acc-probe-proj-scope")
+    runner.docker_cli = "/usr/bin/docker"
+
+    with patch("subprocess.run") as mock_sub:
+        mock_sub.return_value = subprocess.CompletedProcess(
+            args=["docker", "compose"],
+            returncode=0,
+            stdout="CONNECTIVITY_OK:http://backend:8000/api/v1\n",
+            stderr="",
+        )
+
+        res = runner._check_frontend_backend_connectivity()
+        assert res.passed is True
+        assert res.status == "PASS"
+
+        # Verify arguments passed to subprocess.run
+        assert mock_sub.call_count == 1
+        cmd_args = mock_sub.call_args[0][0]
+        assert "-p" in cmd_args
+        p_idx = cmd_args.index("-p")
+        assert cmd_args[p_idx + 1] == "finova-acc-probe-proj-scope"
+        assert "exec" in cmd_args
+        assert "frontend" in cmd_args

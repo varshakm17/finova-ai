@@ -167,7 +167,7 @@ When Docker is available, `evaluation/docker_acceptance.py` verifies 10 mandator
 11. **Guaranteed Scoped Teardown:** Executes `docker compose -p <project> down -v` in a `finally` block, reporting warnings if teardown encounters errors.
 
 > [!NOTE]
-> On host machines without Docker CLI or a running Docker daemon, Docker acceptance checks report `SKIPPED` with overall state `NOT_VERIFIED` (exit code 2). This prevents false deployment certifications.
+> On host machines without Docker CLI or a running Docker daemon, live Docker acceptance checks report `SKIPPED` with overall state `NOT_VERIFIED` (exit code 2). This prevents false deployment certifications. In offline test environments, the frontend-to-backend probe script is independently compiled and executed against simulated responses and standalone HTTP subprocesses in `tests/test_docker_acceptance.py`. Live internal Docker network verification occurs exclusively when the container suite is launched on a host with an active Docker daemon.
 
 ### Dependency Integrity Strategy
 - **Pip Pinning:** Docker builds explicitly pin `pip==24.3.1` in `Dockerfile.backend` and `Dockerfile.frontend` to eliminate build-time installer drift.

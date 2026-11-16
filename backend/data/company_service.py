@@ -112,9 +112,25 @@ class CompanyService:
             raw_data = self._load_from_cache()
 
         if raw_data is None:
-            client = self._get_client()
-            raw_data = client.get_company_tickers()
-            self._save_to_cache(raw_data)
+            try:
+                client = self._get_client()
+                raw_data = client.get_company_tickers()
+                self._save_to_cache(raw_data)
+            except Exception as exc:
+                # Fall back to existing cached directory if remote fetch fails (e.g. offline tests or unconfigured SEC identity)
+                if self.cache_path.exists():
+                    try:
+                        with open(self.cache_path, "r", encoding="utf-8") as f:
+                            raw_data = json.load(f)
+                        logger.warning(
+                            "Remote SEC ticker fetch failed (%s); falling back to existing local cache: %s",
+                            exc,
+                            self.cache_path,
+                        )
+                    except Exception:
+                        raise exc
+                else:
+                    raise exc
 
         self._by_ticker.clear()
         self._by_cik.clear()

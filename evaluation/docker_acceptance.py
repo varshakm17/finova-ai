@@ -83,6 +83,73 @@ def validate_host_ports(backend_port: int, frontend_port: int) -> tuple[bool, st
     )
 
 
+def generate_frontend_connectivity_probe() -> str:
+    """Generate a self-contained, valid Python probe script to verify backend connectivity from frontend container.
+
+    Requirements enforced:
+    - Syntactically valid Python without compound statements on semicolon-delimited lines.
+    - Resolves and validates BACKEND_API_URL environment variable.
+    - Normalizes trailing slashes and constructs /health endpoint.
+    - Validates HTTP response status 200.
+    - Validates and parses JSON payload.
+    - Validates that response status attribute equals 'healthy'.
+    - Returns structured error diagnostic messages on stderr.
+    - Emits CONNECTIVITY_OK:<backend_url> on stdout upon complete verification.
+    """
+    return (
+        "import json\n"
+        "import os\n"
+        "import sys\n"
+        "import urllib.error\n"
+        "import urllib.request\n"
+        "\n"
+        "backend_url = os.environ.get('BACKEND_API_URL', '').strip()\n"
+        "if not backend_url:\n"
+        "    sys.stderr.write('ERROR: BACKEND_API_URL environment variable is missing or empty\\n')\n"
+        "    sys.exit(1)\n"
+        "\n"
+        "base_url = backend_url.rstrip('/')\n"
+        "health_url = base_url if base_url.endswith('/health') else f'{base_url}/health'\n"
+        "\n"
+        "req = urllib.request.Request(\n"
+        "    health_url,\n"
+        "    headers={'User-Agent': 'Finova-Frontend-Probe/1.0'},\n"
+        ")\n"
+        "\n"
+        "try:\n"
+        "    resp = urllib.request.urlopen(req, timeout=5)\n"
+        "except urllib.error.HTTPError as exc:\n"
+        "    sys.stderr.write(f'HTTP ERROR: Received status {exc.code} from {health_url}\\n')\n"
+        "    sys.exit(1)\n"
+        "except urllib.error.URLError as exc:\n"
+        "    sys.stderr.write(f'NETWORK ERROR: Failed to reach backend at {health_url}: {exc.reason}\\n')\n"
+        "    sys.exit(1)\n"
+        "except Exception as exc:\n"
+        "    sys.stderr.write(f'PROBE ERROR: Unexpected error connecting to {health_url}: {exc}\\n')\n"
+        "    sys.exit(1)\n"
+        "\n"
+        "status_code = resp.getcode()\n"
+        "if status_code != 200:\n"
+        "    sys.stderr.write(f'STATUS ERROR: Expected HTTP 200, got {status_code} from {health_url}\\n')\n"
+        "    sys.exit(1)\n"
+        "\n"
+        "try:\n"
+        "    raw_body = resp.read()\n"
+        "    data = json.loads(raw_body.decode('utf-8'))\n"
+        "except Exception as exc:\n"
+        "    sys.stderr.write(f'JSON ERROR: Malformed JSON payload received from {health_url}: {exc}\\n')\n"
+        "    sys.exit(1)\n"
+        "\n"
+        "backend_status = data.get('status') if isinstance(data, dict) else None\n"
+        "if backend_status != 'healthy':\n"
+        "    sys.stderr.write(f'HEALTH ERROR: Backend status is {backend_status!r}, expected \"healthy\". Payload: {data}\\n')\n"
+        "    sys.exit(1)\n"
+        "\n"
+        "print(f'CONNECTIVITY_OK:{backend_url}')\n"
+        "sys.exit(0)\n"
+    )
+
+
 class DockerAcceptanceRunner:
     """Orchestrates actual Docker container build, run, health, and persistence tests."""
 
@@ -205,18 +272,7 @@ class DockerAcceptanceRunner:
 
     def _check_frontend_backend_connectivity(self) -> DockerCheckResult:
         """Validate that the frontend container can communicate with the backend across the Docker network."""
-        probe_script = (
-            "import os, sys, urllib.request, json; "
-            "backend_url = os.environ.get('BACKEND_API_URL', ''); "
-            "assert backend_url, 'BACKEND_API_URL is unset or empty'; "
-            "health_url = backend_url.rstrip('/') + '/health'; "
-            "req = urllib.request.Request(health_url, headers={'User-Agent': 'Finova-Frontend-Probe/1.0'}); "
-            "with urllib.request.urlopen(req, timeout=5) as resp: "
-            "    assert resp.status == 200, f'Unexpected status {resp.status}'; "
-            "    data = json.loads(resp.read().decode('utf-8')); "
-            "    assert data.get('status') == 'healthy', f'Backend reported unhealthy: {data}'; "
-            "print('CONNECTIVITY_OK:' + backend_url)"
-        )
+        probe_script = generate_frontend_connectivity_probe()
         code, stdout, stderr, err = self._run_compose_cmd(
             ["exec", "-T", "frontend", "python", "-c", probe_script],
             timeout=15,
@@ -231,12 +287,17 @@ class DockerAcceptanceRunner:
                 details={"error": err},
             )
         if code != 0 or "CONNECTIVITY_OK" not in stdout:
+            err_detail = (
+                stderr.strip()
+                or stdout.strip()
+                or f"Process exited with non-zero exit code ({code})"
+            )
             return DockerCheckResult(
                 name="docker_frontend_backend_connectivity",
                 passed=False,
                 status="FAIL",
                 is_mandatory=True,
-                message=f"Frontend could not communicate with backend service via Docker network: {stderr.strip() or stdout.strip()}",
+                message=f"Frontend could not communicate with backend service via Docker network: {err_detail}",
                 details={
                     "returncode": code,
                     "stdout": stdout.strip(),
