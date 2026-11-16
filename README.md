@@ -186,7 +186,7 @@ python -m evaluation.run_evaluation --eval-type all
 | **Citation Traceability** | Passages Linked to Accession | **100.0% Verified Ground Truth** | ✅ CERTIFIED |
 | **Hallucination Detection**| Claim Audit Precision | **98.2% Accuracy** | ✅ CERTIFIED |
 | **SEC Benchmark Retrieval** | Real 10-K NDCG@5 | **0.842** | ✅ CERTIFIED |
-| **Offline Test Suite** | Automated Tests Pass Rate | **504 / 504 Passed (100% pass)** | ✅ CERTIFIED |
+| **Offline Test Suite** | Automated Tests Pass Rate | **504 passed, 12 skipped, 0 failed** | ✅ CERTIFIED |
 | **Security Hardening** | Static Vulnerability Scan | **0 High/Critical Vulnerabilities** | ✅ SECURE |
 
 ---
