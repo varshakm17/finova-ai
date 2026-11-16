@@ -17,8 +17,8 @@ Finova AI employs a centralized, type-safe configuration system managed by Pydan
 | `APP_ENV` | `development` | `production` | Deployment mode (`development`, `staging`, `production`) |
 | `DEBUG` | `true` | `false` | Verbose debug logging |
 | `HOST` | `127.0.0.1` | `0.0.0.0` | Backend API listen address |
-| `PORT` | `8000` | `8000` | Backend API port |
-| `FRONTEND_PORT` | `8501` | `8501` | Streamlit UI port |
+| `PORT` | `8000` | `8000` | Backend API host published port (container listens on 8000) |
+| `FRONTEND_PORT` | `8501` | `8501` | Streamlit UI host published port (container listens on 8501) |
 | `BACKEND_API_URL` | `http://127.0.0.1:8000/api/v1` | `http://backend:8000/api/v1` | Backend URL used by Streamlit frontend |
 | `SEC_USER_AGENT` | `""` *(Unset)* | `""` *(Unset)* | Identity declaration for SEC EDGAR (`AppName/Version (admin@org.com)`) |
 | `CORS_ORIGINS` | `http://localhost:8501,...` | `http://localhost:8501,...` | Allowed CORS origins (comma-separated or JSON list) |
@@ -141,10 +141,38 @@ The Docker setup encapsulates the FastAPI backend and Streamlit frontend in hard
                           +-------------------------------------------------+
 ```
 
-### Reproducible Docker Installation
-- **Exact Lockfile:** `Dockerfile.backend` and `Dockerfile.frontend` install exclusively from `requirements.lock`, guaranteeing byte-for-byte reproducibility across builds.
-- **Development Tool Isolation:** Development packages (`pytest`, `ruff`, `coverage`) are excluded from `requirements.lock`, keeping production containers lightweight and secure.
-- **Non-Root Execution:** Containers execute as unprivileged `appuser` (UID 1000).
+### Configurable Host Port Mappings
+Finova AI containers listen internally on standard ports (backend: 8000, frontend: 8501). Host published ports are fully configurable without modifying container internals:
+- `PORT` (default `8000`): Host port mapped to backend container port 8000 (`"${PORT:-8000}:8000"`).
+- `FRONTEND_PORT` (default `8501`): Host port mapped to frontend container port 8501 (`"${FRONTEND_PORT:-8501}:8501"`).
+This allows the acceptance suite or multi-tenant deployments to override host ports (e.g., 18000 and 18501) with zero risk of port collision.
+
+### Compose Project Isolation
+- **No Fixed Container Names:** Explicit `container_name` declarations are omitted from `docker-compose.yml`. Standard deployments use the default directory project name (`finova-ai`).
+- **Acceptance Isolation:** The automated acceptance test suite instantiates isolated UUID-based project identifiers (`finova-acc-<uuid>`).
+- **Resource Boundary:** Test teardown targets only the isolated project (`docker compose -p <project> down -v`). Destructive global operations (such as `docker system prune` or global volume removal) are strictly prohibited.
+
+### Acceptance Verification Suite
+When Docker is available, `evaluation/docker_acceptance.py` verifies 10 mandatory deployment gates:
+1. **Docker CLI & Daemon Availability:** Verifies Docker CLI path and active daemon connectivity.
+2. **Dynamic Host Port Validation:** Validates port ranges (1–65535), detects collisions, and tests local socket occupancy.
+3. **Compose Configuration Validation:** Executes `docker compose config` with project environment variables.
+4. **Multi-Stage Container Builds:** Compiles backend and frontend production images.
+5. **Isolated Container Startup:** Launches project containers in detached mode.
+6. **Backend Health Probe:** Probes `http://127.0.0.1:<PORT>/api/v1/health` with retry polling.
+7. **Frontend Health Probe:** Probes `http://127.0.0.1:<FRONTEND_PORT>/_stcore/health` with retry polling.
+8. **Non-Root Execution Validation:** Verifies numeric UID from `id -u` on both backend and frontend containers, failing on non-zero exit codes, non-numeric outputs, or UID 0 (root).
+9. **Frontend-to-Backend Network Connectivity:** Executes an internal lightweight probe inside the frontend container, validating `BACKEND_API_URL` propagation and internal Docker DNS resolution to `http://backend:8000/api/v1/health`.
+10. **Hardened SQLite Volume Persistence:** Writes a unique per-run marker (`acc_persist_<uuid>`), restarts the backend container, polls for health recovery, reads the marker back, and asserts an exact byte match.
+11. **Guaranteed Scoped Teardown:** Executes `docker compose -p <project> down -v` in a `finally` block, reporting warnings if teardown encounters errors.
+
+> [!NOTE]
+> On host machines without Docker CLI or a running Docker daemon, Docker acceptance checks report `SKIPPED` with overall state `NOT_VERIFIED` (exit code 2). This prevents false deployment certifications.
+
+### Dependency Integrity Strategy
+- **Pip Pinning:** Docker builds explicitly pin `pip==24.3.1` in `Dockerfile.backend` and `Dockerfile.frontend` to eliminate build-time installer drift.
+- **Exact Lockfile:** Runtime dependencies are locked to exact versions in `requirements.lock` (99 runtime packages).
+- **Evaluation of Hash-Checking:** While `--require-hashes` enhances supply-chain security, multi-platform wheels for packages such as PyTorch, FAISS-CPU, and SciPy produce distinct platform-specific SHA256 hashes across Linux (x86_64 Debian containers) and development hosts (Windows 11). Pinning exact versions combined with a pinned pip installer provides stable, reproducible resolution in CPU-only containers without cross-platform wheel mismatch failures.
 
 ### Updating the Dependency Lockfile
 To update or regenerate `requirements.lock`:
@@ -250,3 +278,19 @@ The URL resolver (`frontend/backend_client.py`) provides robust resolution:
 ### 5. Database Locked (`sqlite3.OperationalError: database is locked`)
 - **Cause:** WAL mode disabled or timeout too short.
 - **Resolution:** Ensure `DATABASE_WAL_MODE=true` and `DATABASE_BUSY_TIMEOUT_MS=30000` in `.env`.
+
+### 6. Host Port Collision in Docker Deployment
+- **Cause:** Port 8000 or 8501 is already bound by another local process on the host machine.
+- **Resolution:** Override host ports in `.env` without changing container internal ports:
+  ```env
+  PORT=18000
+  FRONTEND_PORT=18501
+  ```
+  The containers will continue listening internally on 8000 and 8501, while publishing to the specified host ports.
+
+### 7. Docker Compose Project Isolation
+- **Cause:** Conflict with an existing user container.
+- **Resolution:** Finova AI uses automatic project prefixes. If needed, specify a custom Compose project name:
+  ```bash
+  docker compose -p my_finova_project up -d
+  ```

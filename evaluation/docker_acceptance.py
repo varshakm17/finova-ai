@@ -2,13 +2,15 @@
 
 Executes a non-destructive, isolated Docker Compose acceptance workflow:
 1. Docker CLI availability & daemon connectivity.
-2. Compose configuration syntax validation.
-3. Multi-stage backend & frontend image builds.
-4. Isolated container startup with random high port mappings.
-5. Live health probing of backend (/api/v1/health) and frontend (_stcore/health).
-6. Non-root user validation (UID 1000 appuser).
-7. SQLite data volume mounting & restart persistence validation.
-8. Guaranteed teardown and volume cleanup.
+2. Dynamic host port validation & collision detection.
+3. Compose configuration syntax validation with isolated project scope.
+4. Multi-stage backend & frontend image builds.
+5. Isolated container startup with configurable host port mappings.
+6. Live health probing of backend (/api/v1/health) and frontend (_stcore/health).
+7. Non-root user validation (UID 1000 appuser) for both backend and frontend.
+8. Frontend-to-backend Docker network communication & BACKEND_API_URL validation.
+9. Hardened SQLite data volume mounting & restart persistence validation.
+10. Guaranteed teardown and volume cleanup restricted strictly to the acceptance project.
 
 If Docker is unavailable, tests are cleanly marked SKIPPED with explicit prerequisite explanations.
 """
@@ -17,8 +19,11 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import subprocess
+import sys
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -42,6 +47,42 @@ class DockerCheckResult:
     details: dict[str, Any] = field(default_factory=dict)
 
 
+def validate_host_ports(backend_port: int, frontend_port: int) -> tuple[bool, str]:
+    """Validate that host ports are valid integers, distinct, and not currently occupied."""
+    if not (1 <= backend_port <= 65535):
+        return (
+            False,
+            f"Invalid backend host port {backend_port}: must be an integer between 1 and 65535.",
+        )
+    if not (1 <= frontend_port <= 65535):
+        return (
+            False,
+            f"Invalid frontend host port {frontend_port}: must be an integer between 1 and 65535.",
+        )
+    if backend_port == frontend_port:
+        return (
+            False,
+            f"Port collision: backend host port ({backend_port}) and frontend host port ({frontend_port}) cannot be identical.",
+        )
+
+    for role, port in (("backend", backend_port), ("frontend", frontend_port)):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                if s.connect_ex(("127.0.0.1", port)) == 0:
+                    return (
+                        False,
+                        f"Host port {port} ({role}) is already in use by another process on 127.0.0.1.",
+                    )
+        except Exception as exc:
+            return False, f"Socket error probing port {port} ({role}): {exc}"
+
+    return (
+        True,
+        f"Host ports {backend_port} (backend) and {frontend_port} (frontend) are valid and available.",
+    )
+
+
 class DockerAcceptanceRunner:
     """Orchestrates actual Docker container build, run, health, and persistence tests."""
 
@@ -53,16 +94,292 @@ class DockerAcceptanceRunner:
         build_timeout_sec: int = 240,
         startup_timeout_sec: int = 60,
     ) -> None:
-        """Initialize runner with isolated project identifiers and test ports."""
-        self.project_name = project_name or f"finova-acc-{int(time.time())}"
+        """Initialize runner with unique UUID-based project identifier and test ports."""
+        self.project_name = project_name or f"finova-acc-{uuid.uuid4().hex[:8]}"
         self.backend_port = backend_port
         self.frontend_port = frontend_port
         self.build_timeout_sec = build_timeout_sec
         self.startup_timeout_sec = startup_timeout_sec
         self.docker_cli = shutil.which("docker")
 
+    def _run_compose_cmd(
+        self,
+        args: list[str],
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> tuple[int, str, str, str | None]:
+        """Execute a Docker Compose command scoped strictly to this test project.
+
+        Returns (returncode, stdout, stderr, error_message).
+        Captures TimeoutExpired and general exceptions without raising uncaught errors.
+        """
+        cmd = [
+            "docker",
+            "compose",
+            "-p",
+            self.project_name,
+            "-f",
+            "docker-compose.yml",
+            *args,
+        ]
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(PROJECT_ROOT),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+            )
+            return proc.returncode, proc.stdout, proc.stderr, None
+        except subprocess.TimeoutExpired:
+            return (
+                -1,
+                "",
+                "",
+                f"Command timed out after {timeout}s: {' '.join(cmd[:6])}",
+            )
+        except Exception as exc:
+            return -1, "", "", f"Command execution failed: {exc}"
+
+    def _validate_non_root(self, service: str) -> DockerCheckResult:
+        """Validate that a container service executes under an unprivileged non-root user (UID 1000)."""
+        check_name = f"docker_{service}_non_root_execution"
+        code, stdout, stderr, err = self._run_compose_cmd(
+            ["exec", "-T", service, "id", "-u"],
+            timeout=15,
+        )
+        if err:
+            return DockerCheckResult(
+                name=check_name,
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"{service.capitalize()} non-root execution check error: {err}",
+                details={"service": service, "error": err},
+            )
+        if code != 0:
+            return DockerCheckResult(
+                name=check_name,
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"{service.capitalize()} non-root check returned non-zero exit code ({code}): {stderr.strip()}",
+                details={
+                    "service": service,
+                    "returncode": code,
+                    "stderr": stderr.strip(),
+                },
+            )
+
+        uid_str = stdout.strip()
+        if not uid_str or not uid_str.isdigit():
+            return DockerCheckResult(
+                name=check_name,
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"{service.capitalize()} non-root check did not return a valid numeric UID: '{uid_str}'",
+                details={"service": service, "stdout": uid_str},
+            )
+
+        uid_int = int(uid_str)
+        if uid_int == 0:
+            return DockerCheckResult(
+                name=check_name,
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Security violation: {service.capitalize()} container is executing as root (UID 0).",
+                details={"service": service, "uid": 0},
+            )
+
+        return DockerCheckResult(
+            name=check_name,
+            passed=True,
+            status="PASS",
+            is_mandatory=True,
+            message=f"{service.capitalize()} container runs as unprivileged non-root user (UID: {uid_int}).",
+            details={"service": service, "uid": uid_int},
+        )
+
+    def _check_frontend_backend_connectivity(self) -> DockerCheckResult:
+        """Validate that the frontend container can communicate with the backend across the Docker network."""
+        probe_script = (
+            "import os, sys, urllib.request, json; "
+            "backend_url = os.environ.get('BACKEND_API_URL', ''); "
+            "assert backend_url, 'BACKEND_API_URL is unset or empty'; "
+            "health_url = backend_url.rstrip('/') + '/health'; "
+            "req = urllib.request.Request(health_url, headers={'User-Agent': 'Finova-Frontend-Probe/1.0'}); "
+            "with urllib.request.urlopen(req, timeout=5) as resp: "
+            "    assert resp.status == 200, f'Unexpected status {resp.status}'; "
+            "    data = json.loads(resp.read().decode('utf-8')); "
+            "    assert data.get('status') == 'healthy', f'Backend reported unhealthy: {data}'; "
+            "print('CONNECTIVITY_OK:' + backend_url)"
+        )
+        code, stdout, stderr, err = self._run_compose_cmd(
+            ["exec", "-T", "frontend", "python", "-c", probe_script],
+            timeout=15,
+        )
+        if err:
+            return DockerCheckResult(
+                name="docker_frontend_backend_connectivity",
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Frontend-to-backend internal connectivity probe failed: {err}",
+                details={"error": err},
+            )
+        if code != 0 or "CONNECTIVITY_OK" not in stdout:
+            return DockerCheckResult(
+                name="docker_frontend_backend_connectivity",
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Frontend could not communicate with backend service via Docker network: {stderr.strip() or stdout.strip()}",
+                details={
+                    "returncode": code,
+                    "stdout": stdout.strip(),
+                    "stderr": stderr.strip(),
+                },
+            )
+        return DockerCheckResult(
+            name="docker_frontend_backend_connectivity",
+            passed=True,
+            status="PASS",
+            is_mandatory=True,
+            message="Frontend successfully communicated with backend service across internal Docker network.",
+            details={"output": stdout.strip()},
+        )
+
+    def _check_persistence(self) -> DockerCheckResult:
+        """Validate SQLite volume persistence across backend container restarts using unique markers."""
+        marker_id = 9999
+        marker_val = f"acc_persist_{uuid.uuid4().hex[:12]}"
+
+        # Step 1: Write unique marker into isolated container DB
+        write_script = (
+            f"import sqlite3; "
+            f"conn = sqlite3.connect('/app/data/finova.db'); "
+            f"conn.execute('CREATE TABLE IF NOT EXISTS _acc_persistence (id INTEGER PRIMARY KEY, val TEXT);'); "
+            f"conn.execute('INSERT OR REPLACE INTO _acc_persistence VALUES ({marker_id}, \\'{marker_val}\\');'); "
+            f"conn.commit(); conn.close(); print('WRITE_OK')"
+        )
+        code, stdout, stderr, err = self._run_compose_cmd(
+            ["exec", "-T", "backend", "python", "-c", write_script],
+            timeout=15,
+        )
+        if err or code != 0 or "WRITE_OK" not in stdout:
+            return DockerCheckResult(
+                name="docker_data_volume_persistence",
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Failed writing test marker into SQLite database: {err or stderr.strip()}",
+                details={
+                    "step": "write_marker",
+                    "code": code,
+                    "stderr": stderr.strip(),
+                    "err": err,
+                },
+            )
+
+        # Step 2: Restart backend container
+        code, stdout, stderr, err = self._run_compose_cmd(
+            ["restart", "backend"], timeout=25
+        )
+        if err or code != 0:
+            return DockerCheckResult(
+                name="docker_data_volume_persistence",
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Failed restarting backend container: {err or stderr.strip()}",
+                details={
+                    "step": "restart_backend",
+                    "code": code,
+                    "stderr": stderr.strip(),
+                    "err": err,
+                },
+            )
+
+        # Step 3: Wait for backend to recover health post-restart
+        backend_url = f"http://127.0.0.1:{self.backend_port}/api/v1/health"
+        post_restart_healthy = False
+        start_t = time.monotonic()
+        while time.monotonic() - start_t < 30:
+            try:
+                r = httpx.get(backend_url, timeout=2.0)
+                if r.status_code == 200:
+                    post_restart_healthy = True
+                    break
+            except Exception:
+                pass
+            time.sleep(1.0)
+
+        if not post_restart_healthy:
+            return DockerCheckResult(
+                name="docker_data_volume_persistence",
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Backend did not regain healthy status at {backend_url} within 30s after restart.",
+                details={"step": "post_restart_health", "url": backend_url},
+            )
+
+        # Step 4: Read marker back from database
+        read_script = (
+            f"import sqlite3; "
+            f"conn = sqlite3.connect('/app/data/finova.db'); "
+            f"cur = conn.execute('SELECT val FROM _acc_persistence WHERE id={marker_id};'); "
+            f"row = cur.fetchone(); conn.close(); "
+            f"print(row[0] if row else 'NONE')"
+        )
+        code, stdout, stderr, err = self._run_compose_cmd(
+            ["exec", "-T", "backend", "python", "-c", read_script],
+            timeout=15,
+        )
+        if err or code != 0:
+            return DockerCheckResult(
+                name="docker_data_volume_persistence",
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Failed reading test marker from SQLite database after restart: {err or stderr.strip()}",
+                details={
+                    "step": "read_marker",
+                    "code": code,
+                    "stderr": stderr.strip(),
+                    "err": err,
+                },
+            )
+
+        retrieved_val = stdout.strip()
+        if retrieved_val != marker_val:
+            return DockerCheckResult(
+                name="docker_data_volume_persistence",
+                passed=False,
+                status="FAIL",
+                is_mandatory=True,
+                message=f"Data persistence mismatch: expected '{marker_val}', retrieved '{retrieved_val}'.",
+                details={
+                    "step": "verify_marker",
+                    "expected": marker_val,
+                    "retrieved": retrieved_val,
+                },
+            )
+
+        return DockerCheckResult(
+            name="docker_data_volume_persistence",
+            passed=True,
+            status="PASS",
+            is_mandatory=True,
+            message="SQLite data volume persistence verified across container restart with unique marker.",
+            details={"marker_id": marker_id, "marker_value": marker_val},
+        )
+
     def run_acceptance_suite(self) -> list[DockerCheckResult]:
-        """Execute full end-to-end Docker acceptance workflow."""
+        """Execute full end-to-end Docker acceptance workflow with guaranteed cleanup."""
         results: list[DockerCheckResult] = []
 
         # 1. Docker CLI availability
@@ -119,6 +436,17 @@ class DockerAcceptanceRunner:
                     message="Docker daemon is active and responding.",
                 )
             )
+        except subprocess.TimeoutExpired:
+            results.append(
+                DockerCheckResult(
+                    name="docker_daemon_connectivity",
+                    passed=False,
+                    status="SKIPPED",
+                    is_mandatory=True,
+                    message="Docker daemon probe timed out after 8s. Docker daemon is unresponsive.",
+                )
+            )
+            return results
         except Exception as exc:
             results.append(
                 DockerCheckResult(
@@ -131,7 +459,41 @@ class DockerAcceptanceRunner:
             )
             return results
 
-        # 3. Docker Compose Configuration Validation
+        # 3. Dynamic Host Port Validation
+        ports_valid, port_msg = validate_host_ports(
+            self.backend_port, self.frontend_port
+        )
+        if not ports_valid:
+            results.append(
+                DockerCheckResult(
+                    name="docker_host_port_validation",
+                    passed=False,
+                    status="FAIL",
+                    is_mandatory=True,
+                    message=f"Host port validation failed: {port_msg}",
+                    details={
+                        "backend_port": self.backend_port,
+                        "frontend_port": self.frontend_port,
+                    },
+                )
+            )
+            return results
+
+        results.append(
+            DockerCheckResult(
+                name="docker_host_port_validation",
+                passed=True,
+                status="PASS",
+                is_mandatory=True,
+                message=port_msg,
+                details={
+                    "backend_port": self.backend_port,
+                    "frontend_port": self.frontend_port,
+                },
+            )
+        )
+
+        # 4. Docker Compose Configuration Validation
         env_vars = os.environ.copy()
         env_vars["PORT"] = str(self.backend_port)
         env_vars["FRONTEND_PORT"] = str(self.frontend_port)
@@ -139,77 +501,48 @@ class DockerAcceptanceRunner:
             "FinovaAI-DockerTest/1.0 (test-runner@finova.internal)"
         )
 
-        try:
-            cfg_check = subprocess.run(
-                ["docker", "compose", "-f", "docker-compose.yml", "config"],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=15,
-                env=env_vars,
-            )
-            if cfg_check.returncode != 0:
-                results.append(
-                    DockerCheckResult(
-                        name="docker_compose_config_validation",
-                        passed=False,
-                        status="FAIL",
-                        is_mandatory=True,
-                        message=f"docker-compose.yml configuration validation failed: {cfg_check.stderr[:300]}",
-                    )
-                )
-                return results
-
-            results.append(
-                DockerCheckResult(
-                    name="docker_compose_config_validation",
-                    passed=True,
-                    status="PASS",
-                    is_mandatory=True,
-                    message="docker-compose.yml configuration syntax validated successfully.",
-                )
-            )
-        except Exception as exc:
+        code, stdout, stderr, err = self._run_compose_cmd(
+            ["config"], timeout=15, env=env_vars
+        )
+        if err or code != 0:
             results.append(
                 DockerCheckResult(
                     name="docker_compose_config_validation",
                     passed=False,
                     status="FAIL",
                     is_mandatory=True,
-                    message=f"docker compose config command execution failed: {exc}",
+                    message=f"docker-compose.yml configuration validation failed: {err or stderr[:300]}",
+                    details={"stderr": stderr[:300], "error": err},
                 )
             )
             return results
 
+        results.append(
+            DockerCheckResult(
+                name="docker_compose_config_validation",
+                passed=True,
+                status="PASS",
+                is_mandatory=True,
+                message="docker-compose.yml configuration syntax validated successfully.",
+            )
+        )
+
         # Execute container lifecycle checks with guaranteed cleanup
         cleanup_needed = True
         try:
-            # 4. Backend Image Build
-            build_backend = subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "-p",
-                    self.project_name,
-                    "-f",
-                    "docker-compose.yml",
-                    "build",
-                    "backend",
-                ],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=self.build_timeout_sec,
-                env=env_vars,
+            # 5. Backend Image Build
+            code, stdout, stderr, err = self._run_compose_cmd(
+                ["build", "backend"], timeout=self.build_timeout_sec, env=env_vars
             )
-            if build_backend.returncode != 0:
+            if err or code != 0:
                 results.append(
                     DockerCheckResult(
                         name="docker_build_backend_image",
                         passed=False,
                         status="FAIL",
                         is_mandatory=True,
-                        message=f"Backend Docker image build failed: {build_backend.stderr[-500:]}",
+                        message=f"Backend Docker image build failed: {err or stderr[-500:]}",
+                        details={"stderr": stderr[-500:], "error": err},
                     )
                 )
                 return results
@@ -224,32 +557,19 @@ class DockerAcceptanceRunner:
                 )
             )
 
-            # 5. Frontend Image Build
-            build_frontend = subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "-p",
-                    self.project_name,
-                    "-f",
-                    "docker-compose.yml",
-                    "build",
-                    "frontend",
-                ],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=self.build_timeout_sec,
-                env=env_vars,
+            # 6. Frontend Image Build
+            code, stdout, stderr, err = self._run_compose_cmd(
+                ["build", "frontend"], timeout=self.build_timeout_sec, env=env_vars
             )
-            if build_frontend.returncode != 0:
+            if err or code != 0:
                 results.append(
                     DockerCheckResult(
                         name="docker_build_frontend_image",
                         passed=False,
                         status="FAIL",
                         is_mandatory=True,
-                        message=f"Frontend Docker image build failed: {build_frontend.stderr[-500:]}",
+                        message=f"Frontend Docker image build failed: {err or stderr[-500:]}",
+                        details={"stderr": stderr[-500:], "error": err},
                     )
                 )
                 return results
@@ -264,32 +584,19 @@ class DockerAcceptanceRunner:
                 )
             )
 
-            # 6. Container Startup
-            up_cmd = subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "-p",
-                    self.project_name,
-                    "-f",
-                    "docker-compose.yml",
-                    "up",
-                    "-d",
-                ],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=self.startup_timeout_sec,
-                env=env_vars,
+            # 7. Container Startup
+            code, stdout, stderr, err = self._run_compose_cmd(
+                ["up", "-d"], timeout=self.startup_timeout_sec, env=env_vars
             )
-            if up_cmd.returncode != 0:
+            if err or code != 0:
                 results.append(
                     DockerCheckResult(
                         name="docker_container_startup",
                         passed=False,
                         status="FAIL",
                         is_mandatory=True,
-                        message=f"docker compose up -d failed: {up_cmd.stderr[:300]}",
+                        message=f"docker compose up -d failed: {err or stderr[:300]}",
+                        details={"stderr": stderr[:300], "error": err},
                     )
                 )
                 return results
@@ -304,7 +611,7 @@ class DockerAcceptanceRunner:
                 )
             )
 
-            # 7. Backend Health Endpoint Probe
+            # 8. Backend Health Endpoint Probe
             backend_url = f"http://127.0.0.1:{self.backend_port}/api/v1/health"
             backend_healthy = False
             diag_data = None
@@ -317,7 +624,8 @@ class DockerAcceptanceRunner:
                         diag_data = r.json()
                         break
                 except Exception:
-                    time.sleep(1.5)
+                    pass
+                time.sleep(1.0)
 
             if not backend_healthy:
                 results.append(
@@ -327,6 +635,7 @@ class DockerAcceptanceRunner:
                         status="FAIL",
                         is_mandatory=True,
                         message=f"Backend health endpoint failed to respond at {backend_url} within 30s.",
+                        details={"url": backend_url},
                     )
                 )
                 return results
@@ -342,161 +651,132 @@ class DockerAcceptanceRunner:
                 )
             )
 
-            # 8. Non-Root Execution Check
-            user_check = subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "-p",
-                    self.project_name,
-                    "-f",
-                    "docker-compose.yml",
-                    "exec",
-                    "-T",
-                    "backend",
-                    "id",
-                    "-u",
-                ],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            uid = user_check.stdout.strip()
-            if uid == "0":
+            # 9. Frontend Health Endpoint Probe
+            frontend_url = f"http://127.0.0.1:{self.frontend_port}/_stcore/health"
+            frontend_healthy = False
+            start_t = time.monotonic()
+            while time.monotonic() - start_t < 30:
+                try:
+                    r = httpx.get(frontend_url, timeout=2.0)
+                    if r.status_code == 200:
+                        frontend_healthy = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(1.0)
+
+            if not frontend_healthy:
                 results.append(
                     DockerCheckResult(
-                        name="docker_non_root_execution",
+                        name="docker_frontend_health_check",
                         passed=False,
                         status="FAIL",
                         is_mandatory=True,
-                        message="Security violation: Backend container is executing as root (UID 0).",
+                        message=f"Frontend health endpoint failed to respond at {frontend_url} within 30s.",
+                        details={"url": frontend_url},
                     )
                 )
-            else:
-                results.append(
-                    DockerCheckResult(
-                        name="docker_non_root_execution",
-                        passed=True,
-                        status="PASS",
-                        is_mandatory=True,
-                        message=f"Container runs as unprivileged appuser (UID: {uid}).",
-                    )
-                )
+                return results
 
-            # 9. SQLite Volume Persistence After Restart
-            # Write a marker into database inside container
-            subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "-p",
-                    self.project_name,
-                    "-f",
-                    "docker-compose.yml",
-                    "exec",
-                    "-T",
-                    "backend",
-                    "python",
-                    "-c",
-                    "import sqlite3; conn = sqlite3.connect('/app/data/finova.db'); conn.execute('CREATE TABLE IF NOT EXISTS _acc_test (id INTEGER, val TEXT);'); conn.execute('INSERT INTO _acc_test VALUES (1, \\'persisted_value\\');'); conn.commit(); conn.close()",
-                ],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=15,
+            results.append(
+                DockerCheckResult(
+                    name="docker_frontend_health_check",
+                    passed=True,
+                    status="PASS",
+                    is_mandatory=True,
+                    message=f"Frontend container is healthy at {frontend_url}.",
+                    details={"url": frontend_url},
+                )
             )
 
-            # Restart backend container
-            subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "-p",
-                    self.project_name,
-                    "-f",
-                    "docker-compose.yml",
-                    "restart",
-                    "backend",
-                ],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=20,
-            )
-            time.sleep(3)
+            # 10. Non-Root Execution Checks (Backend & Frontend)
+            backend_non_root = self._validate_non_root("backend")
+            results.append(backend_non_root)
+            if not backend_non_root.passed:
+                return results
 
-            # Read back marker
-            read_marker = subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "-p",
-                    self.project_name,
-                    "-f",
-                    "docker-compose.yml",
-                    "exec",
-                    "-T",
-                    "backend",
-                    "python",
-                    "-c",
-                    "import sqlite3; conn = sqlite3.connect('/app/data/finova.db'); cur = conn.execute('SELECT val FROM _acc_test WHERE id=1;'); row = cur.fetchone(); print(row[0] if row else 'NONE'); conn.close()",
-                ],
-                cwd=str(PROJECT_ROOT),
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
+            frontend_non_root = self._validate_non_root("frontend")
+            results.append(frontend_non_root)
+            if not frontend_non_root.passed:
+                return results
 
-            persisted_val = read_marker.stdout.strip()
-            if persisted_val == "persisted_value":
-                results.append(
-                    DockerCheckResult(
-                        name="docker_data_volume_persistence",
-                        passed=True,
-                        status="PASS",
-                        is_mandatory=True,
-                        message="SQLite volume persistence verified across container restarts.",
-                    )
-                )
-            else:
-                results.append(
-                    DockerCheckResult(
-                        name="docker_data_volume_persistence",
-                        passed=False,
-                        status="FAIL",
-                        is_mandatory=True,
-                        message=f"Data persistence failed across container restart (retrieved '{persisted_val}').",
-                    )
-                )
+            # 11. Frontend-to-Backend Docker Network Connectivity
+            conn_res = self._check_frontend_backend_connectivity()
+            results.append(conn_res)
+            if not conn_res.passed:
+                return results
+
+            # 12. SQLite Persistence Across Container Restart
+            persistence_res = self._check_persistence()
+            results.append(persistence_res)
+            if not persistence_res.passed:
+                return results
 
         finally:
             if cleanup_needed and self.docker_cli:
-                # 10. Safe Isolated Teardown & Cleanup
-                down_cmd = subprocess.run(
-                    [
-                        "docker",
-                        "compose",
-                        "-p",
-                        self.project_name,
-                        "-f",
-                        "docker-compose.yml",
-                        "down",
-                        "-v",
-                    ],
-                    cwd=str(PROJECT_ROOT),
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                results.append(
-                    DockerCheckResult(
-                        name="docker_environment_cleanup",
-                        passed=down_cmd.returncode == 0,
-                        status="PASS" if down_cmd.returncode == 0 else "WARN",
-                        is_mandatory=False,
-                        message=f"Isolated test project '{self.project_name}' and volumes removed cleanly.",
+                try:
+                    down_code, _, down_err, err = self._run_compose_cmd(
+                        ["down", "-v"], timeout=30
                     )
-                )
+                    cleanup_ok = down_code == 0 and err is None
+                    results.append(
+                        DockerCheckResult(
+                            name="docker_environment_cleanup",
+                            passed=cleanup_ok,
+                            status="PASS" if cleanup_ok else "WARN",
+                            is_mandatory=False,
+                            message=(
+                                f"Isolated test project '{self.project_name}' and volumes removed cleanly."
+                                if cleanup_ok
+                                else f"Cleanup warning for project '{self.project_name}': {err or down_err[:200]}"
+                            ),
+                            details={"project_name": self.project_name},
+                        )
+                    )
+                except Exception as exc:
+                    results.append(
+                        DockerCheckResult(
+                            name="docker_environment_cleanup",
+                            passed=False,
+                            status="WARN",
+                            is_mandatory=False,
+                            message=f"Cleanup exception for project '{self.project_name}': {exc}",
+                        )
+                    )
 
         return results
+
+
+def main() -> int:
+    """CLI entrypoint for standalone Docker acceptance execution."""
+    print("=================================================================")
+    print("Finova AI — Docker Deployment Acceptance Test Runner")
+    print("=================================================================\n")
+
+    runner = DockerAcceptanceRunner()
+    results = runner.run_acceptance_suite()
+
+    has_fail = False
+    has_skip = False
+    for res in results:
+        status_label = f"[{res.status}]"
+        print(f"{status_label:<10} {res.name}: {res.message}")
+        if res.status == "FAIL":
+            has_fail = True
+        elif res.status == "SKIPPED":
+            has_skip = True
+
+    print("\n-----------------------------------------------------------------")
+    if has_fail:
+        print("RESULT: Docker Acceptance FAILED (one or more mandatory checks failed)")
+        return 1
+    if has_skip:
+        print("RESULT: Docker Acceptance SKIPPED (prerequisites missing, e.g. Docker)")
+        return 2
+
+    print("RESULT: Docker Acceptance PASSED (all deployment checks verified)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

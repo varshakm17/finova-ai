@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install runtime Python dependencies from exact pinned lockfile
 COPY requirements.lock ./
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN pip install --no-cache-dir pip==24.3.1 && \
     pip install --no-cache-dir -r requirements.lock
 
 # Create application user and required persistent storage directories
