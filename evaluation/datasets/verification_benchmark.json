@@ -1,0 +1,504 @@
+{
+  "metadata": {
+    "benchmark_name": "finova_verification_benchmark",
+    "version": "1.0.0",
+    "description": "Controlled anti-hallucination and claim-level verification benchmark containing supported, partially supported, unsupported, contradicted, numeric mismatch, period mismatch, fabricated citation, and cross-company attribution cases.",
+    "total_cases": 18,
+    "companies": ["AAPL", "MSFT", "TSLA", "NVDA"],
+    "categories": [
+      "supported_exact_numeric",
+      "supported_qualitative_paraphrase",
+      "supported_calculation_receipt",
+      "partially_supported_missing_period",
+      "partially_supported_ambiguous_scope",
+      "unsupported_absence_in_evidence",
+      "unsupported_forward_looking_hallucination",
+      "contradicted_numeric_mismatch",
+      "contradicted_directional_reversal",
+      "numeric_scale_error",
+      "numeric_transposed_digits",
+      "period_mismatch_fiscal_year",
+      "period_mismatch_quarter_vs_year",
+      "fabricated_citation_missing_id",
+      "fabricated_citation_irrelevant_passage",
+      "wrong_company_attribution",
+      "cross_evidence_contradiction",
+      "unsupported_speculative_ratio"
+    ],
+    "created_at": "2026-11-16T00:00:00Z"
+  },
+  "cases": [
+    {
+      "case_id": "VER-001",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "In fiscal year 2023, Apple reported total net sales of $383,285 million compared to $394,328 million in fiscal year 2022.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E1"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E1",
+          "chunk_id": "chunk_aapl_10k_2023_rev",
+          "content": "Total net sales were $383,285 million in 2023 compared to $394,328 million in 2022, a decrease of 3%. Product sales were $298,085 million.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "supported",
+      "is_grounded": true,
+      "failure_type": "none",
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth",
+      "notes": "Exact numerical match with primary SEC filing Item 7 table."
+    },
+    {
+      "case_id": "VER-002",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple's hardware product lineup includes iPhone, Mac, iPad, and Wearables, Home and Accessories.",
+      "claim_type": "risk_or_business",
+      "citation_ids": ["E2"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E2",
+          "chunk_id": "chunk_aapl_10k_2023_products",
+          "content": "The Company's hardware products include iPhone, Mac, iPad, and Wearables, Home and Accessories. The Company also provides Services including advertising, AppleCare, cloud services, and digital content.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_1"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "supported",
+      "is_grounded": true,
+      "failure_type": "none",
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth",
+      "notes": "Qualitative paraphrase accurately supported by statutory Item 1 disclosure."
+    },
+    {
+      "case_id": "VER-003",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple achieved a gross margin of 44.13% in fiscal year 2023.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["C1"],
+      "retrieved_evidence": [],
+      "calculation_evidence": [
+        {
+          "calculation_id": "C1",
+          "metric_name": "gross_margin",
+          "value": 44.13,
+          "formatted_value": "44.13%",
+          "period": "FY2023",
+          "company_ticker": "AAPL",
+          "formula": "gross_profit / total_revenue",
+          "input_values": {
+            "gross_profit": 169148000000.0,
+            "total_revenue": 383285000000.0
+          }
+        }
+      ],
+      "expected_verdict": "supported",
+      "is_grounded": true,
+      "failure_type": "none",
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth",
+      "notes": "Directly grounded in deterministic calculation receipt C1."
+    },
+    {
+      "case_id": "VER-004",
+      "company_ticker": "AAPL",
+      "period": null,
+      "claim_text": "Apple generated total net sales of $383,285 million.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E1"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E1",
+          "chunk_id": "chunk_aapl_10k_2023_rev",
+          "content": "Total net sales were $383,285 million in 2023 compared to $394,328 million in 2022.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "partially_supported",
+      "is_grounded": true,
+      "failure_type": "period_mismatch",
+      "expected_issues": ["missing_period"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Numbers are accurate for FY2023 but claim omits fiscal reporting period."
+    },
+    {
+      "case_id": "VER-005",
+      "company_ticker": "TSLA",
+      "period": "FY2023",
+      "claim_text": "Tesla delivered approximately 1.81 million total vehicles in fiscal year 2023.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E3"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E3",
+          "chunk_id": "chunk_tsla_10k_2023_deliveries",
+          "content": "In 2023, we produced 1,845,985 vehicles and delivered 1,808,581 vehicles, an increase of 38% over 2022.",
+          "company_ticker": "TSLA",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "supported",
+      "is_grounded": true,
+      "failure_type": "none",
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth",
+      "notes": "1.808M vehicles rounds to 1.81 million deliveries within 1% tolerance."
+    },
+    {
+      "case_id": "VER-006",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple entered into an agreement to acquire Sony Pictures Entertainment for $45 billion in late 2023.",
+      "claim_type": "general_fact",
+      "citation_ids": [],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E1",
+          "chunk_id": "chunk_aapl_10k_2023_rev",
+          "content": "Total net sales were $383,285 million in 2023 compared to $394,328 million in 2022.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "unsupported",
+      "is_grounded": false,
+      "failure_type": "unsupported_claim",
+      "expected_issues": ["claim_not_present_in_evidence"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Fabricated corporate acquisition completely absent from SEC disclosures."
+    },
+    {
+      "case_id": "VER-007",
+      "company_ticker": "MSFT",
+      "period": "FY2024",
+      "claim_text": "Microsoft announced it will discontinue its Windows operating system by the end of calendar year 2026.",
+      "claim_type": "forward_looking",
+      "citation_ids": ["E4"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E4",
+          "chunk_id": "chunk_msft_10k_2023_segments",
+          "content": "More Personal Computing consists of Windows, Devices, Gaming, and Search and news advertising.",
+          "company_ticker": "MSFT",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_1"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "unsupported",
+      "is_grounded": false,
+      "failure_type": "unsupported_claim",
+      "expected_issues": ["forward_looking_hallucination"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Hallucinated forward-looking statement not found in any cited evidence."
+    },
+    {
+      "case_id": "VER-008",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple's fiscal year 2023 total net sales were $394,328 million.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E1"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E1",
+          "chunk_id": "chunk_aapl_10k_2023_rev",
+          "content": "Total net sales were $383,285 million in fiscal year 2023. Operating income was $114,301 million in 2023.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "numeric_mismatch",
+      "expected_issues": ["numeric_mismatch_value_conflict"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "$394,328 million was FY2022 sales; FY2023 was explicitly $383,285 million."
+    },
+    {
+      "case_id": "VER-009",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple's total net sales increased by 2.8% in fiscal year 2023 compared to fiscal year 2022.",
+      "claim_type": "trend_direction",
+      "citation_ids": ["E1"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E1",
+          "chunk_id": "chunk_aapl_10k_2023_rev",
+          "content": "Total net sales were $383,285 million in 2023 compared to $394,328 million in 2022, a decrease of 2.8% or $11,043 million.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "directional_contradiction",
+      "expected_issues": ["directional_conflict_increase_vs_decrease"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Direct directional contradiction: claim says increased, statutory filing says decreased."
+    },
+    {
+      "case_id": "VER-010",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple reported operating income of $114.30 million in fiscal year 2023.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E5"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E5",
+          "chunk_id": "chunk_aapl_10k_2023_opinc",
+          "content": "Operating income was $114,301 million in 2023, down from $119,437 million in 2022.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "scale_error",
+      "expected_issues": ["scale_error_millions_vs_billions"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Scale factor error: $114.30 million stated instead of $114,301 million ($114.3B)."
+    },
+    {
+      "case_id": "VER-011",
+      "company_ticker": "TSLA",
+      "period": "FY2023",
+      "claim_text": "Tesla recorded total automotive revenues of $92,419 million in fiscal year 2023.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E6"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E6",
+          "chunk_id": "chunk_tsla_10k_2023_rev",
+          "content": "Total automotive revenues were $82,419 million in 2023 compared to $71,462 million in 2022.",
+          "company_ticker": "TSLA",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "numeric_mismatch",
+      "expected_issues": ["numerical_conflict"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Transposed/incorrect digit ($92,419M vs $82,419M)."
+    },
+    {
+      "case_id": "VER-012",
+      "company_ticker": "AAPL",
+      "period": "FY2022",
+      "claim_text": "In fiscal year 2022, Apple generated total net sales of $383,285 million.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E1"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E1",
+          "chunk_id": "chunk_aapl_10k_2023_rev",
+          "content": "Total net sales were $383,285 million in 2023 compared to $394,328 million in 2022.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "period_mismatch",
+      "expected_issues": ["fiscal_year_mismatch"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Temporal mismatch: $383,285 million was FY2023 revenue, not FY2022."
+    },
+    {
+      "case_id": "VER-013",
+      "company_ticker": "MSFT",
+      "period": "Q1 2023",
+      "claim_text": "In Q1 2023, Microsoft's full year revenue reached $211,915 million.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E7"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E7",
+          "chunk_id": "chunk_msft_10k_2023_rev",
+          "content": "For the fiscal year ended June 30, 2023, Microsoft revenue was $211,915 million.",
+          "company_ticker": "MSFT",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "period_mismatch",
+      "expected_issues": ["annual_vs_quarterly_mismatch"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Quarterly vs annual mismatch: FY2023 annual revenue confused with Q1."
+    },
+    {
+      "case_id": "VER-014",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple invested $29,915 million in research and development during fiscal year 2023.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E999"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E1",
+          "chunk_id": "chunk_aapl_10k_2023_rev",
+          "content": "Total net sales were $383,285 million in 2023.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "unsupported",
+      "is_grounded": false,
+      "failure_type": "fabricated_citation",
+      "expected_issues": ["citation_id_not_found"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Cited evidence [E999] does not exist in context."
+    },
+    {
+      "case_id": "VER-015",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple's cash flows from operations totaled $110,543 million in fiscal year 2023.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E8"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E8",
+          "chunk_id": "chunk_aapl_10k_2023_risk",
+          "content": "Item 1A. Risk Factors. Global economic conditions could materially adversely affect the Company's business, results of operations, financial condition and growth.",
+          "company_ticker": "AAPL",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_1A"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "unsupported",
+      "is_grounded": false,
+      "failure_type": "fabricated_citation",
+      "expected_issues": ["irrelevant_cited_passage"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Cited passage [E8] discusses macro risk factors and contains zero cash flow figures."
+    },
+    {
+      "case_id": "VER-016",
+      "company_ticker": "AAPL",
+      "period": "FY2023",
+      "claim_text": "Apple generated $87,907 million in revenue from its Intelligent Cloud server segment in fiscal year 2023.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E9"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E9",
+          "chunk_id": "chunk_msft_10k_2023_cloud",
+          "content": "Microsoft Intelligent Cloud revenue was $87,907 million for fiscal year 2023, up 17% from 2022.",
+          "company_ticker": "MSFT",
+          "reporting_period": "FY2023",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "wrong_company",
+      "expected_issues": ["wrong_company_attribution"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "Microsoft's Intelligent Cloud segment revenue erroneously attributed to Apple."
+    },
+    {
+      "case_id": "VER-017",
+      "company_ticker": "NVDA",
+      "period": "FY2024",
+      "claim_text": "NVIDIA's Data Center revenue surged 217% to $47.5 billion in fiscal year 2024.",
+      "claim_type": "trend_direction",
+      "citation_ids": ["E10"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E10",
+          "chunk_id": "chunk_nvda_10k_2024_dc",
+          "content": "Data Center revenue was $47,525 million for fiscal 2024, up 217% compared to $15,005 million for fiscal 2023.",
+          "company_ticker": "NVDA",
+          "reporting_period": "FY2024",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "supported",
+      "is_grounded": true,
+      "failure_type": "none",
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth",
+      "notes": "Accurate percentage growth and absolute revenue for NVIDIA Data Center."
+    },
+    {
+      "case_id": "VER-018",
+      "company_ticker": "NVDA",
+      "period": "FY2024",
+      "claim_text": "NVIDIA achieved an unprecedented net profit margin of 95% in fiscal year 2024.",
+      "claim_type": "financial_metric",
+      "citation_ids": ["E10"],
+      "retrieved_evidence": [
+        {
+          "evidence_id": "E10",
+          "chunk_id": "chunk_nvda_10k_2024_dc",
+          "content": "Net income for fiscal year 2024 was $29,760 million on total revenue of $60,922 million, representing net margin of 48.8%.",
+          "company_ticker": "NVDA",
+          "reporting_period": "FY2024",
+          "filing_type": "10-K",
+          "section_name": "ITEM_7"
+        }
+      ],
+      "calculation_evidence": [],
+      "expected_verdict": "contradicted",
+      "is_grounded": false,
+      "failure_type": "numeric_mismatch",
+      "expected_issues": ["numerical_conflict"],
+      "dataset_provenance": "synthetic_verification_probe",
+      "notes": "95% claimed net margin contradicts actual statutory net margin of 48.8%."
+    }
+  ]
+}

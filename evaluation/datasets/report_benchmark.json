@@ -1,0 +1,256 @@
+{
+  "metadata": {
+    "benchmark_name": "finova_report_benchmark",
+    "version": "1.0.0",
+    "description": "Multi-agent financial research report benchmark covering end-to-end report generation quality, section coverage, citation integrity, financial metric accuracy, missing metric handling, and conflict resolution.",
+    "total_scenarios": 8,
+    "companies": ["AAPL", "MSFT", "TSLA", "NVDA"],
+    "categories": [
+      "complete_comprehensive_report",
+      "missing_metrics_graceful_handling",
+      "weak_evidence_limitation_disclosure",
+      "multi_period_trend_accuracy",
+      "incorrect_trend_detection",
+      "conflicting_evidence_resolution",
+      "missing_sources_citation_gap",
+      "unsupported_speculative_summary"
+    ],
+    "created_at": "2026-11-16T00:00:00Z"
+  },
+  "scenarios": [
+    {
+      "scenario_id": "REP-001",
+      "title": "Comprehensive Apple Three-Year Financial Research Brief",
+      "description": "Full end-to-end multi-agent research evaluation for AAPL covering FY2021-FY2023 with rich evidence and complete XBRL metrics.",
+      "request": {
+        "question": "Provide a comprehensive financial research brief on Apple Inc. analyzing revenue trends, gross and operating margins, cash flow generation, and principal risk factors across fiscal years 2021 to 2023.",
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "reporting_period": "FY2021-FY2023",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": [
+        "executive_summary",
+        "company_overview",
+        "financial_performance",
+        "profitability_margins",
+        "cash_flow_capital",
+        "financial_health",
+        "risk_mda_insights",
+        "synthesis_outlook"
+      ],
+      "expected_metrics": [
+        "revenue",
+        "gross_profit",
+        "gross_margin",
+        "operating_income",
+        "operating_margin",
+        "net_income",
+        "operating_cash_flow",
+        "free_cash_flow"
+      ],
+      "expected_trends": [
+        {
+          "metric_name": "total_revenue",
+          "expected_direction": "MIXED",
+          "notes": "Revenue grew in 2022 from 2021, but declined 2.8% in 2023."
+        }
+      ],
+      "min_required_citations": 5,
+      "min_required_tables": 2,
+      "allow_missing_metrics": false,
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth"
+    },
+    {
+      "scenario_id": "REP-002",
+      "title": "Missing Debt Metrics & Graceful Limitation Handling",
+      "description": "Report generation scenario where total debt and interest expense observations are absent, verifying graceful degradation without hallucinated values.",
+      "request": {
+        "question": "Analyze Apple's solvency and debt-to-equity leverage structure for fiscal year 2023.",
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "reporting_period": "FY2023",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": [
+        "executive_summary",
+        "financial_health",
+        "synthesis_outlook"
+      ],
+      "expected_metrics": [
+        "total_assets",
+        "total_liabilities",
+        "stockholders_equity"
+      ],
+      "expected_unavailable_metrics": [
+        "debt_to_equity",
+        "interest_coverage"
+      ],
+      "min_required_citations": 2,
+      "min_required_tables": 1,
+      "allow_missing_metrics": true,
+      "expected_issues": ["missing_metric:debt_to_equity", "missing_metric:interest_coverage"],
+      "dataset_provenance": "synthetic_verification_probe"
+    },
+    {
+      "scenario_id": "REP-003",
+      "title": "Sparse/Weak Evidence Limitation Disclosure",
+      "description": "Inquiry on a non-existent or sparsely covered topic (e.g. quantum computing patent portfolio for Apple in 10-K), expecting explicit limitation warnings.",
+      "request": {
+        "question": "Detail Apple's quantum computing commercial architecture and commercial quantum processor roadmap from its fiscal year 2023 Form 10-K disclosures.",
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "reporting_period": "FY2023",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": [
+        "executive_summary",
+        "risk_mda_insights",
+        "synthesis_outlook"
+      ],
+      "expected_metrics": [],
+      "min_required_citations": 0,
+      "min_required_tables": 0,
+      "allow_missing_metrics": true,
+      "expected_issues": ["insufficient_evidence_warning", "sparse_retrieval_disclosure"],
+      "dataset_provenance": "synthetic_verification_probe"
+    },
+    {
+      "scenario_id": "REP-004",
+      "title": "Microsoft Cloud & Productivity Multi-Year Longitudinal Trends",
+      "description": "Verifying multi-year longitudinal trend calculations and narrative consistency for Microsoft across FY2021-FY2023.",
+      "request": {
+        "question": "Provide a detailed financial research brief on Microsoft Corporation evaluating revenue expansion in Intelligent Cloud, operating leverage, and capital expenditures from FY2021 to FY2023.",
+        "ticker": "MSFT",
+        "company_name": "Microsoft Corporation",
+        "reporting_period": "FY2021-FY2023",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": [
+        "executive_summary",
+        "company_overview",
+        "financial_performance",
+        "profitability_margins",
+        "cash_flow_capital",
+        "synthesis_outlook"
+      ],
+      "expected_metrics": [
+        "revenue",
+        "operating_income",
+        "net_income",
+        "capital_expenditures"
+      ],
+      "expected_trends": [
+        {
+          "metric_name": "total_revenue",
+          "expected_direction": "UPWARD",
+          "notes": "Consistent revenue growth across FY21, FY22, and FY23."
+        }
+      ],
+      "min_required_citations": 4,
+      "min_required_tables": 2,
+      "allow_missing_metrics": false,
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth"
+    },
+    {
+      "scenario_id": "REP-005",
+      "title": "Incorrect Trend Detection Probe",
+      "description": "Probe evaluating whether evaluator flags incorrect narrative trend assertions when revenue decreased while text asserts an increase.",
+      "request": {
+        "question": "Summarize Apple's FY2023 top-line revenue trajectory relative to FY2022.",
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "reporting_period": "FY2023",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": [
+        "executive_summary",
+        "financial_performance"
+      ],
+      "expected_metrics": ["revenue"],
+      "expected_trends": [
+        {
+          "metric_name": "total_revenue",
+          "expected_direction": "DOWNWARD",
+          "notes": "Apple net sales fell from $394.3B to $383.3B (-2.8%)."
+        }
+      ],
+      "min_required_citations": 2,
+      "min_required_tables": 1,
+      "allow_missing_metrics": false,
+      "expected_issues": [],
+      "dataset_provenance": "synthetic_verification_probe"
+    },
+    {
+      "scenario_id": "REP-006",
+      "title": "Conflicting Disclosures Resolution",
+      "description": "Evaluates handling of conflicting restatements or dual-reported figures across different filings.",
+      "request": {
+        "question": "Analyze Tesla's FY2022 automotive regulatory credits and gross margin as reported in original vs subsequently filed comparative 10-K reports.",
+        "ticker": "TSLA",
+        "company_name": "Tesla, Inc.",
+        "reporting_period": "FY2022-FY2023",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": [
+        "executive_summary",
+        "financial_performance",
+        "profitability_margins"
+      ],
+      "expected_metrics": ["automotive_revenues", "gross_profit"],
+      "min_required_citations": 3,
+      "min_required_tables": 1,
+      "allow_missing_metrics": true,
+      "expected_issues": ["reconciliation_note_present"],
+      "dataset_provenance": "synthetic_verification_probe"
+    },
+    {
+      "scenario_id": "REP-007",
+      "title": "Missing Sources & Citation Deficit Check",
+      "description": "Benchmark testing whether evaluator correctly penalizes reports with zero or below-threshold statutory citations.",
+      "request": {
+        "question": "Provide a high-level summary of NVIDIA's revenue growth drivers.",
+        "ticker": "NVDA",
+        "company_name": "NVIDIA Corporation",
+        "reporting_period": "FY2024",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": ["executive_summary", "company_overview"],
+      "expected_metrics": ["revenue"],
+      "min_required_citations": 2,
+      "min_required_tables": 1,
+      "allow_missing_metrics": true,
+      "expected_issues": [],
+      "dataset_provenance": "curated_sec_ground_truth"
+    },
+    {
+      "scenario_id": "REP-008",
+      "title": "Unsupported Speculative Forecast Detection",
+      "description": "Tests evaluation of reports that make speculative stock price or financial predictions without SEC disclosure foundation.",
+      "request": {
+        "question": "What is the expected stock price target and 2030 projected market capitalization for Apple based on Form 10-K filings?",
+        "ticker": "AAPL",
+        "company_name": "Apple Inc.",
+        "reporting_period": "FY2023",
+        "output_format": "markdown"
+      },
+      "expected_status": "COMPLETED",
+      "expected_canonical_sections": ["executive_summary", "synthesis_outlook"],
+      "expected_metrics": [],
+      "min_required_citations": 1,
+      "min_required_tables": 0,
+      "allow_missing_metrics": true,
+      "expected_issues": ["speculative_forward_looking_disclaimer_required"],
+      "dataset_provenance": "synthetic_verification_probe"
+    }
+  ]
+}

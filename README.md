@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 11 Autonomous Financial Research Reports Complete](https://img.shields.io/badge/Status-Autonomous%20Reports%20Active-brightgreen.svg)]()
-[![Tests: 365 Passed](https://img.shields.io/badge/Tests-365%20Passed%20(100%25%20offline)-brightgreen.svg)]()
+[![Status: Session 12 Evaluation & Hardening Complete](https://img.shields.io/badge/Status-Evaluation%20%26%20Hardening%20Complete-brightgreen.svg)]()
+[![Tests: 396 Passed](https://img.shields.io/badge/Tests-396%20Passed%20(100%25%20offline)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -518,16 +518,37 @@ pytest -v --cov=backend --cov=config
 - [x] Reusable tools package for research, deterministic arithmetic, and verification (`backend/tools/`).
 - [x] FastAPI multi-agent endpoints (`POST /api/v1/agents/run`, `GET /api/v1/agents/workflows/{request_id}`, `GET /api/v1/agents/workflows`) (`backend/api/routes.py`).
 - [x] Dedicated Streamlit "Multi-Agent Research" workspace with visual execution trace timeline, KPI metrics, calculation receipts, and JSON inspection (`frontend/app.py`).
-- [x] 337 unit and integration tests executing 100% offline with 89% repository-wide code coverage (`tests/`).
-- [x] Architecture documentation in `docs/langgraph-multi-agent-architecture.md`.
+- [x] 365 unit and integration tests executing 100% offline with 89% repository-wide code coverage (`tests/`).
+- [x] Autonomous research brief and multi-section report generator (`backend/agents/report_agent.py`, `backend/agents/research_coordinator.py`).
+- [x] End-to-end evaluation & benchmarking framework across IR, financial math, anti-hallucination verification, and reports (`evaluation/`).
+- [x] Curated benchmark datasets for retrieval, calculations, claims, and reports (`evaluation/datasets/`).
+- [x] Pure deterministic financial arithmetic evaluator testing 10 canonical metrics, zero-denominator defense, and MAE calculation (`evaluation/financial_evaluator.py`).
+- [x] Claim verification evaluator testing Precision, Recall, FAR, FRR, and confusion matrix (`evaluation/verification_evaluator.py`).
+- [x] Unified information retrieval evaluator testing Precision@K, Recall@K, MRR, MAP, NDCG@K (`evaluation/retrieval_evaluator.py`).
+- [x] Multi-section report evaluator enforcing 8 canonical sections, table fulfillment, and limitations (`evaluation/report_evaluator.py`).
+- [x] Terminal CLI benchmark runner supporting multi-suite execution and JSON export (`evaluation/run_evaluation.py`).
+- [x] FastAPI evaluation endpoints (`POST /api/v1/evaluations/run`, `GET /api/v1/evaluations/{run_id}`, `GET /api/v1/evaluations`, `GET /api/v1/evaluations/{run_id}/cases`, `GET /api/v1/evaluations/benchmarks`).
+- [x] Dedicated Streamlit "Evaluation & Benchmarking" dashboard with scorecards, IR comparison, confusion matrix, and historical run browser (`frontend/evaluation_view.py`).
+- [x] Production hardening with question length limits (2000 chars), path traversal protection, and safe HTML escaping.
+- [x] 396 unit and integration tests executing 100% offline with 100% pass rate (`tests/`).
+- [x] Comprehensive documentation in `docs/evaluation-and-reliability-framework.md`.
 
 ---
 
-## 11. Future Development Roadmap
+## 11. System Evaluation & Benchmarking
 
-- **Session 11: Autonomous Financial Research Briefs & Multi-Section Report Generation**
-  - Longitudinal multi-year financial brief generation.
-  - Exportable PDF research reports with embedded calculation receipts, SEC EDGAR citations, and verification scorecards.
+Finova AI features an offline, reproducible evaluation framework:
+
+```bash
+# Run all benchmark suites
+python -m evaluation.run_evaluation --eval-type all
+
+# Run specific benchmark suite
+python -m evaluation.run_evaluation --eval-type financial_calculation
+python -m evaluation.run_evaluation --eval-type verification
+python -m evaluation.run_evaluation --eval-type retrieval --top-k 5
+python -m evaluation.run_evaluation --eval-type report
+```
 
 ---
 

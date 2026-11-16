@@ -4,6 +4,7 @@ Provides health diagnostics, company identity resolution, filing discovery,
 financial observations, and SEC filing document ingestion & chunking.
 """
 
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,12 @@ from backend.data.sec_client import (
     SECRateLimitError,
 )
 from backend.data.storage import Database
+from evaluation.evaluation_models import (
+    BenchmarkDatasetMeta,
+    EvaluationRunRequest,
+    EvaluationType,
+)
+from evaluation.run_evaluation import run_benchmarks
 from backend.evaluation.evidence_report import EvidenceReportGenerator
 from backend.evaluation.evidence_validator import EvidenceQualityValidator
 from backend.evaluation.retrieval_comparison import RetrievalComparator
@@ -1844,3 +1851,196 @@ def list_research_reports(
 ) -> list[dict[str, Any]]:
     """List stored financial research reports."""
     return _db.list_research_reports(ticker=ticker, limit=limit)
+
+
+# =============================================================================
+# Session 12: End-to-End Evaluation & Benchmarking Endpoints
+# =============================================================================
+
+
+@router.post(
+    "/evaluations/run",
+    response_model=dict[str, Any],
+    summary="Trigger Evaluation Benchmark Run",
+    description="Execute deterministic offline evaluation benchmark suites across retrieval, calculations, verification, or report generation.",
+    tags=["Evaluations & Benchmarks"],
+)
+def run_evaluation(request: EvaluationRunRequest) -> dict[str, Any]:
+    """Trigger an evaluation run and return execution summary."""
+    # Path traversal and input security validation
+    if request.dataset_path:
+        dpath = Path(request.dataset_path).resolve()
+        if not dpath.is_file():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Benchmark dataset file does not exist: {request.dataset_path}",
+            )
+
+    try:
+        runs = run_benchmarks(
+            eval_type=request.eval_type,
+            dataset_path=request.dataset_path,
+            top_k=request.top_k,
+            retrieval_mode=request.retrieval_mode or "hybrid",
+            save_to_db=request.save_results,
+        )
+    except Exception as exc:
+        logger.error("Evaluation run failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Evaluation execution failed: {str(exc)}",
+        )
+
+    if not runs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No evaluation suites executed for type '{request.eval_type}'.",
+        )
+
+    if len(runs) == 1:
+        r = runs[0]
+        return {
+            "run_id": r.run_id,
+            "eval_type": r.eval_type,
+            "status": r.status,
+            "total_cases": r.total_cases,
+            "passed_cases": r.passed_cases,
+            "failed_cases": r.failed_cases,
+            "pass_rate": r.summary.pass_rate if hasattr(r.summary, "pass_rate") else 0.0,
+            "duration_ms": r.duration_ms,
+            "summary": r.summary.model_dump() if hasattr(r.summary, "model_dump") else r.summary,
+            "metrics": [m.model_dump() for m in r.metrics],
+            "issues": [i.model_dump() for i in r.issues],
+        }
+    else:
+        return {
+            "runs_count": len(runs),
+            "eval_type": request.eval_type,
+            "run_ids": [r.run_id for r in runs],
+            "runs": [
+                {
+                    "run_id": r.run_id,
+                    "eval_type": r.eval_type,
+                    "total_cases": r.total_cases,
+                    "passed_cases": r.passed_cases,
+                    "pass_rate": r.summary.pass_rate if hasattr(r.summary, "pass_rate") else 0.0,
+                    "duration_ms": r.duration_ms,
+                    "summary": r.summary.model_dump() if hasattr(r.summary, "model_dump") else r.summary,
+                }
+                for r in runs
+            ],
+        }
+
+
+@router.get(
+    "/evaluations/benchmarks",
+    response_model=list[dict[str, Any]],
+    summary="List Benchmark Datasets",
+    description="Retrieve catalog and provenance metadata for offline benchmark datasets.",
+    tags=["Evaluations & Benchmarks"],
+)
+def list_benchmark_datasets() -> list[dict[str, Any]]:
+    """List all available benchmark datasets and metadata."""
+    datasets_dir = Path("evaluation/datasets")
+    benchmarks: list[dict[str, Any]] = []
+
+    benchmark_files = [
+        ("retrieval", "retrieval_benchmark.json"),
+        ("financial_calculation", "financial_calculation_benchmark.json"),
+        ("verification", "verification_benchmark.json"),
+        ("report", "report_benchmark.json"),
+    ]
+
+    for b_type, filename in benchmark_files:
+        file_path = datasets_dir / filename
+        if file_path.exists():
+            try:
+                with open(file_path, encoding="utf-8") as f:
+                    content = json.load(f)
+                meta = content.get("metadata", {})
+                cases_count = (
+                    len(content.get("queries", []))
+                    or len(content.get("cases", []))
+                    or len(content.get("scenarios", []))
+                )
+                benchmarks.append(
+                    {
+                        "benchmark_type": b_type,
+                        "filename": filename,
+                        "name": meta.get("benchmark_name", filename),
+                        "version": meta.get("version", "1.0.0"),
+                        "description": meta.get("description", ""),
+                        "total_cases": cases_count,
+                        "companies": meta.get("companies", []),
+                        "path": str(file_path),
+                    }
+                )
+            except Exception as exc:
+                benchmarks.append(
+                    {
+                        "benchmark_type": b_type,
+                        "filename": filename,
+                        "error": str(exc),
+                    }
+                )
+
+    return benchmarks
+
+
+@router.get(
+    "/evaluations/{run_id}",
+    response_model=dict[str, Any],
+    summary="Get Evaluation Run Details",
+    description="Retrieve complete evaluation run scorecard, summary, metrics, and recorded issues.",
+    tags=["Evaluations & Benchmarks"],
+)
+def get_evaluation_run(run_id: str) -> dict[str, Any]:
+    """Retrieve evaluation run by run_id."""
+    run = _db.get_evaluation_run(run_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evaluation run '{run_id}' not found.",
+        )
+    return run
+
+
+@router.get(
+    "/evaluations",
+    response_model=list[dict[str, Any]],
+    summary="List Evaluation Runs",
+    description="List historical evaluation benchmark executions with optional filter by evaluation type.",
+    tags=["Evaluations & Benchmarks"],
+)
+def list_evaluation_runs(
+    eval_type: str | None = Query(
+        default=None,
+        description="Filter by evaluation type (retrieval, financial_calculation, verification, report)",
+    ),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[dict[str, Any]]:
+    """List stored evaluation runs."""
+    return _db.list_evaluation_runs(eval_type=eval_type, limit=limit)
+
+
+@router.get(
+    "/evaluations/{run_id}/cases",
+    response_model=list[dict[str, Any]],
+    summary="Get Evaluation Case Results",
+    description="Retrieve itemized test case outcomes, expected vs actual values, and diagnostics for a run.",
+    tags=["Evaluations & Benchmarks"],
+)
+def get_evaluation_cases(
+    run_id: str,
+    passed: bool | None = Query(
+        default=None, description="Optional filter by pass status"
+    ),
+) -> list[dict[str, Any]]:
+    """Retrieve itemized case results for an evaluation run."""
+    run = _db.get_evaluation_run(run_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evaluation run '{run_id}' not found.",
+        )
+    return _db.get_evaluation_case_results(run_id=run_id, passed=passed)

@@ -486,6 +486,102 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_ref_report_id ON report_references (report_id);"
             )
 
+            # 16. Evaluation Runs Table (Session 12)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS evaluation_runs (
+                    run_id TEXT PRIMARY KEY,
+                    eval_type TEXT NOT NULL,
+                    dataset_name TEXT NOT NULL,
+                    dataset_version TEXT NOT NULL,
+                    software_version TEXT,
+                    commit_sha TEXT,
+                    config_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL,
+                    total_cases INTEGER NOT NULL DEFAULT 0,
+                    passed_cases INTEGER NOT NULL DEFAULT 0,
+                    failed_cases INTEGER NOT NULL DEFAULT 0,
+                    duration_ms REAL NOT NULL DEFAULT 0.0,
+                    summary_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_er_created_at ON evaluation_runs (created_at);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_er_eval_type ON evaluation_runs (eval_type);"
+            )
+
+            # 17. Evaluation Case Results Table (Session 12)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS evaluation_case_results (
+                    case_result_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    case_id TEXT NOT NULL,
+                    eval_type TEXT NOT NULL,
+                    passed INTEGER NOT NULL DEFAULT 1,
+                    metrics_json TEXT NOT NULL DEFAULT '{}',
+                    input_summary TEXT,
+                    expected_output TEXT,
+                    actual_output TEXT,
+                    error_message TEXT,
+                    provenance TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES evaluation_runs(run_id)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ecr_run_id ON evaluation_case_results (run_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ecr_case_id ON evaluation_case_results (case_id);"
+            )
+
+            # 18. Evaluation Metrics Table (Session 12)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS evaluation_metrics (
+                    metric_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    eval_type TEXT NOT NULL,
+                    metric_name TEXT NOT NULL,
+                    metric_value REAL NOT NULL,
+                    metric_category TEXT,
+                    details_json TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY (run_id) REFERENCES evaluation_runs(run_id)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_em_run_id ON evaluation_metrics (run_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_em_name ON evaluation_metrics (metric_name);"
+            )
+
+            # 19. Evaluation Issues Table (Session 12)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS evaluation_issues (
+                    issue_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL,
+                    case_id TEXT,
+                    issue_type TEXT NOT NULL,
+                    severity TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (run_id) REFERENCES evaluation_runs(run_id)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ei_run_id ON evaluation_issues (run_id);"
+            )
+
         logger.info("Database initialized successfully at: %s", self.db_path)
 
     def save_company(self, company_data: dict[str, Any]) -> None:
@@ -1642,3 +1738,311 @@ class Database:
                     (limit,),
                 ).fetchall()
             return [dict(r) for r in rows]
+
+    # =========================================================================
+    # Session 12: Evaluation & Benchmarking Persistence Methods
+    # =========================================================================
+
+    def save_evaluation_run(
+        self,
+        run_data: dict[str, Any] | Any = None,
+        case_results: list[dict[str, Any] | Any] | None = None,
+        metrics: list[dict[str, Any] | Any] | None = None,
+        issues: list[dict[str, Any] | Any] | None = None,
+        run: dict[str, Any] | Any = None,
+    ) -> None:
+        """Persist complete evaluation benchmark run, per-case outcomes, and metrics."""
+        actual_run = run if run is not None else run_data
+        if actual_run is None:
+            raise ValueError("Must provide run or run_data")
+
+        if hasattr(actual_run, "model_dump"):
+            run_dict = actual_run.model_dump()
+        elif isinstance(actual_run, dict):
+            run_dict = dict(actual_run)
+        else:
+            run_dict = dict(actual_run)
+
+        now_iso = datetime.now(UTC).isoformat()
+        run_id = run_dict["run_id"]
+
+        raw_cases = case_results if case_results is not None else run_dict.get("case_results", [])
+        cases: list[dict[str, Any]] = [
+            c.model_dump() if hasattr(c, "model_dump") else c for c in raw_cases
+        ]
+
+        raw_metrics = metrics if metrics is not None else run_dict.get("metrics", [])
+        metric_items: list[dict[str, Any]] = [
+            m.model_dump() if hasattr(m, "model_dump") else m for m in raw_metrics
+        ]
+
+        raw_issues = issues if issues is not None else run_dict.get("issues", [])
+        issue_items: list[dict[str, Any]] = [
+            i.model_dump() if hasattr(i, "model_dump") else i for i in raw_issues
+        ]
+
+        config_val = run_dict.get("config") or run_dict.get("config_json", {})
+        config_json = json.dumps(config_val) if not isinstance(config_val, str) else config_val
+
+        summary_val = run_dict.get("summary") or run_dict.get("summary_json", {})
+        if hasattr(summary_val, "model_dump"):
+            summary_val = summary_val.model_dump()
+        summary_json = json.dumps(summary_val) if not isinstance(summary_val, str) else summary_val
+
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO evaluation_runs (
+                    run_id, eval_type, dataset_name, dataset_version, software_version,
+                    commit_sha, config_json, status, total_cases, passed_cases,
+                    failed_cases, duration_ms, summary_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    status = excluded.status,
+                    total_cases = excluded.total_cases,
+                    passed_cases = excluded.passed_cases,
+                    failed_cases = excluded.failed_cases,
+                    duration_ms = excluded.duration_ms,
+                    summary_json = excluded.summary_json;
+                """,
+                (
+                    run_id,
+                    run_dict.get("eval_type", "all"),
+                    run_dict.get("dataset_name", "standard"),
+                    run_dict.get("dataset_version", "1.0.0"),
+                    run_dict.get("software_version", "1.0.0"),
+                    run_dict.get("commit_sha"),
+                    config_json,
+                    run_dict.get("status", "COMPLETED"),
+                    run_dict.get("total_cases", len(cases)),
+                    run_dict.get("passed_cases", 0),
+                    run_dict.get("failed_cases", 0),
+                    run_dict.get("duration_ms", 0.0),
+                    summary_json,
+                    run_dict.get("created_at", now_iso),
+                ),
+            )
+
+            # Insert case results
+            if cases:
+                for c in cases:
+                    metrics_val = c.get("metrics") or c.get("metrics_json") or c.get("details", {})
+                    m_json = json.dumps(metrics_val) if not isinstance(metrics_val, str) else metrics_val
+                    expected_str = c.get("expected_output") or c.get("expected")
+                    actual_str = c.get("actual_output") or c.get("actual")
+                    if isinstance(expected_str, (dict, list)):
+                        expected_str = json.dumps(expected_str)
+                    elif expected_str is not None:
+                        expected_str = str(expected_str)
+                    if isinstance(actual_str, (dict, list)):
+                        actual_str = json.dumps(actual_str)
+                    elif actual_str is not None:
+                        actual_str = str(actual_str)
+
+                    conn.execute(
+                        """
+                        INSERT INTO evaluation_case_results (
+                            case_result_id, run_id, case_id, eval_type, passed,
+                            metrics_json, input_summary, expected_output, actual_output,
+                            error_message, provenance, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(case_result_id) DO UPDATE SET
+                            passed = excluded.passed,
+                            metrics_json = excluded.metrics_json,
+                            actual_output = excluded.actual_output,
+                            error_message = excluded.error_message;
+                        """,
+                        (
+                            c.get("case_result_id", f"{run_id}_{c['case_id']}"),
+                            run_id,
+                            c["case_id"],
+                            c.get("eval_type", run_dict.get("eval_type", "general")),
+                            1 if c.get("passed", True) else 0,
+                            m_json,
+                            c.get("input_summary"),
+                            expected_str,
+                            actual_str,
+                            c.get("error_message"),
+                            c.get("provenance", c.get("details", {}).get("provenance", "synthetic_fixture")),
+                            c.get("created_at", now_iso),
+                        ),
+                    )
+
+            # Insert metrics
+            if metric_items:
+                for idx, m in enumerate(metric_items, start=1):
+                    details_val = m.get("details") or m.get("details_json", {})
+                    d_json = json.dumps(details_val) if not isinstance(details_val, str) else details_val
+                    conn.execute(
+                        """
+                        INSERT INTO evaluation_metrics (
+                            metric_id, run_id, eval_type, metric_name,
+                            metric_value, metric_category, details_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(metric_id) DO UPDATE SET
+                            metric_value = excluded.metric_value,
+                            details_json = excluded.details_json;
+                        """,
+                        (
+                            m.get("metric_id", f"{run_id}_m_{idx}"),
+                            run_id,
+                            m.get("eval_type", run_dict.get("eval_type", "general")),
+                            m["metric_name"],
+                            float(m["metric_value"]),
+                            m.get("metric_category", "macro"),
+                            d_json,
+                        ),
+                    )
+
+            # Insert issues
+            if issue_items:
+                for idx, iss in enumerate(issue_items, start=1):
+                    conn.execute(
+                        """
+                        INSERT INTO evaluation_issues (
+                            issue_id, run_id, case_id, issue_type,
+                            severity, description, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(issue_id) DO UPDATE SET
+                            severity = excluded.severity,
+                            description = excluded.description;
+                        """,
+                        (
+                            iss.get("issue_id", f"{run_id}_iss_{idx}"),
+                            run_id,
+                            iss.get("case_id"),
+                            iss.get("issue_type", "general_failure"),
+                            iss.get("severity", "MEDIUM"),
+                            iss["description"],
+                            iss.get("created_at", now_iso),
+                        ),
+                    )
+
+    def get_evaluation_run(self, run_id: str) -> dict[str, Any] | None:
+        """Retrieve evaluation benchmark summary and metadata by run_id."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM evaluation_runs WHERE run_id = ?;",
+                (run_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            run_dict = dict(row)
+            try:
+                run_dict["config"] = json.loads(run_dict.pop("config_json", "{}"))
+            except (json.JSONDecodeError, TypeError):
+                run_dict["config"] = {}
+            try:
+                run_dict["summary"] = json.loads(run_dict.pop("summary_json", "{}"))
+            except (json.JSONDecodeError, TypeError):
+                run_dict["summary"] = {}
+
+            run_dict["metrics"] = self.get_evaluation_metrics(run_id)
+            run_dict["issues"] = self.get_evaluation_issues(run_id)
+            return run_dict
+
+    def list_evaluation_runs(
+        self, eval_type: str | None = None, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """List historical evaluation runs ordered by newest first."""
+        with self.connection() as conn:
+            if eval_type:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM evaluation_runs
+                    WHERE eval_type = ?
+                    ORDER BY created_at DESC LIMIT ?;
+                    """,
+                    (eval_type.strip(), limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM evaluation_runs
+                    ORDER BY created_at DESC LIMIT ?;
+                    """,
+                    (limit,),
+                ).fetchall()
+
+            runs = []
+            for r in rows:
+                rd = dict(r)
+                try:
+                    rd["config"] = json.loads(rd.pop("config_json", "{}"))
+                except Exception:
+                    rd["config"] = {}
+                try:
+                    rd["summary"] = json.loads(rd.pop("summary_json", "{}"))
+                except Exception:
+                    rd["summary"] = {}
+                runs.append(rd)
+            return runs
+
+    def get_evaluation_case_results(
+        self, run_id: str, passed: bool | None = None
+    ) -> list[dict[str, Any]]:
+        """Fetch all per-case execution results for an evaluation run with optional passed filter."""
+        with self.connection() as conn:
+            if passed is not None:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM evaluation_case_results
+                    WHERE run_id = ? AND passed = ?
+                    ORDER BY created_at ASC;
+                    """,
+                    (run_id.strip(), 1 if passed else 0),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM evaluation_case_results
+                    WHERE run_id = ?
+                    ORDER BY created_at ASC;
+                    """,
+                    (run_id.strip(),),
+                ).fetchall()
+            results = []
+            for r in rows:
+                cd = dict(r)
+                cd["passed"] = bool(cd.get("passed", 1))
+                try:
+                    cd["metrics"] = json.loads(cd.pop("metrics_json", "{}"))
+                except Exception:
+                    cd["metrics"] = {}
+                results.append(cd)
+            return results
+
+    def get_evaluation_metrics(self, run_id: str) -> list[dict[str, Any]]:
+        """Fetch all aggregated metrics for an evaluation run."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM evaluation_metrics
+                WHERE run_id = ?
+                ORDER BY metric_name ASC;
+                """,
+                (run_id.strip(),),
+            ).fetchall()
+            results = []
+            for r in rows:
+                md = dict(r)
+                try:
+                    md["details"] = json.loads(md.pop("details_json", "{}"))
+                except Exception:
+                    md["details"] = {}
+                results.append(md)
+            return results
+
+    def get_evaluation_issues(self, run_id: str) -> list[dict[str, Any]]:
+        """Fetch all diagnostic issues logged during an evaluation run."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM evaluation_issues
+                WHERE run_id = ?
+                ORDER BY created_at ASC;
+                """,
+                (run_id.strip(),),
+            ).fetchall()
+            return [dict(r) for r in rows]
+

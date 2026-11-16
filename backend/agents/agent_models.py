@@ -105,6 +105,7 @@ class AgentRunRequest(BaseModel):
     question: str = Field(
         ...,
         min_length=3,
+        max_length=2000,
         description="Financial inquiry or research question",
         examples=["What were Apple's primary revenue drivers in fiscal year 2023?"],
     )
@@ -397,6 +398,7 @@ class ReportGenerationRequest(BaseModel):
     question: str = Field(
         ...,
         min_length=5,
+        max_length=2000,
         description="Research brief request or objective",
         examples=[
             "Analyze Microsoft's financial performance over the last three fiscal years, including revenue growth, profitability, cash flow, and major business risks."

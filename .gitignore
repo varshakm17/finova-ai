@@ -83,4 +83,5 @@ datasets/indexes/
 *.index
 *.npy
 notebooks/.ipynb_checkpoints/
+evaluation/results/
 

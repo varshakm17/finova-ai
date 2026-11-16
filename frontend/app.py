@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.utils.logger import get_logger
 from config.settings import get_settings
+from frontend.evaluation_view import render_evaluation_view
 
 logger = get_logger("frontend")
 
@@ -189,6 +190,7 @@ def main() -> None:
             "Navigation",
             options=[
                 "Overview",
+                "Evaluation & Benchmarking",
                 "Autonomous Research Reports",
                 "Multi-Agent Research",
                 "Company Lookup & Ingestion (SEC)",
@@ -229,9 +231,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 11</div>
+                    <div class="metric-value">Session 12</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Autonomous Research Briefs & Multi-Section Report Generation
+                        End-to-End Evaluation, Financial Accuracy & Production Hardening
                     </p>
                 </div>
                 """,
@@ -284,7 +286,13 @@ def main() -> None:
         )
 
     # -------------------------------------------------------------------------
-    # View 2: Autonomous Research Reports (Session 11)
+    # View 2: Evaluation & Benchmarking (Session 12)
+    # -------------------------------------------------------------------------
+    elif nav_selection == "Evaluation & Benchmarking":
+        render_evaluation_view(backend_url, settings)
+
+    # -------------------------------------------------------------------------
+    # View 3: Autonomous Research Reports (Session 11)
     # -------------------------------------------------------------------------
     elif nav_selection == "Autonomous Research Reports":
         st.markdown(

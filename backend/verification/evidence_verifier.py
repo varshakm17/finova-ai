@@ -191,6 +191,45 @@ class EvidenceVerifier:
                 warnings=[period_detail.explanation],
             )
 
+        # Check 4.5: Company Attribution Consistency Verification
+        if claim.mentioned_company:
+            ticker_aliases = {
+                "aapl": "apple",
+                "msft": "microsoft",
+                "tsla": "tesla",
+                "nvda": "nvidia",
+                "amzn": "amazon",
+                "goog": "google",
+                "googl": "google",
+                "meta": "meta",
+            }
+            claim_comp = claim.mentioned_company.lower()
+            for cid in cited_upper:
+                if cid in retrieved_map:
+                    passage = retrieved_map[cid]
+                    p_ticker = (passage.ticker or "").lower()
+                    p_name = (passage.company_name or "").lower()
+                    p_alias = ticker_aliases.get(p_ticker, "")
+                    if p_ticker or p_name or p_alias:
+                        company_match = (
+                            (p_ticker and (claim_comp in p_ticker or p_ticker in claim_comp))
+                            or (p_name and (claim_comp in p_name or p_name in claim_comp))
+                            or (p_alias and (claim_comp in p_alias or p_alias in claim_comp))
+                        )
+                        if not company_match:
+                            return ClaimVerificationResult(
+                                claim_id=claim.claim_id,
+                                claim_text=claim.claim_text,
+                                outcome=VerificationOutcome.CONTRADICTED,
+                                verification_reason=(
+                                    f"Company attribution mismatch: Claim refers to '{claim.mentioned_company}' "
+                                    f"but cited passage {cid} belongs to '{passage.company_name}' ({passage.ticker})."
+                                ),
+                                confidence_score=0.98,
+                                verification_method="company_verifier",
+                                warnings=[f"Company attribution mismatch: {claim.mentioned_company} vs {passage.ticker}"],
+                            )
+
         # Check 5: Numerical Verification
         numeric_details = self.numeric_verifier.verify_claim_numbers(
             claim=claim,

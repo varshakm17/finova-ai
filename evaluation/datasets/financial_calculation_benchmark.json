@@ -1,0 +1,381 @@
+{
+  "metadata": {
+    "benchmark_name": "finova_financial_calculation_benchmark",
+    "version": "1.0.0",
+    "description": "Exhaustive deterministic financial math test cases with independently calculated reference values covering normal, edge, missing-input, and zero-denominator conditions.",
+    "total_cases": 18,
+    "metrics_covered": [
+      "revenue_growth",
+      "gross_profit_margin",
+      "operating_profit_margin",
+      "net_profit_margin",
+      "current_ratio",
+      "debt_to_equity_ratio",
+      "return_on_assets",
+      "return_on_equity",
+      "operating_cash_flow_margin",
+      "free_cash_flow"
+    ],
+    "created_at": "2026-11-16T00:00:00Z"
+  },
+  "cases": [
+    {
+      "case_id": "CALC-001",
+      "metric_name": "gross_profit_margin",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Gross Profit Margin",
+      "inputs": {
+        "revenue": 383285000000.0,
+        "gross_profit": 169148000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 44.1311,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Apple FY2023 10-K: Gross Profit $169,148M / Total Net Sales $383,285M * 100 = 44.1311%."
+    },
+    {
+      "case_id": "CALC-002",
+      "metric_name": "revenue_growth",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Revenue Growth Rate",
+      "inputs": {
+        "current_revenue": 383285000000.0,
+        "previous_revenue": 394328000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": -2.8005,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "(383,285 - 394,328) / 394,328 * 100 = -2.8005%."
+    },
+    {
+      "case_id": "CALC-003",
+      "metric_name": "operating_profit_margin",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Operating Profit Margin",
+      "inputs": {
+        "revenue": 383285000000.0,
+        "operating_income": 114301000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 29.8214,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Operating Income $114,301M / Revenue $383,285M * 100 = 29.8214%."
+    },
+    {
+      "case_id": "CALC-004",
+      "metric_name": "net_profit_margin",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Net Profit Margin",
+      "inputs": {
+        "revenue": 383285000000.0,
+        "net_income": 96995000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 25.3062,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Net Income $96,995M / Revenue $383,285M * 100 = 25.3062%."
+    },
+    {
+      "case_id": "CALC-005",
+      "metric_name": "current_ratio",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "non_calendar_fiscal_year",
+      "formula_name": "Current Ratio",
+      "inputs": {
+        "current_assets": 143566000000.0,
+        "current_liabilities": 145308000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 0.9880,
+      "expected_unit": "ratio",
+      "tolerance_abs": 0.001,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Current Assets $143,566M / Current Liabilities $145,308M = 0.9880."
+    },
+    {
+      "case_id": "CALC-006",
+      "metric_name": "debt_to_equity_ratio",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Debt to Equity Ratio",
+      "inputs": {
+        "total_debt": 111088000000.0,
+        "stockholders_equity": 62146000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 1.7875,
+      "expected_unit": "ratio",
+      "tolerance_abs": 0.002,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Total Debt $111,088M / Stockholders Equity $62,146M = 1.7875."
+    },
+    {
+      "case_id": "CALC-007",
+      "metric_name": "return_on_assets",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Return on Assets",
+      "inputs": {
+        "net_income": 96995000000.0,
+        "total_assets": 352583000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 27.5098,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Net Income $96,995M / Total Assets $352,583M * 100 = 27.5098%."
+    },
+    {
+      "case_id": "CALC-008",
+      "metric_name": "return_on_equity",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Return on Equity",
+      "inputs": {
+        "net_income": 96995000000.0,
+        "stockholders_equity": 62146000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 156.0760,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.05,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Net Income $96,995M / Stockholders Equity $62,146M * 100 = 156.076%."
+    },
+    {
+      "case_id": "CALC-009",
+      "metric_name": "free_cash_flow",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Free Cash Flow",
+      "inputs": {
+        "operating_cash_flow": 110543000000.0,
+        "capital_expenditures": 10959000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 99584000000.0,
+      "expected_unit": "USD",
+      "tolerance_abs": 1.0,
+      "tolerance_pct": 0.01,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Operating Cash Flow $110,543M - CapEx $10,959M = $99,584M."
+    },
+    {
+      "case_id": "CALC-010",
+      "metric_name": "operating_cash_flow_margin",
+      "company_ticker": "AAPL",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "normal",
+      "formula_name": "Operating Cash Flow Margin",
+      "inputs": {
+        "operating_cash_flow": 110543000000.0,
+        "revenue": 383285000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 28.8409,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Operating Cash Flow $110,543M / Revenue $383,285M * 100 = 28.8409%."
+    },
+    {
+      "case_id": "CALC-011",
+      "metric_name": "gross_profit_margin",
+      "company_ticker": "SYNTH_ZERO",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "zero_denominator",
+      "formula_name": "Gross Profit Margin",
+      "inputs": {
+        "revenue": 0.0,
+        "gross_profit": 500000.0
+      },
+      "expected_status": "unavailable",
+      "expected_value": null,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.0,
+      "tolerance_pct": 0.0,
+      "dataset_provenance": "synthetic_fixture",
+      "explanation": "Zero revenue denominator is mathematically undefined; engine must return unavailable/None, not zero."
+    },
+    {
+      "case_id": "CALC-012",
+      "metric_name": "current_ratio",
+      "company_ticker": "SYNTH_ZERO_LIAB",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "zero_denominator",
+      "formula_name": "Current Ratio",
+      "inputs": {
+        "current_assets": 1000000.0,
+        "current_liabilities": 0.0
+      },
+      "expected_status": "unavailable",
+      "expected_value": null,
+      "expected_unit": "ratio",
+      "tolerance_abs": 0.0,
+      "tolerance_pct": 0.0,
+      "dataset_provenance": "synthetic_fixture",
+      "explanation": "Zero current liabilities denominator must be treated as unavailable rather than dividing by zero."
+    },
+    {
+      "case_id": "CALC-013",
+      "metric_name": "net_profit_margin",
+      "company_ticker": "SYNTH_LOSS",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "negative_values",
+      "formula_name": "Net Profit Margin",
+      "inputs": {
+        "revenue": 100000000.0,
+        "net_income": -15000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": -15.0,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "synthetic_fixture",
+      "explanation": "Negative net income represents net loss; formula preserves negative sign (-15%)."
+    },
+    {
+      "case_id": "CALC-014",
+      "metric_name": "free_cash_flow",
+      "company_ticker": "SYNTH_NEG_FCF",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "negative_values",
+      "formula_name": "Free Cash Flow",
+      "inputs": {
+        "operating_cash_flow": 25000000.0,
+        "capital_expenditures": 40000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": -15000000.0,
+      "expected_unit": "USD",
+      "tolerance_abs": 1.0,
+      "tolerance_pct": 0.01,
+      "dataset_provenance": "synthetic_fixture",
+      "explanation": "CapEx exceeding Operating Cash Flow produces negative Free Cash Flow (cash burn)."
+    },
+    {
+      "case_id": "CALC-015",
+      "metric_name": "operating_profit_margin",
+      "company_ticker": "SYNTH_MISSING",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "missing_inputs",
+      "formula_name": "Operating Profit Margin",
+      "inputs": {
+        "operating_income": 50000000.0
+      },
+      "expected_status": "unavailable",
+      "expected_value": null,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.0,
+      "tolerance_pct": 0.0,
+      "dataset_provenance": "synthetic_fixture",
+      "explanation": "Revenue is missing; calculation must return status unavailable without raising unhandled exception."
+    },
+    {
+      "case_id": "CALC-016",
+      "metric_name": "debt_to_equity_ratio",
+      "company_ticker": "SYNTH_MISSING_EQ",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "missing_inputs",
+      "formula_name": "Debt to Equity Ratio",
+      "inputs": {
+        "total_debt": 80000000.0
+      },
+      "expected_status": "unavailable",
+      "expected_value": null,
+      "expected_unit": "ratio",
+      "tolerance_abs": 0.0,
+      "tolerance_pct": 0.0,
+      "dataset_provenance": "synthetic_fixture",
+      "explanation": "Stockholders equity observation missing; ratio cannot be computed."
+    },
+    {
+      "case_id": "CALC-017",
+      "metric_name": "gross_profit_margin",
+      "company_ticker": "MSFT",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "non_calendar_fiscal_year",
+      "formula_name": "Gross Profit Margin",
+      "inputs": {
+        "revenue": 211915000000.0,
+        "gross_profit": 146052000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 68.9201,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.05,
+      "dataset_provenance": "verified_sec_xbrl_inputs",
+      "explanation": "Microsoft June 30 FY2023 10-K: Gross Profit $146,052M / Revenue $211,915M * 100 = 68.9201%."
+    },
+    {
+      "case_id": "CALC-018",
+      "metric_name": "revenue_growth",
+      "company_ticker": "SYNTH_RESTATED",
+      "fiscal_year": 2023,
+      "fiscal_period": "FY",
+      "test_scenario": "restated_amended",
+      "formula_name": "Revenue Growth Rate",
+      "inputs": {
+        "current_revenue": 120000000.0,
+        "previous_revenue": 100000000.0
+      },
+      "expected_status": "calculated",
+      "expected_value": 20.0,
+      "expected_unit": "percentage",
+      "tolerance_abs": 0.01,
+      "tolerance_pct": 0.01,
+      "dataset_provenance": "synthetic_fixture",
+      "explanation": "Prior period restated revenue of $100M yields exactly 20.0% revenue growth on $120M."
+    }
+  ]
+}

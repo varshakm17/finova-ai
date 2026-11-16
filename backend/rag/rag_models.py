@@ -18,6 +18,7 @@ class RAGRequest(BaseModel):
     question: str = Field(
         ...,
         min_length=1,
+        max_length=2000,
         description="Natural-language corporate finance or statutory disclosure question",
     )
     ticker: str | None = Field(
