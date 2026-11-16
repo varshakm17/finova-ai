@@ -113,6 +113,18 @@ COMPARATIVE_KEYWORDS = {
     "competitor",
 }
 
+REPORT_KEYWORDS = {
+    "report",
+    "research brief",
+    "financial brief",
+    "comprehensive analysis",
+    "full analysis",
+    "detailed report",
+    "multi-section report",
+    "executive brief",
+    "research report",
+}
+
 COMMON_ACRONYM_STOPWORDS = {
     "A",
     "I",
@@ -239,7 +251,27 @@ class SupervisorAgent(BaseFinovaAgent):
                 "Question is ambiguous or lacks sufficient financial context.",
             )
 
-        # 2. Check for Comparative Research
+        # 2. Check for Report Generation
+        has_report_kw = any(
+            re.search(rf"\b{re.escape(kw)}\b", lower_q) for kw in REPORT_KEYWORDS
+        )
+        if has_report_kw:
+            reason = "Detected financial research report generation request."
+            return (
+                AgentIntent.REPORT_GENERATION,
+                AgentWorkflowType.FINANCIAL_RESEARCH_REPORT,
+                [
+                    "research_planner",
+                    "research_agent",
+                    "financial_analyst_agent",
+                    "research_coordinator",
+                    "report_agent",
+                    "verification_agent",
+                ],
+                reason,
+            )
+
+        # 3. Check for Comparative Research
         has_comparative_kw = any(
             re.search(rf"\b{re.escape(kw)}\b", lower_q) for kw in COMPARATIVE_KEYWORDS
         )
@@ -322,6 +354,25 @@ class SupervisorAgent(BaseFinovaAgent):
         intent, workflow_type, selected_agents, routing_reason = self.classify_intent(
             question, detected_tickers
         )
+
+        # Allow explicit override from state if caller specifically requested report generation
+        if (
+            state.get("workflow_type")
+            == AgentWorkflowType.FINANCIAL_RESEARCH_REPORT.value
+        ):
+            intent = AgentIntent.REPORT_GENERATION
+            workflow_type = AgentWorkflowType.FINANCIAL_RESEARCH_REPORT
+            selected_agents = [
+                "research_planner",
+                "research_agent",
+                "financial_analyst_agent",
+                "research_coordinator",
+                "report_agent",
+                "verification_agent",
+            ]
+            routing_reason = (
+                "Explicit request for financial research report generation."
+            )
 
         trace_summary = (
             f"Classified intent as {intent.value} -> workflow {workflow_type.value}. "

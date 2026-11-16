@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 from backend.agents.agent_models import (
     AgentRunRequest,
     AgentRunResponse,
+    ReportGenerationRequest,
+    ReportGenerationResponse,
     WorkflowRun,
 )
 from backend.data.company_service import CompanyService, normalize_ticker
@@ -1750,3 +1752,95 @@ def list_agent_workflows(
 ) -> list[dict[str, Any]]:
     """List recent agent workflow runs."""
     return _db.list_recent_workflows(limit=limit)
+
+
+# =============================================================================
+# Session 11: Autonomous Financial Research Briefs & Reports Endpoints
+# =============================================================================
+
+
+@router.post(
+    "/reports/generate",
+    response_model=ReportGenerationResponse,
+    summary="Generate Autonomous Financial Research Report",
+    description="Plan, execute multi-task research, compute deterministic longitudinal trends, compile multi-section report in Markdown/HTML, and audit claims.",
+    tags=["Financial Research Reports"],
+)
+def generate_research_report(
+    request: ReportGenerationRequest,
+) -> ReportGenerationResponse:
+    """Execute end-to-end autonomous financial research brief generation."""
+    try:
+        engine = get_orchestration_engine()
+        return engine.run_report(request)
+    except Exception as exc:
+        logger.error(
+            "Error generating financial research report: %s", exc, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Report generation failed: {exc}",
+        ) from exc
+
+
+@router.get(
+    "/reports/{report_id}",
+    response_model=dict[str, Any],
+    summary="Get Financial Research Report",
+    description="Retrieve a stored multi-section financial research brief with sections and statutory references.",
+    tags=["Financial Research Reports"],
+)
+def get_research_report(report_id: str) -> dict[str, Any]:
+    """Retrieve report by unique report_id."""
+    report = _db.get_research_report(report_id)
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Financial research report '{report_id}' not found.",
+        )
+    return report
+
+
+@router.get(
+    "/reports/{report_id}/verification",
+    response_model=dict[str, Any],
+    summary="Get Report Verification Audit",
+    description="Retrieve claim-level verification results and anti-hallucination audits for a research report.",
+    tags=["Financial Research Reports"],
+)
+def get_report_verification(report_id: str) -> dict[str, Any]:
+    """Retrieve verification audit for a report by report_id."""
+    report = _db.get_research_report(report_id)
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Financial research report '{report_id}' not found.",
+        )
+
+    verification_run = _db.get_verification_run(report_id)
+    if verification_run:
+        return verification_run
+
+    return {
+        "report_id": report_id,
+        "verification_status": report.get("verification_status", "UNVERIFIED"),
+        "status": report.get("status", "completed"),
+        "is_valid": report.get("verification_status") != "REJECTED",
+    }
+
+
+@router.get(
+    "/reports",
+    response_model=list[dict[str, Any]],
+    summary="List Financial Research Reports",
+    description="List historical autonomous financial research briefs with optional ticker filter.",
+    tags=["Financial Research Reports"],
+)
+def list_research_reports(
+    ticker: str | None = Query(
+        default=None, description="Optional stock ticker filter (e.g. AAPL)"
+    ),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[dict[str, Any]]:
+    """List stored financial research reports."""
+    return _db.list_research_reports(ticker=ticker, limit=limit)

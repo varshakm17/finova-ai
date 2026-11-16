@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 10 LangGraph Multi-Agent Orchestration Complete](https://img.shields.io/badge/Status-LangGraph%20Multi--Agent%20Active-brightgreen.svg)]()
-[![Tests: 337 Passed](https://img.shields.io/badge/Tests-337%20Passed%20(89%25%20cov)-brightgreen.svg)]()
+[![Status: Session 11 Autonomous Financial Research Reports Complete](https://img.shields.io/badge/Status-Autonomous%20Reports%20Active-brightgreen.svg)]()
+[![Tests: 365 Passed](https://img.shields.io/badge/Tests-365%20Passed%20(100%25%20offline)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -92,6 +92,9 @@ For detailed architectural specifications, agent definitions, sequence diagrams,
 - [hybrid-retrieval.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/hybrid-retrieval.md) — BM25 sparse search, domain-aware financial tokenization, and Reciprocal Rank Fusion (RRF).
 - [retrieval-evaluation-and-evidence-quality.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/retrieval-evaluation-and-evidence-quality.md) — Empirical IR evaluation metrics, cross-encoder reranking, and deterministic evidence quality audits.
 - [grounded-rag-and-llm-integration.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/grounded-rag-and-llm-integration.md) — Local LLM provider integration, multi-modal context building, citation verification, and evidence-grounded financial RAG.
+- [answer-verification-and-anti-hallucination.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/answer-verification-and-anti-hallucination.md) — Claim-level anti-hallucination engine, numerical verification, and contradiction detection.
+- [langgraph-multi-agent-architecture.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/langgraph-multi-agent-architecture.md) — LangGraph Supervisor orchestration and multi-agent execution tracing.
+- [autonomous-financial-research-and-report-generation.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/autonomous-financial-research-and-report-generation.md) — Autonomous multi-task planning, longitudinal financial trends, and multi-section Markdown/HTML brief generation.
 
 ---
 

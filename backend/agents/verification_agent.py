@@ -2,6 +2,7 @@
 
 Performs claim-level anti-hallucination verification across numerical values,
 reporting periods, and factual claims against retrieved evidence and receipts.
+Verifies single answers as well as multi-section financial research reports.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ logger = get_logger("verification_agent")
 
 
 class VerificationAgent(BaseFinovaAgent):
-    """Verification Agent auditing generated answers before user presentation."""
+    """Verification Agent auditing generated answers and research briefs before user presentation."""
 
     def __init__(
         self,
@@ -49,7 +50,9 @@ class VerificationAgent(BaseFinovaAgent):
                     chunk_id=str(ev.get("chunk_id", f"chunk_{idx}")),
                     ticker=str(ev.get("ticker", "AAPL")),
                     company_name=str(ev.get("company_name", "Target Company")),
-                    filing_type=str(ev.get("filing_type", "10-K")),
+                    filing_type=str(
+                        ev.get("filing_type") or ev.get("form_type", "10-K")
+                    ),
                     filing_date=str(ev.get("filing_date", "2023-11-03")),
                     report_date=ev.get("report_date", "2023-09-30"),
                     accession_number=str(
@@ -83,7 +86,9 @@ class VerificationAgent(BaseFinovaAgent):
                     calculated_value=fval,
                     unit=str(ce.get("unit", "ratio")),
                     formula=str(
-                        ce.get("formula_definition") or ce.get("formula", "N/A")
+                        ce.get("formula_definition")
+                        or ce.get("formula")
+                        or ce.get("formula_expression", "N/A")
                     ),
                     period_start=ce.get("period_start"),
                     period_end=str(ce.get("period_end", "2023-09-30")),
@@ -94,13 +99,76 @@ class VerificationAgent(BaseFinovaAgent):
             )
         return converted
 
+    def verify_report(
+        self,
+        report_data: dict[str, Any],
+        evidence: list[dict[str, Any]],
+        receipts: list[dict[str, Any]],
+        question: str = "",
+    ) -> dict[str, Any]:
+        """Verify all claims and numbers across an autonomous research report."""
+        report_id = report_data.get("report_id", str(uuid.uuid4()))
+        markdown_text = report_data.get("markdown_content") or ""
+        retrieved_objs = self._convert_retrieved_evidence(evidence)
+        calc_objs = self._convert_calculation_evidence(receipts)
+
+        run_result = self.verifier.verify_answer(
+            answer_id=report_id,
+            question=question or report_data.get("title", "Financial Research Report"),
+            answer_text=markdown_text,
+            retrieved_evidence=retrieved_objs,
+            calculation_evidence=calc_objs,
+            persist=True,
+        )
+
+        status_val = run_result.overall_status.value
+        is_valid = status_val != OverallVerificationStatus.REJECTED.value
+
+        # Update sections verification status
+        if "sections" in report_data and isinstance(report_data["sections"], list):
+            for sec in report_data["sections"]:
+                if isinstance(sec, dict):
+                    sec["verification_status"] = status_val
+                elif hasattr(sec, "verification_status"):
+                    sec.verification_status = status_val
+
+        report_data["verification_status"] = status_val
+        if "metadata" in report_data and isinstance(report_data["metadata"], dict):
+            report_data["metadata"]["verification_status"] = status_val
+        if not is_valid:
+            report_data["status"] = "REJECTED"
+
+        result_dict = run_result.model_dump()
+        result_dict["is_valid"] = is_valid
+        return result_dict
+
     def execute(self, state: FinovaAgentState) -> dict[str, Any]:
-        """Execute claim-level verification over generated answer."""
+        """Execute claim-level verification over generated answer or multi-section report."""
         question = state.get("user_question", "")
-        answer_text = state.get("generated_answer", "")
+        generated_report = state.get("generated_report")
+        report_markdown = state.get("report_markdown")
+        answer_text = report_markdown or state.get("generated_answer", "")
         raw_retrieved = state.get("retrieved_evidence", [])
         raw_calcs = state.get("calculation_results", [])
         answer_id = state.get("request_id", str(uuid.uuid4()))
+
+        # Check for report workflow
+        if generated_report and isinstance(generated_report, dict):
+            verification_audit = self.verify_report(
+                report_data=generated_report,
+                evidence=raw_retrieved,
+                receipts=raw_calcs,
+                question=question,
+            )
+            is_valid = verification_audit.get("is_valid", True)
+            return {
+                "report_verification": verification_audit,
+                "verification_result": verification_audit,
+                "generated_report": generated_report,
+                "final_answer": report_markdown if is_valid else None,
+                "current_step": "verification_agent",
+                "warnings": verification_audit.get("warnings", []),
+            }
 
         # If there is no answer or an insufficient evidence notice
         if (

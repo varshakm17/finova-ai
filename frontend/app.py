@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Ensure project root is in sys.path for relative imports
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -188,6 +189,7 @@ def main() -> None:
             "Navigation",
             options=[
                 "Overview",
+                "Autonomous Research Reports",
                 "Multi-Agent Research",
                 "Company Lookup & Ingestion (SEC)",
                 "Hybrid Research Search (RRF)",
@@ -227,9 +229,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 10</div>
+                    <div class="metric-value">Session 11</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        LangGraph Multi-Agent Orchestration & Supervisor Routing
+                        Autonomous Research Briefs & Multi-Section Report Generation
                     </p>
                 </div>
                 """,
@@ -276,10 +278,264 @@ def main() -> None:
         )
 
         st.info(
-            "📌 **Session 10 Active**: LangGraph Multi-Agent Orchestration is fully operational. "
-            "Navigate to **Multi-Agent Research** to run orchestrated queries across Supervisor, "
-            "Research, Financial Analyst, RAG, and Verification agents."
+            "📌 **Session 11 Active**: Autonomous Financial Research Briefs & Multi-Section Report Generation is fully operational. "
+            "Navigate to **Autonomous Research Reports** to plan, execute multi-task research, analyze longitudinal trends, "
+            "and generate auditable reports in Markdown and HTML."
         )
+
+    # -------------------------------------------------------------------------
+    # View 2: Autonomous Research Reports (Session 11)
+    # -------------------------------------------------------------------------
+    elif nav_selection == "Autonomous Research Reports":
+        st.markdown(
+            "### 📑 Autonomous Financial Research Reports & Intelligence Briefs"
+        )
+        st.caption(
+            "End-to-end autonomous research orchestration: deterministic task planning, multi-period trend computation, "
+            "multi-section Markdown/HTML synthesis, and claim-level anti-hallucination verification."
+        )
+
+        with st.form("report_generation_form"):
+            r_col1, r_col2 = st.columns([3, 1])
+            with r_col1:
+                rep_question = st.text_area(
+                    "Research Objective / Brief Scope",
+                    value="Analyze Apple's financial performance, profitability margins, revenue growth trends, and key operational risk factors.",
+                    height=100,
+                    help="Describe the research objective. The Research Planner will decompose this into specialized filing and calculation tasks.",
+                )
+            with r_col2:
+                rep_ticker = st.text_input(
+                    "Target Ticker",
+                    value="AAPL",
+                    placeholder="e.g. AAPL, MSFT, NVDA",
+                )
+                rep_period = st.text_input(
+                    "Reporting Period",
+                    value="FY2022-FY2023",
+                    placeholder="e.g. FY2023, FY2022-FY2023",
+                )
+                rep_format = st.selectbox(
+                    "Deliverable Format",
+                    options=["markdown", "html"],
+                    index=0,
+                )
+
+            with st.expander("⚙️ Advanced Parameters"):
+                p1, p2 = st.columns(2)
+                with p1:
+                    rep_max_steps = st.slider("Max Execution Steps", 5, 30, 20)
+                with p2:
+                    rep_timeout = st.slider("Timeout (seconds)", 15, 300, 120)
+
+            submitted_report = st.form_submit_button(
+                "🚀 Generate Autonomous Financial Brief", use_container_width=True
+            )
+
+        if submitted_report:
+            with st.spinner(
+                "Executing autonomous research planning, task retrieval, trend calculation, and verification..."
+            ):
+                try:
+                    payload = {
+                        "question": rep_question,
+                        "ticker": rep_ticker.strip().upper() if rep_ticker else None,
+                        "reporting_period": rep_period.strip() if rep_period else None,
+                        "output_format": rep_format,
+                        "max_steps": rep_max_steps,
+                        "timeout_seconds": rep_timeout,
+                    }
+                    resp = httpx.post(
+                        f"{backend_url}/api/v1/reports/generate",
+                        json=payload,
+                        timeout=float(rep_timeout) + 10.0,
+                    )
+                    if resp.status_code == 200:
+                        st.session_state["last_report"] = resp.json()
+                        st.success(
+                            "✅ Autonomous research report successfully generated and verified!"
+                        )
+                    else:
+                        st.error(
+                            f"Report generation failed ({resp.status_code}): {resp.text}"
+                        )
+                except Exception as exc:
+                    st.error(f"Error communicating with backend API: {exc}")
+
+        # Display Report Results
+        last_rep = st.session_state.get("last_report")
+        if last_rep:
+            st.markdown("---")
+            m1, m2, m3, m4, m5 = st.columns(5)
+            v_stat = last_rep.get("verification_status", "UNKNOWN")
+            is_verified = (
+                "VERIFIED" in v_stat
+                and "NOT" not in v_stat
+                and "REJECTED" not in v_stat
+            )
+
+            with m1:
+                st.metric("Report Status", last_rep.get("status", "completed").upper())
+            with m2:
+                st.metric("Verification", v_stat)
+            with m3:
+                st.metric("Sections", last_rep.get("total_sections", 0))
+            with m4:
+                st.metric("Statutory Sources", last_rep.get("total_evidence_cited", 0))
+            with m5:
+                dur_s = round(last_rep.get("execution_time_ms", 0) / 1000.0, 2)
+                st.metric("Execution Time", f"{dur_s}s")
+
+            # Report Navigation Tabs
+            tab_report, tab_plan, tab_trends, tab_verification, tab_html = st.tabs(
+                [
+                    "📄 Full Research Brief",
+                    "📋 Autonomous Research Plan",
+                    "📈 Longitudinal Trends & Ratios",
+                    "🛡️ Claim Verification Audit",
+                    "🌐 Publication HTML View",
+                ]
+            )
+
+            report_obj = last_rep.get("report") or {}
+
+            with tab_report:
+                md_content = last_rep.get("markdown_content") or report_obj.get(
+                    "markdown_content", ""
+                )
+                if md_content:
+                    st.markdown(md_content)
+                    st.download_button(
+                        "📥 Download Markdown Report (.md)",
+                        data=md_content,
+                        file_name=f"finova_report_{last_rep.get('report_id', 'brief')}.md",
+                        mime="text/markdown",
+                        use_container_width=True,
+                    )
+                else:
+                    st.warning("No markdown content available.")
+
+            with tab_plan:
+                st.markdown("#### Autonomous Plan Execution Summary")
+                st.info(last_rep.get("plan_summary", "Autonomous plan executed."))
+                sections = report_obj.get("sections", [])
+                if sections:
+                    st.markdown("##### Target Sections & Coverage")
+                    for sec in sections:
+                        st.markdown(
+                            f"- **{sec.get('title', 'Section')}** (Order: {sec.get('order_index', 0)}) — Status: `{sec.get('verification_status', 'VERIFIED')}`"
+                        )
+
+            with tab_trends:
+                st.markdown(
+                    "#### Deterministic Financial Calculations & Comparative Tables"
+                )
+                st.caption(
+                    "Computed strictly with Python formulas from XBRL facts — Zero LLM arithmetic."
+                )
+                # Show sections that have tables
+                for sec in report_obj.get("sections", []):
+                    if sec.get("tables"):
+                        for tbl in sec["tables"]:
+                            st.markdown(f"##### {tbl.get('title')}")
+                            headers = tbl.get("headers", [])
+                            rows = tbl.get("rows", [])
+                            if headers and rows:
+                                st.table([dict(zip(headers, r)) for r in rows])
+
+            with tab_verification:
+                st.markdown("#### Anti-Hallucination Claim-Level Verification Audit")
+                if is_verified:
+                    st.success(
+                        f"Audit Result: `{v_stat}` — All factual claims and numerical figures are grounded."
+                    )
+                else:
+                    st.warning(
+                        f"Audit Result: `{v_stat}` — Numerical discrepancies or unsupported assertions detected."
+                    )
+
+                refs = report_obj.get("references", [])
+                if refs:
+                    st.markdown("##### Auditable References & Citations")
+                    for r in refs:
+                        st.markdown(
+                            f"- **`[{r.get('citation_id')}]` {r.get('filing_name', 'Source')}**: "
+                            f"{r.get('description', '')} (Acc: `{r.get('accession_number', 'N/A')}`)"
+                        )
+
+            with tab_html:
+                html_code = last_rep.get("html_content") or report_obj.get(
+                    "html_content", ""
+                )
+                if html_code:
+                    components.html(html_code, height=650, scrolling=True)
+                    st.download_button(
+                        "📥 Download HTML Report (.html)",
+                        data=html_code,
+                        file_name=f"finova_report_{last_rep.get('report_id', 'brief')}.html",
+                        mime="text/html",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("HTML deliverable format was not generated for this run.")
+
+        # Historical Reports Section
+        st.markdown("---")
+        st.markdown("### 🗄️ Historical Research Briefs")
+        hist_col1, hist_col2 = st.columns([2, 1])
+        with hist_col1:
+            filter_ticker = st.text_input(
+                "Filter by Ticker", value="", placeholder="e.g. AAPL"
+            )
+        with hist_col2:
+            st.write("")
+            st.write("")
+            st.button("🔄 Refresh Reports", use_container_width=True)
+
+        try:
+            params = {}
+            if filter_ticker.strip():
+                params["ticker"] = filter_ticker.strip().upper()
+            h_resp = httpx.get(
+                f"{backend_url}/api/v1/reports", params=params, timeout=10.0
+            )
+            if h_resp.status_code == 200:
+                past_reports = h_resp.json()
+                if past_reports:
+                    for rep_item in past_reports[:10]:
+                        with st.expander(
+                            f"Brief: {rep_item.get('title')} ({rep_item.get('reporting_period', 'N/A')}) - {rep_item.get('verification_status')}"
+                        ):
+                            st.write(f"**Report ID:** `{rep_item.get('report_id')}`")
+                            st.write(f"**Created At:** {rep_item.get('created_at')}")
+                            st.write(f"**Status:** {rep_item.get('status')}")
+                            if st.button(
+                                "Load Report", key=f"load_{rep_item.get('report_id')}"
+                            ):
+                                full_rep = httpx.get(
+                                    f"{backend_url}/api/v1/reports/{rep_item.get('report_id')}"
+                                ).json()
+                                st.session_state["last_report"] = {
+                                    "status": full_rep.get("status"),
+                                    "verification_status": full_rep.get(
+                                        "verification_status"
+                                    ),
+                                    "report": full_rep,
+                                    "markdown_content": full_rep.get(
+                                        "markdown_content"
+                                    ),
+                                    "html_content": full_rep.get("html_content"),
+                                    "total_sections": len(full_rep.get("sections", [])),
+                                    "total_evidence_cited": len(
+                                        full_rep.get("references", [])
+                                    ),
+                                    "plan_summary": "Retrieved from persistent storage.",
+                                }
+                                st.rerun()
+                else:
+                    st.caption("No historical research briefs found.")
+        except Exception as exc:
+            st.caption(f"Unable to load historical reports: {exc}")
 
     # -------------------------------------------------------------------------
     # View 2: Multi-Agent Research (Session 10)

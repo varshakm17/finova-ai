@@ -381,6 +381,111 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_aee_step_index ON agent_execution_events (request_id, step_index);"
             )
 
+            # 12. Research Plans Table (Session 11)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS research_plans (
+                    plan_id TEXT PRIMARY KEY,
+                    request_id TEXT NOT NULL,
+                    company_name TEXT NOT NULL,
+                    ticker TEXT,
+                    cik TEXT,
+                    objective TEXT NOT NULL,
+                    reporting_period TEXT,
+                    fiscal_years_json TEXT NOT NULL DEFAULT '[]',
+                    required_filing_types_json TEXT NOT NULL DEFAULT '[]',
+                    required_metrics_json TEXT NOT NULL DEFAULT '[]',
+                    narrative_topics_json TEXT NOT NULL DEFAULT '[]',
+                    expected_sections_json TEXT NOT NULL DEFAULT '[]',
+                    tasks_json TEXT NOT NULL DEFAULT '[]',
+                    is_valid INTEGER NOT NULL DEFAULT 1,
+                    planning_method TEXT NOT NULL DEFAULT 'deterministic',
+                    created_at TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_rp_request_id ON research_plans (request_id);"
+            )
+
+            # 13. Financial Research Reports Table (Session 11)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS financial_research_reports (
+                    report_id TEXT PRIMARY KEY,
+                    request_id TEXT NOT NULL,
+                    plan_id TEXT,
+                    ticker TEXT,
+                    company_name TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    reporting_period TEXT,
+                    status TEXT NOT NULL,
+                    verification_status TEXT NOT NULL DEFAULT 'UNVERIFIED',
+                    executive_summary TEXT,
+                    markdown_content TEXT NOT NULL,
+                    html_content TEXT,
+                    total_sections INTEGER NOT NULL DEFAULT 0,
+                    total_evidence_cited INTEGER NOT NULL DEFAULT 0,
+                    total_calculations_cited INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_frr_request_id ON financial_research_reports (request_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_frr_ticker ON financial_research_reports (ticker);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_frr_created_at ON financial_research_reports (created_at);"
+            )
+
+            # 14. Report Sections Table (Session 11)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS report_sections (
+                    section_id TEXT PRIMARY KEY,
+                    report_id TEXT NOT NULL,
+                    section_key TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    order_index INTEGER NOT NULL,
+                    content_markdown TEXT NOT NULL,
+                    evidence_ids_json TEXT NOT NULL DEFAULT '[]',
+                    calculation_ids_json TEXT NOT NULL DEFAULT '[]',
+                    verification_status TEXT NOT NULL DEFAULT 'UNVERIFIED',
+                    FOREIGN KEY (report_id) REFERENCES financial_research_reports(report_id)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_rs_report_id ON report_sections (report_id);"
+            )
+
+            # 15. Report References Table (Session 11)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS report_references (
+                    reference_id TEXT PRIMARY KEY,
+                    report_id TEXT NOT NULL,
+                    ref_type TEXT NOT NULL,
+                    citation_id TEXT NOT NULL,
+                    filing_name TEXT,
+                    form_type TEXT,
+                    filing_date TEXT,
+                    reporting_period TEXT,
+                    accession_number TEXT,
+                    sec_url TEXT,
+                    description TEXT,
+                    FOREIGN KEY (report_id) REFERENCES financial_research_reports(report_id)
+                );
+                """
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ref_report_id ON report_references (report_id);"
+            )
+
         logger.info("Database initialized successfully at: %s", self.db_path)
 
     def save_company(self, company_data: dict[str, Any]) -> None:
@@ -1251,3 +1356,289 @@ class Database:
                     d["metadata"] = {}
                 result.append(d)
             return result
+
+    # =========================================================================
+    # Session 11: Autonomous Research Planning & Report Persistence
+    # =========================================================================
+
+    def save_research_plan(self, plan: dict[str, Any]) -> None:
+        """Persist a structured research plan."""
+        now_iso = datetime.now(UTC).isoformat()
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO research_plans (
+                    plan_id, request_id, company_name, ticker, cik, objective,
+                    reporting_period, fiscal_years_json, required_filing_types_json,
+                    required_metrics_json, narrative_topics_json, expected_sections_json,
+                    tasks_json, is_valid, planning_method, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(plan_id) DO UPDATE SET
+                    objective = excluded.objective,
+                    reporting_period = excluded.reporting_period,
+                    fiscal_years_json = excluded.fiscal_years_json,
+                    required_filing_types_json = excluded.required_filing_types_json,
+                    required_metrics_json = excluded.required_metrics_json,
+                    narrative_topics_json = excluded.narrative_topics_json,
+                    expected_sections_json = excluded.expected_sections_json,
+                    tasks_json = excluded.tasks_json,
+                    is_valid = excluded.is_valid,
+                    planning_method = excluded.planning_method;
+                """,
+                (
+                    plan["plan_id"],
+                    plan["request_id"],
+                    plan["company_name"],
+                    plan.get("ticker"),
+                    plan.get("cik"),
+                    plan["objective"],
+                    plan.get("reporting_period"),
+                    json.dumps(plan.get("fiscal_years", [])),
+                    json.dumps(plan.get("required_filing_types", [])),
+                    json.dumps(plan.get("required_metrics", [])),
+                    json.dumps(plan.get("narrative_topics", [])),
+                    json.dumps(plan.get("expected_sections", [])),
+                    json.dumps(plan.get("tasks", [])),
+                    1 if plan.get("is_valid", True) else 0,
+                    plan.get("planning_method", "deterministic"),
+                    plan.get("created_at", now_iso),
+                ),
+            )
+
+    def get_research_plan(self, plan_id: str) -> dict[str, Any] | None:
+        """Retrieve a research plan by plan_id."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM research_plans WHERE plan_id = ?;", (plan_id.strip(),)
+            ).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            d["fiscal_years"] = json.loads(d.get("fiscal_years_json") or "[]")
+            d["required_filing_types"] = json.loads(
+                d.get("required_filing_types_json") or "[]"
+            )
+            d["required_metrics"] = json.loads(d.get("required_metrics_json") or "[]")
+            d["narrative_topics"] = json.loads(d.get("narrative_topics_json") or "[]")
+            d["expected_sections"] = json.loads(d.get("expected_sections_json") or "[]")
+            d["tasks"] = json.loads(d.get("tasks_json") or "[]")
+            d["is_valid"] = bool(d.get("is_valid", 1))
+            return d
+
+    def get_research_plan_by_request(self, request_id: str) -> dict[str, Any] | None:
+        """Retrieve a research plan by request_id."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT plan_id FROM research_plans WHERE request_id = ? ORDER BY created_at DESC LIMIT 1;",
+                (request_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            return self.get_research_plan(row["plan_id"])
+
+    def save_research_report(
+        self,
+        report_data: dict[str, Any],
+        sections: list[dict[str, Any]] | None = None,
+        references: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """Persist a complete financial research report with sections and references."""
+        now_iso = datetime.now(UTC).isoformat()
+        if sections is None:
+            sections = report_data.get("sections")
+        if references is None:
+            references = report_data.get("references")
+
+        total_sec = len(sections) if sections else report_data.get("total_sections", 0)
+        total_ev = (
+            len(references)
+            if references
+            else report_data.get("total_evidence_cited", 0)
+        )
+
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO financial_research_reports (
+                    report_id, request_id, plan_id, ticker, company_name, title,
+                    reporting_period, status, verification_status, executive_summary,
+                    markdown_content, html_content, total_sections,
+                    total_evidence_cited, total_calculations_cited, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(report_id) DO UPDATE SET
+                    title = excluded.title,
+                    status = excluded.status,
+                    verification_status = excluded.verification_status,
+                    executive_summary = excluded.executive_summary,
+                    markdown_content = excluded.markdown_content,
+                    html_content = excluded.html_content,
+                    total_sections = excluded.total_sections,
+                    total_evidence_cited = excluded.total_evidence_cited,
+                    total_calculations_cited = excluded.total_calculations_cited,
+                    updated_at = excluded.updated_at;
+                """,
+                (
+                    report_data["report_id"],
+                    report_data["request_id"],
+                    report_data.get("plan_id"),
+                    report_data.get("ticker"),
+                    report_data["company_name"],
+                    report_data["title"],
+                    report_data.get("reporting_period"),
+                    report_data.get("status", "COMPLETED"),
+                    report_data.get("verification_status", "UNVERIFIED"),
+                    report_data.get("executive_summary"),
+                    report_data.get("markdown_content", ""),
+                    report_data.get("html_content"),
+                    total_sec,
+                    total_ev,
+                    report_data.get("total_calculations_cited", 0),
+                    report_data.get("created_at", now_iso),
+                    report_data.get("updated_at", now_iso),
+                ),
+            )
+
+            # Insert or replace sections
+            if sections:
+                for raw_s in sections:
+                    s = raw_s.model_dump() if hasattr(raw_s, "model_dump") else raw_s
+                    conn.execute(
+                        """
+                        INSERT INTO report_sections (
+                            section_id, report_id, section_key, title, order_index,
+                            content_markdown, evidence_ids_json, calculation_ids_json,
+                            verification_status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(section_id) DO UPDATE SET
+                            title = excluded.title,
+                            order_index = excluded.order_index,
+                            content_markdown = excluded.content_markdown,
+                            evidence_ids_json = excluded.evidence_ids_json,
+                            calculation_ids_json = excluded.calculation_ids_json,
+                            verification_status = excluded.verification_status;
+                        """,
+                        (
+                            s["section_id"],
+                            report_data["report_id"],
+                            s["section_key"],
+                            s["title"],
+                            s.get("order_index", 0),
+                            s["content_markdown"],
+                            json.dumps(s.get("evidence_ids", [])),
+                            json.dumps(s.get("calculation_ids", [])),
+                            s.get("verification_status", "UNVERIFIED"),
+                        ),
+                    )
+
+            # Insert or replace references
+            if references:
+                for raw_r in references:
+                    r = raw_r.model_dump() if hasattr(raw_r, "model_dump") else raw_r
+                    conn.execute(
+                        """
+                        INSERT INTO report_references (
+                            reference_id, report_id, ref_type, citation_id, filing_name,
+                            form_type, filing_date, reporting_period, accession_number,
+                            sec_url, description
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(reference_id) DO UPDATE SET
+                            filing_name = excluded.filing_name,
+                            form_type = excluded.form_type,
+                            filing_date = excluded.filing_date,
+                            reporting_period = excluded.reporting_period,
+                            accession_number = excluded.accession_number,
+                            sec_url = excluded.sec_url,
+                            description = excluded.description;
+                        """,
+                        (
+                            r["reference_id"],
+                            report_data["report_id"],
+                            r["ref_type"],
+                            r["citation_id"],
+                            r.get("filing_name"),
+                            r.get("form_type"),
+                            r.get("filing_date"),
+                            r.get("reporting_period"),
+                            r.get("accession_number"),
+                            r.get("sec_url"),
+                            r.get("description"),
+                        ),
+                    )
+
+    def get_research_report(self, report_id: str) -> dict[str, Any] | None:
+        """Retrieve a financial research report with sections and references."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM financial_research_reports WHERE report_id = ?;",
+                (report_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            rep = dict(row)
+
+            # Fetch sections
+            s_rows = conn.execute(
+                """
+                SELECT * FROM report_sections
+                WHERE report_id = ?
+                ORDER BY order_index ASC;
+                """,
+                (report_id.strip(),),
+            ).fetchall()
+            sections = []
+            for sr in s_rows:
+                sd = dict(sr)
+                sd["evidence_ids"] = json.loads(sd.get("evidence_ids_json") or "[]")
+                sd["calculation_ids"] = json.loads(
+                    sd.get("calculation_ids_json") or "[]"
+                )
+                sections.append(sd)
+            rep["sections"] = sections
+
+            # Fetch references
+            r_rows = conn.execute(
+                """
+                SELECT * FROM report_references
+                WHERE report_id = ?
+                ORDER BY citation_id ASC;
+                """,
+                (report_id.strip(),),
+            ).fetchall()
+            rep["references"] = [dict(rr) for rr in r_rows]
+
+            return rep
+
+    def get_research_report_by_request(self, request_id: str) -> dict[str, Any] | None:
+        """Retrieve a financial research report by its request_id."""
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT report_id FROM financial_research_reports WHERE request_id = ? ORDER BY created_at DESC LIMIT 1;",
+                (request_id.strip(),),
+            ).fetchone()
+            if not row:
+                return None
+            return self.get_research_report(row["report_id"])
+
+    def list_research_reports(
+        self, ticker: str | None = None, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """List historical financial research reports with optional ticker filter."""
+        with self.connection() as conn:
+            if ticker:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM financial_research_reports
+                    WHERE ticker = ?
+                    ORDER BY created_at DESC LIMIT ?;
+                    """,
+                    (ticker.strip().upper(), limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM financial_research_reports
+                    ORDER BY created_at DESC LIMIT ?;
+                    """,
+                    (limit,),
+                ).fetchall()
+            return [dict(r) for r in rows]

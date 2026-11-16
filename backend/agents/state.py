@@ -41,6 +41,17 @@ class FinovaAgentState(TypedDict, total=False):
     retrieved_evidence: list[dict[str, Any]]
     calculation_results: list[dict[str, Any]]
 
+    # Session 11: Autonomous Research Planning, Consolidation & Reports
+    research_plan: dict[str, Any] | None
+    task_results: list[dict[str, Any]]
+    financial_analysis: dict[str, Any] | None
+    consolidated_findings: dict[str, Any] | None
+    generated_report: dict[str, Any] | None
+    report_markdown: str | None
+    report_html: str | None
+    report_verification: dict[str, Any] | None
+    output_format: str | None
+
     # Synthesis & Verification
     generated_answer: str | None
     verification_result: dict[str, Any] | None
