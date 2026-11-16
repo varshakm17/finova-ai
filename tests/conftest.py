@@ -34,4 +34,3 @@ def pytest_collection_modifyitems(
     for item in items:
         if "live_sec" in item.keywords:
             item.add_marker(skip_live_sec)
-

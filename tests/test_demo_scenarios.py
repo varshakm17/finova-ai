@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import tempfile
 
+from evaluation.demo_scenarios.demo_integrity_auditor import (
+    DemoIntegrityAuditor,
+)
 from evaluation.demo_scenarios.demo_scenarios import (
     DEMO_SCENARIOS,
     run_demo_scenario,
@@ -49,3 +52,22 @@ def test_run_demo_scenario_execution() -> None:
             html_text = f.read()
         assert "<!DOCTYPE html>" in html_text
         assert "Apple Inc." in html_text
+
+
+def test_demo_integrity_auditor_all_scenarios() -> None:
+    """Verify demo integrity auditor reports 100% pass rate across all 4 scenarios."""
+    auditor = DemoIntegrityAuditor()
+    report = auditor.audit_all(regenerate_if_missing=True)
+
+    assert report.overall_status == "PASSED"
+    assert report.total_scenarios == 4
+    assert report.passed_scenarios == 4
+    assert report.failed_scenarios == 0
+    assert report.total_citations_checked >= 12
+    assert report.total_receipts_checked >= 12
+
+    for scenario_res in report.scenario_results:
+        assert scenario_res.passed is True
+        assert len(scenario_res.issues) == 0
+        assert scenario_res.markdown_path.exists()
+        assert scenario_res.html_path.exists()

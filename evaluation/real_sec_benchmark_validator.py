@@ -314,3 +314,77 @@ class RealSECBenchmarkValidator:
             db_chunks_found=db_chunks_found,
         )
 
+
+def main() -> None:
+    """CLI runner for Real SEC Benchmark Validator."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Finova AI Real-World SEC Benchmark Validator"
+    )
+    parser.add_argument(
+        "--file",
+        type=str,
+        default=None,
+        help="Path to real SEC benchmark JSON file",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON",
+    )
+    args = parser.parse_args()
+
+    validator = RealSECBenchmarkValidator()
+    report = validator.validate_file(args.file)
+
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        print("\n" + "=" * 65)
+        print("  REAL-WORLD SEC BENCHMARK CERTIFICATION AUDIT")
+        print("=" * 65)
+        print(f"  Total Queries:          {report.total_queries}")
+        print(f"  Certified Validated:    {report.validated_filings}")
+        print(f"  Pending Annotations:    {report.pending_annotations}")
+        print(f"  Invalid Metadata:       {report.invalid_metadata_count}")
+        print(f"  Missing Sources:        {report.missing_source_count}")
+        print(f"  Chunk Mismatches:       {report.chunk_mismatch_count}")
+        print(
+            f"  Dataset Integrity:      {'CERTIFIED VALID' if report.is_dataset_valid else 'FAILED'}"
+        )
+        print("-" * 65)
+
+        # Per-company breakdown
+        company_counts: dict[str, dict[str, int]] = {}
+        for c in report.case_results:
+            if c.ticker not in company_counts:
+                company_counts[c.ticker] = {"certified": 0, "pending": 0, "invalid": 0}
+            if c.validation_status == BenchmarkCaseStatus.VALIDATED_REAL_FILING:
+                company_counts[c.ticker]["certified"] += 1
+            elif c.validation_status == BenchmarkCaseStatus.PENDING_ANNOTATION:
+                company_counts[c.ticker]["pending"] += 1
+            else:
+                company_counts[c.ticker]["invalid"] += 1
+
+        print("  PER-COMPANY ANNOTATION COVERAGE:")
+        for t, counts in sorted(company_counts.items()):
+            cov_pct = (
+                (counts["certified"] / (counts["certified"] + counts["pending"]) * 100)
+                if (counts["certified"] + counts["pending"]) > 0
+                else 0
+            )
+            print(
+                f"    - {t:<5}: {counts['certified']} certified, {counts['pending']} pending ({cov_pct:.1f}% certified coverage)"
+            )
+
+        if report.errors:
+            print("-" * 65)
+            print("  AUDIT ERRORS / ISSUES:")
+            for err in report.errors:
+                print(f"    - {err}")
+        print("=" * 65 + "\n")
+
+
+if __name__ == "__main__":
+    main()

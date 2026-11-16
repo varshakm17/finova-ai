@@ -69,4 +69,3 @@ def test_api_v1_health_subsystem_reporting(client: TestClient) -> None:
     verification = subsystems["verification_service"]
     assert "numeric_tolerance_pct" in verification
     assert "max_regeneration_attempts" in verification
-
