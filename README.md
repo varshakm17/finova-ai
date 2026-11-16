@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Production Launch Ready](https://img.shields.io/badge/Status-Production%20Launch%20Ready-brightgreen.svg)]()
-[![Tests: 460+ Passed](https://img.shields.io/badge/Tests-460%2B%20Passed%20(100%25%20offline)-brightgreen.svg)]()
+[![Status: Docker Verification Pending](https://img.shields.io/badge/Status-Docker%20Verification%20Pending-yellow.svg)]()
+[![Tests: 504 passed, 12 skipped, 0 failed](https://img.shields.io/badge/Tests-504%20passed%2C%2012%20skipped%2C%200%20failed-brightgreen.svg)]()
 [![Hardware: CPU Only](https://img.shields.io/badge/Hardware-CPU%20Only%20(16GB%20RAM)-informational.svg)]()
 
 Finova AI is a production-grade, multi-agent corporate financial research system designed to retrieve, analyze, verify, and synthesize evidence-backed financial intelligence from statutory SEC EDGAR filings (Forms 10-K and 10-Q).
@@ -20,10 +20,10 @@ Finova AI includes 4 audited, reproducible corporate research demonstrations bas
 
 | Company | Ticker | SEC CIK | Accession Number | Focus Area | Executive Briefs |
 | :--- | :---: | :---: | :---: | :--- | :---: |
-| **Apple Inc.** | `AAPL` | `0000320193` | `0000320193-23-000106` | Revenue Mix, Services Expansion & Share Repurchases | [Markdown](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/reports/demos/aapl_fy2022-fy2023_demo_brief.md) · [HTML](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/reports/demos/aapl_fy2022-fy2023_demo_brief.html) |
-| **Microsoft Corp** | `MSFT` | `0000789019` | `0000789019-23-000085` | Cloud Transformation, Azure Hypergrowth & AI CapEx | [Markdown](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/reports/demos/msft_fy2022-fy2023_demo_brief.md) · [HTML](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/reports/demos/msft_fy2022-fy2023_demo_brief.html) |
-| **Tesla, Inc.** | `TSLA` | `0001318605` | `0001318605-24-000006` | Automotive vs Energy Margins & Cash Liquidity | [Markdown](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/reports/demos/tsla_fy2022-fy2023_demo_brief.md) · [HTML](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/reports/demos/tsla_fy2022-fy2023_demo_brief.html) |
-| **NVIDIA Corp** | `NVDA` | `0001045810` | `0001045810-24-000029` | Data Center Hypergrowth, Margin Surge & Export Risks | [Markdown](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/reports/demos/nvda_fy2023-fy2024_demo_brief.md) |
+| **Apple Inc.** | `AAPL` | `0000320193` | `0000320193-23-000106` | Revenue Mix, Services Expansion & Share Repurchases | [Markdown](reports/demos/aapl_fy2022-fy2023_demo_brief.md) · [HTML](reports/demos/aapl_fy2022-fy2023_demo_brief.html) |
+| **Microsoft Corp** | `MSFT` | `0000789019` | `0000789019-23-000085` | Cloud Transformation, Azure Hypergrowth & AI CapEx | [Markdown](reports/demos/msft_fy2022-fy2023_demo_brief.md) · [HTML](reports/demos/msft_fy2022-fy2023_demo_brief.html) |
+| **Tesla, Inc.** | `TSLA` | `0001318605` | `0001318605-24-000006` | Automotive vs Energy Margins & Cash Liquidity | [Markdown](reports/demos/tsla_fy2022-fy2023_demo_brief.md) · [HTML](reports/demos/tsla_fy2022-fy2023_demo_brief.html) |
+| **NVIDIA Corp** | `NVDA` | `0001045810` | `0001045810-24-000029` | Data Center Hypergrowth, Margin Surge & Export Risks | [Markdown](reports/demos/nvda_fy2023-fy2024_demo_brief.md) · [HTML](reports/demos/nvda_fy2023-fy2024_demo_brief.html) |
 
 ---
 
@@ -149,7 +149,7 @@ docker compose logs -f
 Finova AI enforces strict reproducible verification via automated CLI suites:
 
 ```powershell
-# 1. Run Complete Offline Test Suite (500+ tests passing offline)
+# 1. Run Complete Offline Test Suite (504 passed, 12 skipped, 0 failed)
 pytest
 
 # 2. Run Deployment Acceptance & Readiness Suite (Static, Local, Docker)
@@ -186,24 +186,23 @@ python -m evaluation.run_evaluation --eval-type all
 | **Citation Traceability** | Passages Linked to Accession | **100.0% Verified Ground Truth** | ✅ CERTIFIED |
 | **Hallucination Detection**| Claim Audit Precision | **98.2% Accuracy** | ✅ CERTIFIED |
 | **SEC Benchmark Retrieval** | Real 10-K NDCG@5 | **0.842** | ✅ CERTIFIED |
-| **Offline Test Suite** | Automated Tests Pass Rate | **504 passed, 12 skipped, 0 failed** | ✅ CERTIFIED |
+| **Offline Test Suite** | Automated Tests Pass Rate | **504 passed, 12 skipped, 0 failed** | ✅ PASSED (12 SKIPPED) |
 | **Security Hardening** | Static Vulnerability Scan | **0 High/Critical Vulnerabilities** | ✅ SECURE |
 
 ---
 
 ## 📚 Technical Documentation Index
 
-- [runtime-configuration-and-deployment.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/runtime-configuration-and-deployment.md) — Runtime stabilization, configuration management, and deployment reliability.
-- [final-system-validation-and-launch.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/final-system-validation-and-launch.md) — Complete launch and operations guide.
-- [project-summary.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/portfolio/project-summary.md) — Resume and LinkedIn portfolio presentation dossier.
-- [architecture-and-methodology.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/portfolio/architecture-and-methodology.md) — Multi-agent topology and financial ratio methodology.
-- [real-world-validation-and-deployment.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/real-world-validation-and-deployment.md) — SEC 10-K benchmark and deployment readiness.
-- [answer-verification-and-anti-hallucination.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/answer-verification-and-anti-hallucination.md) — Claim-level verification engine.
-- [financial-calculation-engine.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/financial-calculation-engine.md) — Deterministic math engine and receipts schema.
-- [hybrid-retrieval.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/hybrid-retrieval.md) — Dense FAISS, BM25 sparse search, and RRF.
+- [Runtime Configuration and Deployment](docs/runtime-configuration-and-deployment.md) — Runtime stabilization, configuration management, and deployment reliability.
+- [Final System Validation and Launch Guide](docs/final-system-validation-and-launch.md) — Complete launch and operations guide.
+- [Architecture and Methodology](docs/portfolio/architecture-and-methodology.md) — Multi-agent topology and financial ratio methodology.
+- [Real-World Validation and Deployment](docs/real-world-validation-and-deployment.md) — SEC 10-K benchmark and deployment readiness.
+- [Answer Verification and Anti-Hallucination](docs/answer-verification-and-anti-hallucination.md) — Claim-level verification engine.
+- [Financial Calculation Engine](docs/financial-calculation-engine.md) — Deterministic math engine and receipts schema.
+- [Hybrid Retrieval and Reranking](docs/hybrid-retrieval.md) — Dense FAISS, BM25 sparse search, and RRF.
 
 ---
 
 ## 📄 License
 
-Distributed under the MIT License. See [LICENSE](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/LICENSE) for details.
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
