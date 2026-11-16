@@ -8,7 +8,7 @@
 [![Tests: 504 passed, 12 skipped, 0 failed](https://img.shields.io/badge/Tests-504%20passed%2C%2012%20skipped%2C%200%20failed-brightgreen.svg)]()
 [![Hardware: CPU Only](https://img.shields.io/badge/Hardware-CPU%20Only%20(16GB%20RAM)-informational.svg)]()
 
-Finova AI is a production-grade, multi-agent corporate financial research system designed to retrieve, analyze, verify, and synthesize evidence-backed financial intelligence from statutory SEC EDGAR filings (Forms 10-K and 10-Q).
+Finova AI is a multi-agent corporate financial research and intelligence system designed to retrieve, analyze, verify, and synthesize evidence-backed financial intelligence from statutory SEC EDGAR filings (Forms 10-K and 10-Q).
 
 Engineered from first principles to eliminate LLM arithmetic hallucinations and citation drift, Finova AI enforces **100% deterministic Python arithmetic** for financial ratios and conducts **claim-level anti-hallucination audits** against genuine SEC accession numbers and filing URLs.
 
