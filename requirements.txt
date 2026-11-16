@@ -1,19 +1,33 @@
-# Core Runtime Dependencies for Finova AI
-# Compatible with Python 3.11+
-fastapi>=0.115.0
-uvicorn[standard]>=0.30.0
-streamlit>=1.38.0
-pydantic>=2.8.0
-pydantic-settings>=2.4.0
-python-dotenv>=1.0.1
-pandas>=2.2.0
-numpy>=1.26.0
-requests>=2.32.0
-httpx>=0.27.0
-beautifulsoup4>=4.12.0
-sentence-transformers>=3.0.0
-faiss-cpu>=1.7.4
-rank-bm25>=0.2.2
-langgraph>=0.2.0
-langchain-core>=0.3.0
+# ==============================================================================
+# Finova AI — Core Runtime Dependencies
+# Target Python Version: 3.11.x
+# Documented & Tested Range Specifications
+# ==============================================================================
 
+# Web & API Framework
+fastapi>=0.115.0,<0.165.0
+uvicorn[standard]>=0.30.0,<0.55.0
+streamlit>=1.38.0,<1.68.0
+
+# Schema & Configuration Management
+pydantic>=2.8.0,<2.15.0
+pydantic-settings>=2.4.0,<2.17.0
+python-dotenv>=1.0.1,<1.3.0
+
+# Scientific & Quantitative Computing
+pandas>=2.2.0,<3.2.0
+numpy>=1.26.0,<2.5.0
+
+# HTTP Networking & HTML Document Parsing
+requests>=2.32.0,<2.35.0
+httpx>=0.27.0,<0.29.0
+beautifulsoup4>=4.12.0,<4.16.0
+
+# Machine Learning, Embeddings & Vector Search (CPU)
+sentence-transformers>=3.0.0,<6.4.0
+faiss-cpu>=1.7.4,<1.17.0
+rank-bm25>=0.2.2,<0.3.0
+
+# Multi-Agent State Machine & Graph Orchestration
+langgraph>=0.2.0,<1.3.0
+langchain-core>=0.3.0,<1.9.0

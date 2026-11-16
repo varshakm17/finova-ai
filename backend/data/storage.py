@@ -29,22 +29,30 @@ def get_db_file_path(settings: Settings | None = None) -> str:
     cfg = settings or get_settings()
     url = cfg.DATABASE_URL
     if url.startswith("sqlite:///"):
-        rel_or_abs = url.replace("sqlite:///", "")
-        if rel_or_abs == ":memory:":
+        path_str = url[len("sqlite:///") :]
+        if path_str == ":memory:":
             return ":memory:"
-        path = Path(rel_or_abs)
+        # On Windows, handle leading slash before drive letters: /C:/... -> C:/...
+        if len(path_str) >= 3 and path_str[0] == "/" and path_str[2] == ":":
+            path_str = path_str[1:]
+        path = Path(path_str)
         if not path.is_absolute():
-            path = BASE_DIR / path
+            path = (BASE_DIR / path).resolve()
+        else:
+            path = path.resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         return str(path)
-    return str(BASE_DIR / "finova.db")
+    return str((BASE_DIR / "finova.db").resolve())
 
 
 class Database:
     """Manages SQLite connections, schema initialization, and transactional data operations."""
 
-    def __init__(self, db_path: str | None = None) -> None:
-        self.db_path = db_path or get_db_file_path()
+    def __init__(
+        self, db_path: str | None = None, settings: Settings | None = None
+    ) -> None:
+        self.settings = settings or get_settings()
+        self.db_path = db_path or get_db_file_path(self.settings)
         self._memory_conn: sqlite3.Connection | None = None
         if self.db_path == ":memory:":
             self._memory_conn = sqlite3.connect(":memory:", check_same_thread=False)
@@ -54,7 +62,7 @@ class Database:
 
     @contextmanager
     def connection(self) -> Generator[sqlite3.Connection, None, None]:
-        """Provide a contextual connection with foreign keys enabled and row factory configured."""
+        """Provide a contextual connection with foreign keys enabled, WAL mode, and busy timeout."""
         if self._memory_conn is not None:
             try:
                 yield self._memory_conn
@@ -63,9 +71,16 @@ class Database:
                 self._memory_conn.rollback()
                 raise
         else:
-            conn = sqlite3.connect(self.db_path)
+            busy_timeout = getattr(self.settings, "DATABASE_BUSY_TIMEOUT_MS", 30000)
+            conn = sqlite3.connect(self.db_path, timeout=busy_timeout / 1000.0)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON;")
+            if self.db_path != ":memory:" and getattr(
+                self.settings, "DATABASE_WAL_MODE", True
+            ):
+                conn.execute("PRAGMA journal_mode = WAL;")
+                conn.execute("PRAGMA synchronous = NORMAL;")
+                conn.execute(f"PRAGMA busy_timeout = {busy_timeout};")
             try:
                 yield conn
                 conn.commit()

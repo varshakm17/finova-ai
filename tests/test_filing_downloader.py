@@ -41,7 +41,7 @@ def test_validate_sec_url() -> None:
 def test_filing_downloader_success(tmp_path: Path) -> None:
     """Verify successful filing document download and disk persistence."""
     test_settings = Settings(
-        SEC_USER_AGENT="FinovaTest/1.0 (tester@example.com)",
+        SEC_USER_AGENT="FinovaTest/1.0 (tester@fintech-research.org)",
         FILINGS_STORAGE_DIR=str(tmp_path),
     )
     downloader = FilingDownloader(settings=test_settings, storage_dir=tmp_path)
@@ -86,7 +86,9 @@ def test_filing_downloader_success(tmp_path: Path) -> None:
 def test_filing_downloader_size_exceeded(tmp_path: Path) -> None:
     """Verify FilingSizeExceededError is raised when document exceeds configured size limit."""
     downloader = FilingDownloader(
-        settings=Settings(SEC_USER_AGENT="FinovaTest/1.0 (tester@example.com)"),
+        settings=Settings(
+            SEC_USER_AGENT="FinovaTest/1.0 (tester@fintech-research.org)"
+        ),
         storage_dir=tmp_path,
         max_size_bytes=100,  # 100 bytes limit
     )
@@ -114,7 +116,9 @@ def test_filing_downloader_size_exceeded(tmp_path: Path) -> None:
 def test_filing_downloader_http_errors(tmp_path: Path) -> None:
     """Verify HTTP 403, 404, and 429 error mapping."""
     downloader = FilingDownloader(
-        settings=Settings(SEC_USER_AGENT="FinovaTest/1.0 (tester@example.com)"),
+        settings=Settings(
+            SEC_USER_AGENT="FinovaTest/1.0 (tester@fintech-research.org)"
+        ),
         storage_dir=tmp_path,
         max_retries=1,
         backoff_factor=0.01,

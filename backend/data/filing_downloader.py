@@ -106,8 +106,8 @@ class FilingDownloader:
         self.backoff_factor = backoff_factor
         self.last_request_time: float = 0.0
 
-        # Validate User-Agent configuration
-        validate_user_agent(self.settings.SEC_USER_AGENT)
+        # Validate User-Agent configuration (allow placeholder during initialization)
+        validate_user_agent(self.settings.SEC_USER_AGENT, allow_placeholder=True)
 
         self._headers = {
             "User-Agent": self.settings.SEC_USER_AGENT.strip(),
@@ -206,6 +206,9 @@ class FilingDownloader:
         logger.info(
             "Downloading filing %s for %s from %s", accession_number, ticker, source_url
         )
+
+        # Enforce valid non-placeholder User-Agent on live download
+        validate_user_agent(self.settings.SEC_USER_AGENT, allow_placeholder=False)
 
         attempt = 0
         while attempt <= self.max_retries:

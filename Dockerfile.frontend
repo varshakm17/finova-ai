@@ -1,37 +1,44 @@
 # ==============================================================================
-# Finova AI — Frontend Dockerfile (Streamlit Portfolio & Intelligence UI)
+# Finova AI — Frontend Production Dockerfile (Streamlit UI)
 # ==============================================================================
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Install system dependencies (curl for healthcheck)
+# Install minimal system dependencies (curl for healthcheck)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt requirements-dev.txt ./
+# Install runtime Python dependencies (exclude dev tools)
+COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy source code required for frontend
-COPY config/ ./config/
-COPY frontend/ ./frontend/
-COPY backend/ ./backend/
-COPY evaluation/ ./evaluation/
-COPY reports/ ./reports/
+# Create application user and required persistent storage directories
+RUN useradd -m -u 1000 appuser && \
+    mkdir -p /app/reports /app/logs /home/appuser/.streamlit && \
+    chown -R appuser:appuser /app /home/appuser
+
+# Copy application source code required for frontend
+COPY --chown=appuser:appuser config/ ./config/
+COPY --chown=appuser:appuser frontend/ ./frontend/
+COPY --chown=appuser:appuser backend/ ./backend/
+COPY --chown=appuser:appuser evaluation/ ./evaluation/
+COPY --chown=appuser:appuser reports/ ./reports/
+
+USER appuser
 
 # Expose Streamlit default port
 EXPOSE 8501
 
-# Health check for Streamlit server
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+# Healthcheck for Streamlit core server
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8501/_stcore/health || exit 1
 
-# Launch Streamlit application
+# Launch Streamlit server
 CMD ["streamlit", "run", "frontend/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
-

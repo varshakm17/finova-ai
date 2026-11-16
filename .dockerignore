@@ -1,0 +1,68 @@
+# Git and VCS
+.git/
+.gitignore
+.github/
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python byte code and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+
+# Local databases and runtime data
+*.sqlite
+*.sqlite3
+*.db
+finova.db
+
+# Secrets and local environment files
+.env
+.env.local
+.env.*.local
+*.secrets
+*.key
+*.pem
+
+# Test & coverage caches
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Local logs (mount as Docker volume)
+logs/*
+!logs/.gitkeep
+
+# Local SEC filing downloads and indexes (mount as Docker volumes)
+datasets/cache/*
+datasets/filings/*
+datasets/indexes/*
+*.index
+*.npy
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -5,7 +5,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Status: Production Launch Ready](https://img.shields.io/badge/Status-Production%20Launch%20Ready-brightgreen.svg)]()
-[![Tests: 405 Passed](https://img.shields.io/badge/Tests-405%20Passed%20(100%25%20offline)-brightgreen.svg)]()
+[![Tests: 440+ Passed](https://img.shields.io/badge/Tests-440%2B%20Passed%20(100%25%20offline)-brightgreen.svg)]()
 [![Hardware: CPU Only](https://img.shields.io/badge/Hardware-CPU%20Only%20(16GB%20RAM)-informational.svg)]()
 
 Finova AI is a production-grade, multi-agent corporate financial research system designed to retrieve, analyze, verify, and synthesize evidence-backed financial intelligence from statutory SEC EDGAR filings (Forms 10-K and 10-Q).
@@ -149,25 +149,28 @@ docker compose logs -f
 Finova AI enforces strict reproducible verification via automated CLI suites:
 
 ```powershell
-# 1. Run Complete Offline Test Suite (405 tests passing offline)
+# 1. Run Complete Offline Test Suite (440+ tests passing offline)
 pytest
 
-# 2. Run Demo Scenarios & Generate Executive Briefs
+# 2. Run Deployment Smoke Tests (Static, Local, Docker)
+python evaluation/deployment_smoke_tests.py --mode static
+
+# 3. Run Demo Scenarios & Generate Executive Briefs
 python -m evaluation.demo_scenarios.demo_scenarios --scenario all
 
-# 3. Audit Demo Integrity (Citations, Receipts & Provenance)
+# 4. Audit Demo Integrity (Citations, Receipts & Provenance)
 python -m evaluation.demo_scenarios.demo_integrity_auditor
 
-# 4. Audit Real-World SEC Benchmark Certification
+# 5. Audit Real-World SEC Benchmark Certification
 python -m evaluation.real_sec_benchmark_validator
 
-# 5. Run Performance Latency Smoke Tests
+# 6. Run Performance Latency Smoke Tests
 python -m evaluation.performance_smoke_tests
 
-# 6. Run Security & Hardening Audit
+# 7. Run Security & Hardening Audit
 python -m evaluation.security_audit
 
-# 7. Run Unified Evaluation Benchmark
+# 8. Run Unified Evaluation Benchmark
 python -m evaluation.run_evaluation --eval-type all
 ```
 
@@ -188,6 +191,7 @@ python -m evaluation.run_evaluation --eval-type all
 
 ## 📚 Technical Documentation Index
 
+- [runtime-configuration-and-deployment.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/runtime-configuration-and-deployment.md) — Runtime stabilization, configuration management, and deployment reliability.
 - [final-system-validation-and-launch.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/final-system-validation-and-launch.md) — Complete launch and operations guide.
 - [project-summary.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/portfolio/project-summary.md) — Resume and LinkedIn portfolio presentation dossier.
 - [architecture-and-methodology.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/portfolio/architecture-and-methodology.md) — Multi-agent topology and financial ratio methodology.

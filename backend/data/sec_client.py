@@ -69,16 +69,74 @@ def normalize_cik(cik: str | int) -> str:
     return f"{int(cleaned):010d}"
 
 
-def validate_user_agent(user_agent: str | None) -> None:
+PLACEHOLDER_EMAILS = {
+    "contact@example.com",
+    "admincontact@domain.com",
+    "user@example.com",
+    "your-email@example.com",
+    "email@domain.com",
+    "sample@samplecompany.com",
+}
+
+PLACEHOLDER_DOMAINS = {
+    "example.com",
+    "example.org",
+    "example.net",
+    "domain.com",
+    "sample.com",
+    "samplecompany.com",
+    "yourdomain.com",
+}
+
+
+def is_placeholder_user_agent(user_agent: str | None) -> bool:
+    """Check whether User-Agent header contains known example or placeholder contact identities."""
+    if not user_agent or not user_agent.strip():
+        return True
+    ua_clean = user_agent.strip().lower()
+    for placeholder in PLACEHOLDER_EMAILS:
+        if placeholder in ua_clean:
+            return True
+    match = re.search(r"@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)", ua_clean)
+    if match:
+        domain = match.group(1).rstrip(")>]")
+        if domain in PLACEHOLDER_DOMAINS:
+            return True
+    return False
+
+
+def mask_user_agent(user_agent: str | None) -> str:
+    """Mask email/contact info in User-Agent header for safe public display."""
+    if not user_agent or not user_agent.strip():
+        return "[NOT CONFIGURED]"
+
+    def _mask_email(match: re.Match) -> str:
+        user, domain = match.group(1), match.group(2)
+        masked_user = user[0] + "***" if user else "***"
+        parts = domain.split(".")
+        tld = parts[-1] if len(parts) > 1 else "com"
+        return f"{masked_user}@{parts[0][0]}***.{tld}"
+
+    return re.sub(
+        r"([a-zA-Z0-9_.+-]+)@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)",
+        _mask_email,
+        user_agent.strip(),
+    )
+
+
+def validate_user_agent(
+    user_agent: str | None, allow_placeholder: bool = False
+) -> None:
     """Validate that the configured User-Agent complies with SEC guidelines.
 
     The SEC requires: Sample Company Name AdminContact@<sample company domain>.com
 
     Args:
         user_agent: User-Agent string to inspect.
+        allow_placeholder: If False, rejects known placeholder identities (e.g. contact@example.com).
 
     Raises:
-        SECConfigurationError: If missing, placeholder, or invalid.
+        SECConfigurationError: If missing, placeholder, or invalid syntax.
     """
     if not user_agent or not user_agent.strip():
         raise SECConfigurationError(
@@ -94,7 +152,14 @@ def validate_user_agent(user_agent: str | None) -> None:
         raise SECConfigurationError(
             f"SEC_USER_AGENT '{ua_clean}' does not contain a valid contact email. "
             "SEC EDGAR guidelines require a valid contact email in the User-Agent header "
-            "(e.g., 'FinovaAI-Research/0.1.0 (admin@example.com)')."
+            "(e.g., 'FinovaAI-Research/0.1.0 (admin@myfirm.org)')."
+        )
+
+    if not allow_placeholder and is_placeholder_user_agent(ua_clean):
+        raise SECConfigurationError(
+            f"SEC_USER_AGENT '{ua_clean}' contains an unconfigured placeholder identity. "
+            "SEC EDGAR fair-access policy requires a valid, genuine institutional or researcher contact email. "
+            "Please configure SEC_USER_AGENT in your .env file with your actual name/organization and email."
         )
 
 
@@ -108,6 +173,7 @@ class SECClient:
         backoff_factor: float = 0.5,
         requests_per_second: float = 8.0,
         timeout: float = 12.0,
+        allow_placeholder: bool = True,
     ) -> None:
         self.settings = settings or get_settings()
         self.max_retries = max_retries
@@ -115,9 +181,12 @@ class SECClient:
         self.min_interval = 1.0 / requests_per_second
         self.timeout = timeout
         self.last_request_time: float = 0.0
+        self.allow_placeholder = allow_placeholder
 
         # Validate User-Agent upon instantiation
-        validate_user_agent(self.settings.SEC_USER_AGENT)
+        validate_user_agent(
+            self.settings.SEC_USER_AGENT, allow_placeholder=allow_placeholder
+        )
 
         self._headers = {
             "User-Agent": self.settings.SEC_USER_AGENT.strip(),
@@ -143,11 +212,15 @@ class SECClient:
             dict[str, Any]: Parsed JSON response.
 
         Raises:
+            SECConfigurationError: If User-Agent is unconfigured or a placeholder.
             SECAuthenticationError: On 403 Forbidden.
             SECNotFoundError: On 404 Not Found.
             SECRateLimitError: On 429 Too Many Requests after retries.
             SECNetworkError: On persistent network or HTTP failures.
         """
+        # Validate that live outbound SEC calls do not use a placeholder email
+        validate_user_agent(self.settings.SEC_USER_AGENT, allow_placeholder=False)
+
         attempt = 0
         while attempt <= self.max_retries:
             self._throttle()

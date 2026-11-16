@@ -353,23 +353,39 @@ def get_health() -> HealthResponse:
 
     # 2. SEC Client Subsystem Check
     try:
-        from backend.data.sec_client import validate_user_agent
+        from backend.data.sec_client import (
+            is_placeholder_user_agent,
+            mask_user_agent,
+            validate_user_agent,
+        )
 
-        validate_user_agent(settings.SEC_USER_AGENT)
+        validate_user_agent(settings.SEC_USER_AGENT, allow_placeholder=True)
+        is_placeholder = is_placeholder_user_agent(settings.SEC_USER_AGENT)
         filings_dir = Path(settings.FILINGS_STORAGE_DIR)
         filings_dir.mkdir(parents=True, exist_ok=True)
         subsystems["sec_client"] = {
-            "status": "Healthy",
+            "status": "Healthy" if not is_placeholder else "Degraded",
             "user_agent_valid": True,
-            "declared_user_agent": settings.SEC_USER_AGENT,
+            "is_placeholder": is_placeholder,
+            "declared_user_agent": mask_user_agent(settings.SEC_USER_AGENT),
             "filings_cache_directory": str(filings_dir),
             "cache_writable": filings_dir.exists(),
             "fair_access_rps": 8.0,
         }
+        if is_placeholder:
+            subsystems["sec_client"]["notice"] = (
+                "SEC_USER_AGENT contains a placeholder contact identity. "
+                "Configure your actual identity in .env before performing live SEC requests."
+            )
+            if overall_status != "Unavailable":
+                overall_status = "Degraded"
     except Exception as exc:
+        from backend.data.sec_client import mask_user_agent
+
         subsystems["sec_client"] = {
             "status": "Degraded",
             "user_agent_valid": False,
+            "declared_user_agent": mask_user_agent(settings.SEC_USER_AGENT),
             "error": str(exc),
         }
         if overall_status != "Unavailable":

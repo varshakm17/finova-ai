@@ -15,9 +15,13 @@ services:
       - HOST=0.0.0.0
       - PORT=8000
       - DATABASE_URL=sqlite:////app/data/finova.db
-      - SEC_USER_AGENT=FinovaAI-Research/1.0 (contact@example.com)
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL=qwen2.5:3b
+      - DATABASE_WAL_MODE=True
+      - SEC_USER_AGENT=${SEC_USER_AGENT:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8501,http://127.0.0.1:8501,http://frontend:8501}
+      - CORS_ALLOW_CREDENTIALS=True
+      - DOCS_ENABLED=${DOCS_ENABLED:-True}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
     volumes:
       - finova_data:/app/data
       - finova_filings:/app/datasets/filings
@@ -41,7 +45,7 @@ services:
     ports:
       - "8501:8501"
     environment:
-      - BACKEND_API_URL=http://backend:8000/api/v1
+      - BACKEND_API_URL=${BACKEND_API_URL:-http://backend:8000/api/v1}
     depends_on:
       backend:
         condition: service_healthy
@@ -61,4 +65,3 @@ volumes:
     driver: local
   finova_logs:
     driver: local
-

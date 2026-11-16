@@ -14,4 +14,3 @@ def test_security_audit_clean_pass() -> None:
     assert report.is_hardened is True
     assert len(report.findings) == 0
     assert len(report.passed_checks) >= 4
-

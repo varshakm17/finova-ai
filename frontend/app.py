@@ -7,7 +7,6 @@ and statutory filing HTML ingestion with section-aware chunk inspection.
 
 import sys
 from pathlib import Path
-from typing import Any
 
 import httpx
 import streamlit as st
@@ -141,17 +140,9 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------------------------
-# Backend Health Verification
+# Backend Health & Connectivity
 # -----------------------------------------------------------------------------
-def check_backend_health(base_url: str) -> dict[str, Any] | None:
-    """Query backend health check endpoint safely with a brief timeout."""
-    try:
-        response = httpx.get(f"{base_url}/health", timeout=1.2)
-        if response.status_code == 200:
-            return response.json()
-    except (httpx.RequestError, httpx.HTTPStatusError):
-        return None
-    return None
+from frontend.backend_client import check_backend_health, resolve_backend_endpoints
 
 
 # -----------------------------------------------------------------------------
@@ -159,8 +150,9 @@ def check_backend_health(base_url: str) -> dict[str, Any] | None:
 # -----------------------------------------------------------------------------
 def main() -> None:
     settings = get_settings()
-    backend_url = f"http://{settings.HOST}:{settings.PORT}"
-    health_data = check_backend_health(backend_url)
+    endpoints = resolve_backend_endpoints(settings=settings)
+    backend_url = endpoints.base_url
+    is_online, health_data, health_error = check_backend_health(endpoints)
 
     # Sidebar
     with st.sidebar:
@@ -170,17 +162,21 @@ def main() -> None:
 
         # System Status Indicator
         st.markdown("**System Status**")
-        if health_data:
+        if is_online and health_data:
             st.markdown(
                 f'<span class="badge-active">● Backend: Online (v{health_data.get("version", "0.1.0")})</span>',
                 unsafe_allow_html=True,
             )
-            st.caption(f"Connected to `{backend_url}`")
+            st.caption(f"Connected: `{endpoints.api_v1_url}`")
+            st.caption(f"Source: `{endpoints.configured_from}`")
         else:
             st.markdown(
                 '<span class="badge-offline">○ Backend: Offline</span>',
                 unsafe_allow_html=True,
             )
+            st.caption(f"Target: `{endpoints.health_url}`")
+            if health_error:
+                st.caption(f"Status: {health_error[:80]}...")
             st.caption(f"Run `uvicorn backend.main:app` on port {settings.PORT}")
 
         st.markdown("---")

@@ -23,4 +23,3 @@ def test_performance_smoke_tester_execution() -> None:
     for m in report.measurements:
         assert m.mean_latency_ms >= 0.0
         assert m.p95_latency_ms >= 0.0
-

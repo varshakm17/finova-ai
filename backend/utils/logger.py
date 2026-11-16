@@ -1,12 +1,16 @@
-"""Centralized logging system for Finova AI.
+"""Centralized logging system for Finova AI with automated secret redaction.
 
 Provides console and file logging with standardized formatting and configurable
-severity levels. Ensures logs directory is created automatically and protects
-against accidental leakage of sensitive variables.
+severity levels. Ensures logs directory is created automatically and redacts
+sensitive credentials, access tokens, and contact identities from log streams.
 """
 
+from __future__ import annotations
+
 import logging
+import re
 from logging.handlers import RotatingFileHandler
+from typing import Any
 
 from config.settings import BASE_DIR, get_settings
 
@@ -14,6 +18,49 @@ DEFAULT_LOG_FORMAT = (
     "%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d - %(message)s"
 )
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+REDACT_PATTERNS = [
+    # Redact email addresses
+    (
+        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b"),
+        "[REDACTED_EMAIL]",
+    ),
+    # Redact Authorization Bearer tokens
+    (re.compile(r"(?i)\bBearer\s+[a-zA-Z0-9_\-\.]{16,}\b"), "Bearer [REDACTED_TOKEN]"),
+    # Redact API keys and secrets in query strings or assignments
+    (
+        re.compile(
+            r"(?i)(api[_-]?key|secret|password|token)\s*[:=]\s*['\"]?[a-zA-Z0-9_\-\.]{8,}['\"]?"
+        ),
+        r"\1=[REDACTED_SECRET]",
+    ),
+]
+
+
+class SensitiveDataFilter(logging.Filter):
+    """Logging filter that scrubs sensitive credentials and contact emails from record messages."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            msg = record.msg
+            for pattern, repl in REDACT_PATTERNS:
+                msg = pattern.sub(repl, msg)
+            record.msg = msg
+
+        # Also inspect and sanitize args if they contain strings
+        if record.args:
+            sanitized_args: list[Any] = []
+            for arg in record.args:
+                if isinstance(arg, str):
+                    arg_str = arg
+                    for pattern, repl in REDACT_PATTERNS:
+                        arg_str = pattern.sub(repl, arg_str)
+                    sanitized_args.append(arg_str)
+                else:
+                    sanitized_args.append(arg)
+            record.args = tuple(sanitized_args)
+
+        return True
 
 
 def setup_logging(
@@ -43,16 +90,19 @@ def setup_logging(
         datefmt=DEFAULT_DATE_FORMAT,
     )
 
+    redaction_filter = SensitiveDataFilter()
+
     # Root logger configuration
     root_logger = logging.getLogger()
     root_logger.setLevel(numeric_level)
 
     # Avoid duplicate handlers if setup_logging is called multiple times
     if not root_logger.handlers:
-        # Console Handler
+        # Console Handler (unbuffered stdout/stderr for Docker & CLI)
         console_handler = logging.StreamHandler()
         console_handler.setLevel(numeric_level)
         console_handler.setFormatter(formatter)
+        console_handler.addFilter(redaction_filter)
         root_logger.addHandler(console_handler)
 
         # Rotating File Handler (10MB max per file, up to 5 backups)
@@ -64,6 +114,7 @@ def setup_logging(
         )
         file_handler.setLevel(numeric_level)
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(redaction_filter)
         root_logger.addHandler(file_handler)
 
     # Suppress overly chatty third-party loggers if not in DEBUG mode

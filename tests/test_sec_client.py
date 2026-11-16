@@ -33,8 +33,15 @@ def test_normalize_cik() -> None:
 def test_validate_user_agent() -> None:
     """Test validation of SEC User-Agent header compliance."""
     # Valid User-Agent containing application name and contact email
-    validate_user_agent("FinovaAI-Research/0.1.0 (contact@example.com)")
+    validate_user_agent("FinovaAI-Research/0.1.0 (researcher@fintech-institute.org)")
     validate_user_agent("AcmeCorp Financial Data research-lead@acme.org")
+
+    # Placeholder rejection
+    with pytest.raises(SECConfigurationError, match="placeholder"):
+        validate_user_agent("FinovaAI-Research/0.1.0 (contact@example.com)")
+
+    with pytest.raises(SECConfigurationError, match="placeholder"):
+        validate_user_agent("AcmeCorp Financial Data admincontact@domain.com")
 
     # Missing / empty
     with pytest.raises(SECConfigurationError, match="SEC_USER_AGENT is not configured"):
@@ -53,7 +60,7 @@ def test_validate_user_agent() -> None:
 def test_sec_client_get_company_tickers_mocked() -> None:
     """Verify SECClient.get_company_tickers with mocked HTTP 200 response."""
     test_settings = Settings(
-        SEC_USER_AGENT="TestApp/1.0 (tester@example.com)",
+        SEC_USER_AGENT="TestApp/1.0 (tester@fintech-research.org)",
     )
     client = SECClient(settings=test_settings)
 
@@ -71,7 +78,7 @@ def test_sec_client_get_company_tickers_mocked() -> None:
 def test_sec_client_404_not_found() -> None:
     """Verify SECClient raises SECNotFoundError on HTTP 404."""
     test_settings = Settings(
-        SEC_USER_AGENT="TestApp/1.0 (tester@example.com)",
+        SEC_USER_AGENT="TestApp/1.0 (tester@fintech-research.org)",
     )
     client = SECClient(settings=test_settings)
 
@@ -87,7 +94,7 @@ def test_sec_client_404_not_found() -> None:
 def test_sec_client_403_forbidden() -> None:
     """Verify SECClient raises SECAuthenticationError on HTTP 403."""
     test_settings = Settings(
-        SEC_USER_AGENT="TestApp/1.0 (tester@example.com)",
+        SEC_USER_AGENT="TestApp/1.0 (tester@fintech-research.org)",
     )
     client = SECClient(settings=test_settings)
 
@@ -103,7 +110,7 @@ def test_sec_client_403_forbidden() -> None:
 def test_sec_client_429_rate_limit_exceeded() -> None:
     """Verify SECClient retries and ultimately raises SECRateLimitError on persistent 429."""
     test_settings = Settings(
-        SEC_USER_AGENT="TestApp/1.0 (tester@example.com)",
+        SEC_USER_AGENT="TestApp/1.0 (tester@fintech-research.org)",
     )
     client = SECClient(settings=test_settings, max_retries=1, backoff_factor=0.01)
 
@@ -119,7 +126,7 @@ def test_sec_client_429_rate_limit_exceeded() -> None:
 def test_sec_client_get_company_filings_flattening_and_filtering() -> None:
     """Verify column-oriented SEC filings data is correctly flattened and filtered."""
     test_settings = Settings(
-        SEC_USER_AGENT="TestApp/1.0 (tester@example.com)",
+        SEC_USER_AGENT="TestApp/1.0 (tester@fintech-research.org)",
     )
     client = SECClient(settings=test_settings)
 
