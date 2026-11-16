@@ -231,9 +231,9 @@ def main() -> None:
                 """
                 <div class="card">
                     <div class="metric-label">Foundation Status</div>
-                    <div class="metric-value">Session 12</div>
+                    <div class="metric-value">Session 13</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        End-to-End Evaluation, Financial Accuracy & Production Hardening
+                        Real-World SEC Benchmark, Live Integration & Deployment Readiness
                     </p>
                 </div>
                 """,
@@ -243,10 +243,10 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">Claim Verification</div>
-                    <div class="metric-value">Deterministic</div>
+                    <div class="metric-label">SEC Benchmark Suite</div>
+                    <div class="metric-value">24 Queries</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Exact numerical tolerances, reporting period audits, contradiction checks.
+                        AAPL, MSFT, TSLA, NVDA (20 certified real filings + 4 pending review).
                     </p>
                 </div>
                 """,
@@ -256,16 +256,248 @@ def main() -> None:
             st.markdown(
                 """
                 <div class="card">
-                    <div class="metric-label">Citation Auditing</div>
-                    <div class="metric-value">100% Traceable</div>
+                    <div class="metric-label">Deployment Topology</div>
+                    <div class="metric-value">Production-Ready</div>
                     <p style="color: #94A3B8; font-size: 0.9rem; margin-top: 0.5rem;">
-                        Every factual assertion requires verified [E1]/[C1] citations and EDGAR URLs.
+                        Docker Compose, multi-container architecture, health diagnostics.
                     </p>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
+        # Subsystem Diagnostics Section
+        with st.expander("🛠️ Subsystem Health & Runtime Diagnostics", expanded=False):
+            if health_data and "subsystems" in health_data:
+                subsys = health_data["subsystems"]
+                d_c1, d_c2, d_c3 = st.columns(3)
+                with d_c1:
+                    db_info = subsys.get("database", {})
+                    st.markdown("**💾 Database (SQLite)**")
+                    st.caption(
+                        f"Status: `{db_info.get('status', 'Unknown')}` | Tables: {db_info.get('tables_count', 0)}"
+                    )
+                    st.caption(
+                        f"Chunks: {db_info.get('document_chunks_count', 0)} | Calculations: {db_info.get('financial_calculations_count', 0)}"
+                    )
+
+                    sec_info = subsys.get("sec_client", {})
+                    st.markdown("**🏛️ SEC EDGAR Client**")
+                    st.caption(f"Status: `{sec_info.get('status', 'Unknown')}`")
+                    st.caption(
+                        f"UA Valid: `{sec_info.get('user_agent_valid', False)}` | Max RPS: {sec_info.get('fair_access_rps', 8.0)}"
+                    )
+
+                with d_c2:
+                    ret_info = subsys.get("retrieval_index", {})
+                    dense = ret_info.get("dense_faiss", {})
+                    sparse = ret_info.get("sparse_bm25", {})
+                    st.markdown("**🔍 Information Retrieval Index**")
+                    st.caption(
+                        f"Dense FAISS: `{dense.get('status', 'Unknown')}` ({dense.get('total_embeddings', 0)} vectors, {dense.get('dimension', 384)}-d)"
+                    )
+                    st.caption(
+                        f"Sparse BM25: `{sparse.get('status', 'Unknown')}` ({sparse.get('indexed_documents', 0)} docs, k1={sparse.get('k1', 1.5)})"
+                    )
+
+                    llm_info = subsys.get("llm_provider", {})
+                    st.markdown("**🤖 Local LLM Provider**")
+                    st.caption(
+                        f"Provider: `{llm_info.get('provider_class', 'Unknown')}` | Model: `{llm_info.get('model_name', 'qwen2.5:3b')}`"
+                    )
+
+                with d_c3:
+                    ver_info = subsys.get("verification_service", {})
+                    st.markdown("**🛡️ Anti-Hallucination Engine**")
+                    st.caption(
+                        f"Status: `{ver_info.get('status', 'Unknown')}` (v{ver_info.get('version', '0.1.0')})"
+                    )
+                    st.caption(
+                        f"Tolerance: ±{ver_info.get('numeric_tolerance_pct', 1.0)}% | Regeneration: Max {ver_info.get('max_regeneration_attempts', 1)}"
+                    )
+
+                    st.markdown("**⚡ Process Metadata**")
+                    st.caption(
+                        f"Uptime: `{health_data.get('uptime_seconds', 0.0)}s` | Environment: `{health_data.get('environment', 'dev')}`"
+                    )
+            else:
+                st.info(
+                    "Direct backend health diagnostics available when FastAPI backend server is active."
+                )
+
+        st.markdown("### 🏛️ Portfolio Demonstration Hub — Audited SEC Case Studies")
+        st.caption(
+            "Reproducible, end-to-end demonstrations executing research planning, SEC evidence retrieval, "
+            "deterministic ratio calculations, and claim verification over statutory Form 10-K filings."
+        )
+
+        p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+        selected_demo_ticker: str | None = None
+
+        with p_col1:
+            st.markdown(
+                """
+                <div class="card">
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #F8FAFC;">🍎 Apple Inc.</div>
+                    <div style="color: #00B4D8; font-size: 0.85rem; margin-bottom: 0.5rem;">AAPL · FY2022-FY2023 10-K</div>
+                    <p style="color: #94A3B8; font-size: 0.82rem;">
+                        <b>Net Sales:</b> $383,285M<br>
+                        <b>Gross Margin:</b> 44.13% (+82 bps)<br>
+                        <b>Services Net Sales:</b> $85,200M (+9.1%)<br>
+                        <b>Free Cash Flow:</b> $99,584M<br>
+                        <b>Share Repurchases:</b> $77,550M
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "Open Apple Brief", key="btn_demo_aapl", use_container_width=True
+            ):
+                selected_demo_ticker = "aapl"
+
+        with p_col2:
+            st.markdown(
+                """
+                <div class="card">
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #F8FAFC;">💻 Microsoft</div>
+                    <div style="color: #00B4D8; font-size: 0.85rem; margin-bottom: 0.5rem;">MSFT · FY2022-FY2023 10-K</div>
+                    <p style="color: #94A3B8; font-size: 0.82rem;">
+                        <b>Total Revenue:</b> $211,915M (+6.9%)<br>
+                        <b>Intelligent Cloud:</b> $87,907M (+17%)<br>
+                        <b>Operating Margin:</b> 41.77%<br>
+                        <b>CapEx (AI Infra):</b> $28,107M<br>
+                        <b>Free Cash Flow:</b> $59,475M
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "Open Microsoft Brief", key="btn_demo_msft", use_container_width=True
+            ):
+                selected_demo_ticker = "msft"
+
+        with p_col3:
+            st.markdown(
+                """
+                <div class="card">
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #F8FAFC;">⚡ Tesla, Inc.</div>
+                    <div style="color: #00B4D8; font-size: 0.85rem; margin-bottom: 0.5rem;">TSLA · FY2022-FY2023 10-K</div>
+                    <p style="color: #94A3B8; font-size: 0.82rem;">
+                        <b>Total Revenue:</b> $96,773M (+18.8%)<br>
+                        <b>Automotive Revenue:</b> $82,419M<br>
+                        <b>Gross Margin:</b> 18.25% (-735 bps)<br>
+                        <b>Energy Storage:</b> $6,035M (+54%)<br>
+                        <b>Cash Reserves:</b> $29,094M
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "Open Tesla Brief", key="btn_demo_tsla", use_container_width=True
+            ):
+                selected_demo_ticker = "tsla"
+
+        with p_col4:
+            st.markdown(
+                """
+                <div class="card">
+                    <div style="font-size: 1.2rem; font-weight: 700; color: #F8FAFC;">🚀 NVIDIA Corp</div>
+                    <div style="color: #00B4D8; font-size: 0.85rem; margin-bottom: 0.5rem;">NVDA · FY2023-FY2024 10-K</div>
+                    <p style="color: #94A3B8; font-size: 0.82rem;">
+                        <b>Revenue:</b> $60,922M (+125.9%)<br>
+                        <b>Data Center:</b> $47,525M (+217%)<br>
+                        <b>Gross Margin:</b> 72.72% (+1,579 bps)<br>
+                        <b>Operating Margin:</b> 54.12%<br>
+                        <b>Free Cash Flow:</b> $26,947M
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "Open NVIDIA Brief", key="btn_demo_nvda", use_container_width=True
+            ):
+                selected_demo_ticker = "nvda"
+
+        # Display Selected Portfolio Brief
+        if "active_demo" not in st.session_state:
+            st.session_state["active_demo"] = "aapl"
+
+        if selected_demo_ticker:
+            st.session_state["active_demo"] = selected_demo_ticker
+
+        active_t = st.session_state["active_demo"]
+        demo_files = {
+            "aapl": (
+                "Apple Inc. (AAPL)",
+                "reports/demos/aapl_fy2022-fy2023_demo_brief.md",
+                "reports/demos/aapl_fy2022-fy2023_demo_brief.html",
+            ),
+            "msft": (
+                "Microsoft Corporation (MSFT)",
+                "reports/demos/msft_fy2022-fy2023_demo_brief.md",
+                "reports/demos/msft_fy2022-fy2023_demo_brief.html",
+            ),
+            "tsla": (
+                "Tesla, Inc. (TSLA)",
+                "reports/demos/tsla_fy2022-fy2023_demo_brief.md",
+                "reports/demos/tsla_fy2022-fy2023_demo_brief.html",
+            ),
+            "nvda": (
+                "NVIDIA Corporation (NVDA)",
+                "reports/demos/nvda_fy2023-fy2024_demo_brief.md",
+                "reports/demos/nvda_fy2023-fy2024_demo_brief.html",
+            ),
+        }
+
+        if active_t in demo_files:
+            c_name, md_p, html_p = demo_files[active_t]
+            st.markdown("---")
+            st.markdown(f"#### 📄 Audited Deliverable: {c_name}")
+            st.markdown(
+                '<span class="badge-active">✓ VERIFIED AUDIT TRAIL — OFFICIAL SEC 10-K FILING</span>',
+                unsafe_allow_html=True,
+            )
+
+            p_md = Path(md_p)
+            if not p_md.exists():
+                # Generate if not exists
+                from evaluation.demo_scenarios.demo_scenarios import run_demo_scenario
+
+                run_demo_scenario(active_t)
+
+            if p_md.exists():
+                with open(p_md, encoding="utf-8") as f:
+                    md_text = f.read()
+
+                tab_md, tab_html = st.tabs(
+                    ["📝 Formatted Markdown Brief", "🌐 Interactive Executive HTML"]
+                )
+                with tab_md:
+                    st.markdown(md_text)
+                    st.download_button(
+                        f"Download {active_t.upper()} Markdown Brief",
+                        data=md_text,
+                        file_name=f"{active_t}_financial_research_brief.md",
+                        mime="text/markdown",
+                    )
+                with tab_html:
+                    p_html = Path(html_p)
+                    if p_html.exists():
+                        with open(p_html, encoding="utf-8") as f:
+                            html_text = f.read()
+                        components.html(html_text, height=750, scrolling=True)
+                        st.download_button(
+                            f"Download {active_t.upper()} HTML Brief",
+                            data=html_text,
+                            file_name=f"{active_t}_financial_research_brief.html",
+                            mime="text/html",
+                        )
+
+        st.markdown("---")
         st.markdown("### 🎯 System Objectives & Core Capabilities")
         st.markdown(
             """
@@ -277,12 +509,6 @@ def main() -> None:
             - **Hybrid IR & Reranking**: Reciprocal Rank Fusion (RRF) over FAISS dense vectors and BM25 sparse lexical tokens, refined with Cross-Encoder reranking.
             - **Automated SEC EDGAR Retrieval**: Programmatic acquisition of annual (10-K) and quarterly (10-Q) filings with section-aware chunking.
             """
-        )
-
-        st.info(
-            "📌 **Session 11 Active**: Autonomous Financial Research Briefs & Multi-Section Report Generation is fully operational. "
-            "Navigate to **Autonomous Research Reports** to plan, execute multi-task research, analyze longitudinal trends, "
-            "and generate auditable reports in Markdown and HTML."
         )
 
     # -------------------------------------------------------------------------

@@ -35,13 +35,17 @@ def render_evaluation_view(backend_url: str, settings: Settings) -> None:
                 options=[
                     "all",
                     "retrieval",
+                    "real_sec",
+                    "integration",
                     "financial_calculation",
                     "verification",
                     "report",
                 ],
                 format_func=lambda x: {
-                    "all": "⚡ Full System (All 4 Suites)",
-                    "retrieval": "🔍 Information Retrieval (16 Queries)",
+                    "all": "⚡ Full System (All 4 Standard Suites)",
+                    "retrieval": "🔍 Information Retrieval (16 Synthetic Queries)",
+                    "real_sec": "🏛️ Real SEC Form 10-K Benchmark (24 Queries: AAPL, MSFT, TSLA, NVDA)",
+                    "integration": "🔬 Full SEC EDGAR Audit & Real Benchmark Suite",
                     "financial_calculation": "🧮 Pure Financial Math (18 Cases)",
                     "verification": "🛡️ Anti-Hallucination (18 Probes)",
                     "report": "📑 Autonomous Reports (8 Scenarios)",
@@ -84,12 +88,28 @@ def render_evaluation_view(backend_url: str, settings: Settings) -> None:
                         )
                         from evaluation.run_evaluation import run_benchmarks
 
-                        run_benchmarks(
-                            eval_type=eval_scope,
-                            top_k=top_k_val,
-                            retrieval_mode=ret_mode,
-                            save_to_db=True,
-                        )
+                        if eval_scope == "real_sec":
+                            run_benchmarks(
+                                eval_type="retrieval",
+                                dataset="real_sec",
+                                top_k=top_k_val,
+                                retrieval_mode=ret_mode,
+                                save_to_db=True,
+                            )
+                        elif eval_scope == "integration":
+                            run_benchmarks(
+                                eval_type="integration",
+                                top_k=top_k_val,
+                                retrieval_mode=ret_mode,
+                                save_to_db=True,
+                            )
+                        else:
+                            run_benchmarks(
+                                eval_type=eval_scope,
+                                top_k=top_k_val,
+                                retrieval_mode=ret_mode,
+                                save_to_db=True,
+                            )
                         st.success(
                             "Offline benchmark run finished and saved to SQLite!"
                         )
@@ -98,12 +118,28 @@ def render_evaluation_view(backend_url: str, settings: Settings) -> None:
                     # Fallback to direct offline execution
                     from evaluation.run_evaluation import run_benchmarks
 
-                    run_benchmarks(
-                        eval_type=eval_scope,
-                        top_k=top_k_val,
-                        retrieval_mode=ret_mode,
-                        save_to_db=True,
-                    )
+                    if eval_scope == "real_sec":
+                        run_benchmarks(
+                            eval_type="retrieval",
+                            dataset="real_sec",
+                            top_k=top_k_val,
+                            retrieval_mode=ret_mode,
+                            save_to_db=True,
+                        )
+                    elif eval_scope == "integration":
+                        run_benchmarks(
+                            eval_type="integration",
+                            top_k=top_k_val,
+                            retrieval_mode=ret_mode,
+                            save_to_db=True,
+                        )
+                    else:
+                        run_benchmarks(
+                            eval_type=eval_scope,
+                            top_k=top_k_val,
+                            retrieval_mode=ret_mode,
+                            save_to_db=True,
+                        )
                     st.success("Offline benchmark run finished and persisted!")
                     st.rerun()
 

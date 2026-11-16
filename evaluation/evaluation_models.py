@@ -98,7 +98,7 @@ class EvaluationSummary(BaseModel):
     passed_cases: int
     failed_cases: int
     pass_rate: float
-    metrics_summary: dict[str, float] = Field(default_factory=dict)
+    metrics_summary: dict[str, Any] = Field(default_factory=dict)
     key_findings: list[str] = Field(default_factory=list)
 
 

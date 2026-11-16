@@ -1766,7 +1766,11 @@ class Database:
         now_iso = datetime.now(UTC).isoformat()
         run_id = run_dict["run_id"]
 
-        raw_cases = case_results if case_results is not None else run_dict.get("case_results", [])
+        raw_cases = (
+            case_results
+            if case_results is not None
+            else run_dict.get("case_results", [])
+        )
         cases: list[dict[str, Any]] = [
             c.model_dump() if hasattr(c, "model_dump") else c for c in raw_cases
         ]
@@ -1782,12 +1786,16 @@ class Database:
         ]
 
         config_val = run_dict.get("config") or run_dict.get("config_json", {})
-        config_json = json.dumps(config_val) if not isinstance(config_val, str) else config_val
+        config_json = (
+            json.dumps(config_val) if not isinstance(config_val, str) else config_val
+        )
 
         summary_val = run_dict.get("summary") or run_dict.get("summary_json", {})
         if hasattr(summary_val, "model_dump"):
             summary_val = summary_val.model_dump()
-        summary_json = json.dumps(summary_val) if not isinstance(summary_val, str) else summary_val
+        summary_json = (
+            json.dumps(summary_val) if not isinstance(summary_val, str) else summary_val
+        )
 
         with self.connection() as conn:
             conn.execute(
@@ -1826,8 +1834,16 @@ class Database:
             # Insert case results
             if cases:
                 for c in cases:
-                    metrics_val = c.get("metrics") or c.get("metrics_json") or c.get("details", {})
-                    m_json = json.dumps(metrics_val) if not isinstance(metrics_val, str) else metrics_val
+                    metrics_val = (
+                        c.get("metrics")
+                        or c.get("metrics_json")
+                        or c.get("details", {})
+                    )
+                    m_json = (
+                        json.dumps(metrics_val)
+                        if not isinstance(metrics_val, str)
+                        else metrics_val
+                    )
                     expected_str = c.get("expected_output") or c.get("expected")
                     actual_str = c.get("actual_output") or c.get("actual")
                     if isinstance(expected_str, (dict, list)):
@@ -1863,7 +1879,12 @@ class Database:
                             expected_str,
                             actual_str,
                             c.get("error_message"),
-                            c.get("provenance", c.get("details", {}).get("provenance", "synthetic_fixture")),
+                            c.get(
+                                "provenance",
+                                c.get("details", {}).get(
+                                    "provenance", "synthetic_fixture"
+                                ),
+                            ),
                             c.get("created_at", now_iso),
                         ),
                     )
@@ -1872,7 +1893,11 @@ class Database:
             if metric_items:
                 for idx, m in enumerate(metric_items, start=1):
                     details_val = m.get("details") or m.get("details_json", {})
-                    d_json = json.dumps(details_val) if not isinstance(details_val, str) else details_val
+                    d_json = (
+                        json.dumps(details_val)
+                        if not isinstance(details_val, str)
+                        else details_val
+                    )
                     conn.execute(
                         """
                         INSERT INTO evaluation_metrics (
@@ -2045,4 +2070,3 @@ class Database:
                 (run_id.strip(),),
             ).fetchall()
             return [dict(r) for r in rows]
-

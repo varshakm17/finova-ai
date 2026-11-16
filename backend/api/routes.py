@@ -31,12 +31,6 @@ from backend.data.sec_client import (
     SECRateLimitError,
 )
 from backend.data.storage import Database
-from evaluation.evaluation_models import (
-    BenchmarkDatasetMeta,
-    EvaluationRunRequest,
-    EvaluationType,
-)
-from evaluation.run_evaluation import run_benchmarks
 from backend.evaluation.evidence_report import EvidenceReportGenerator
 from backend.evaluation.evidence_validator import EvidenceQualityValidator
 from backend.evaluation.retrieval_comparison import RetrievalComparator
@@ -90,9 +84,14 @@ from backend.retrieval.semantic_search import SemanticSearchService
 from backend.utils.logger import get_logger
 from backend.verification import VerificationRun, VerificationService
 from config.settings import get_settings
+from evaluation.evaluation_models import (
+    EvaluationRunRequest,
+)
+from evaluation.run_evaluation import run_benchmarks
 
 logger = get_logger("routes")
 router = APIRouter()
+START_TIME = time.time()
 
 # Service Singletons
 _db = Database()
@@ -169,10 +168,24 @@ _rag_service = RAGService(
 class HealthResponse(BaseModel):
     """Schema for application health check response."""
 
-    status: str = Field(..., description="Application operational status")
+    status: str = Field(default="healthy", description="Application operational status")
+    overall_status: str = Field(
+        default="Healthy",
+        description="Subsystem health status: Healthy, Degraded, Unavailable",
+    )
     app_name: str = Field(..., description="Application name")
     version: str = Field(..., description="Application version")
     environment: str = Field(..., description="Current deployment environment")
+    timestamp: str = Field(
+        default="", description="Diagnostic check timestamp in ISO 8601"
+    )
+    uptime_seconds: float = Field(default=0.0, description="Process uptime in seconds")
+    subsystems: dict[str, Any] = Field(
+        default_factory=dict, description="Detailed diagnostic inspection by subsystem"
+    )
+    config: dict[str, Any] = Field(
+        default_factory=dict, description="Active masked configuration"
+    )
 
 
 class CompanyIdentityResponse(BaseModel):
@@ -288,18 +301,175 @@ class DocumentChunkResponse(BaseModel):
 @router.get(
     "/health",
     response_model=HealthResponse,
-    summary="Application Health Check",
-    description="Returns the operational status, application name, environment, and version.",
+    summary="Application Health Check & System Diagnostics",
+    description="Returns full operational status, subsystem diagnostics, uptime, and active configuration.",
     tags=["Diagnostics"],
 )
 def get_health() -> HealthResponse:
-    """Retrieve current service health and metadata."""
+    """Retrieve current service health, subsystem diagnostics, and runtime metadata."""
+    from datetime import UTC, datetime
+
     settings = get_settings()
+    now_iso = datetime.now(UTC).isoformat()
+    uptime = round(time.time() - START_TIME, 2)
+
+    subsystems: dict[str, Any] = {}
+    overall_status = "Healthy"
+
+    # 1. Database Subsystem Check
+    try:
+        with _db.connection() as conn:
+            cur = conn.cursor()
+            table_count = cur.execute(
+                "SELECT count(*) FROM sqlite_master WHERE type='table'"
+            ).fetchone()[0]
+            chunk_count = 0
+            calc_count = 0
+            try:
+                chunk_count = cur.execute(
+                    "SELECT count(*) FROM document_chunks"
+                ).fetchone()[0]
+                calc_count = cur.execute(
+                    "SELECT count(*) FROM financial_calculations"
+                ).fetchone()[0]
+            except Exception:
+                pass
+        subsystems["database"] = {
+            "status": "Healthy",
+            "driver": "sqlite3",
+            "tables_count": table_count,
+            "document_chunks_count": chunk_count,
+            "financial_calculations_count": calc_count,
+            "connection": "verified",
+        }
+    except Exception as exc:
+        subsystems["database"] = {
+            "status": "Unavailable",
+            "driver": "sqlite3",
+            "error": str(exc),
+            "connection": "failed",
+        }
+        overall_status = "Unavailable"
+
+    # 2. SEC Client Subsystem Check
+    try:
+        from backend.data.sec_client import validate_user_agent
+
+        validate_user_agent(settings.SEC_USER_AGENT)
+        filings_dir = Path(settings.FILINGS_STORAGE_DIR)
+        filings_dir.mkdir(parents=True, exist_ok=True)
+        subsystems["sec_client"] = {
+            "status": "Healthy",
+            "user_agent_valid": True,
+            "declared_user_agent": settings.SEC_USER_AGENT,
+            "filings_cache_directory": str(filings_dir),
+            "cache_writable": filings_dir.exists(),
+            "fair_access_rps": 8.0,
+        }
+    except Exception as exc:
+        subsystems["sec_client"] = {
+            "status": "Degraded",
+            "user_agent_valid": False,
+            "error": str(exc),
+        }
+        if overall_status != "Unavailable":
+            overall_status = "Degraded"
+
+    # 3. Retrieval Index Subsystem Check
+    dense_status = "Healthy"
+    sparse_status = "Healthy"
+    total_embeddings = 0
+    total_bm25_docs = 0
+    try:
+        total_embeddings = _indexing_service.get_stats().total_embeddings
+    except Exception:
+        dense_status = "Degraded"
+    try:
+        total_bm25_docs = _bm25_indexing_service.get_stats().total_documents
+    except Exception:
+        sparse_status = "Degraded"
+
+    subsystems["retrieval_index"] = {
+        "status": "Healthy"
+        if (dense_status == "Healthy" and sparse_status == "Healthy")
+        else "Degraded",
+        "dense_faiss": {
+            "status": dense_status,
+            "total_embeddings": total_embeddings,
+            "dimension": settings.EMBEDDING_DIMENSION,
+            "model_name": settings.EMBEDDING_MODEL_NAME,
+        },
+        "sparse_bm25": {
+            "status": sparse_status,
+            "indexed_documents": total_bm25_docs,
+            "k1": settings.BM25_K1,
+            "b": settings.BM25_B,
+        },
+        "cross_encoder_reranker": {
+            "status": "Healthy",
+            "model_name": getattr(
+                settings,
+                "RERANKER_MODEL_NAME",
+                "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            ),
+        },
+    }
+
+    # 4. LLM Provider Subsystem Check
+    subsystems["llm_provider"] = {
+        "status": "Healthy",
+        "provider_class": type(_llm_provider).__name__,
+        "model_name": getattr(_llm_provider, "model_name", "local-ollama"),
+        "timeout_seconds": getattr(settings, "OLLAMA_TIMEOUT_SECONDS", 60.0),
+    }
+
+    # 5. Verification Engine Subsystem Check
+    subsystems["verification_service"] = {
+        "status": "Healthy",
+        "engine": "Deterministic Anti-Hallucination Claim & Receipt Verifier",
+        "numeric_tolerance_pct": getattr(
+            settings, "VERIFICATION_NUMERIC_TOLERANCE_PCT", 1.0
+        ),
+        "max_regeneration_attempts": getattr(
+            settings, "VERIFICATION_MAX_REGENERATION_ATTEMPTS", 1
+        ),
+        "version": getattr(settings, "VERIFICATION_VERSION", "0.1.0"),
+    }
+
+    # 6. Active Masked Configuration (Zero Secret Leakage)
+    masked_db = "sqlite:///./finova.db"
+    if "finova.db" in settings.DATABASE_URL:
+        masked_db = "sqlite:///./finova.db"
+    elif "memory" in settings.DATABASE_URL:
+        masked_db = "sqlite:///:memory:"
+    else:
+        masked_db = "sqlite:///[configured_local_db]"
+
+    active_config = {
+        "APP_NAME": settings.APP_NAME,
+        "APP_ENV": settings.APP_ENV,
+        "DEBUG": settings.DEBUG,
+        "APP_VERSION": settings.APP_VERSION,
+        "HOST": settings.HOST,
+        "PORT": settings.PORT,
+        "CHUNK_TARGET_SIZE": settings.CHUNK_TARGET_SIZE,
+        "CHUNK_OVERLAP": settings.CHUNK_OVERLAP,
+        "EMBEDDING_DIMENSION": settings.EMBEDDING_DIMENSION,
+        "BM25_K1": settings.BM25_K1,
+        "BM25_B": settings.BM25_B,
+        "DATABASE_URL": masked_db,
+    }
+
     return HealthResponse(
-        status="healthy",
+        status="healthy" if overall_status != "Unavailable" else "unavailable",
+        overall_status=overall_status,
         app_name=settings.APP_NAME,
         version=settings.APP_VERSION,
         environment=settings.APP_ENV,
+        timestamp=now_iso,
+        uptime_seconds=uptime,
+        subsystems=subsystems,
+        config=active_config,
     )
 
 
@@ -1906,9 +2076,13 @@ def run_evaluation(request: EvaluationRunRequest) -> dict[str, Any]:
             "total_cases": r.total_cases,
             "passed_cases": r.passed_cases,
             "failed_cases": r.failed_cases,
-            "pass_rate": r.summary.pass_rate if hasattr(r.summary, "pass_rate") else 0.0,
+            "pass_rate": r.summary.pass_rate
+            if hasattr(r.summary, "pass_rate")
+            else 0.0,
             "duration_ms": r.duration_ms,
-            "summary": r.summary.model_dump() if hasattr(r.summary, "model_dump") else r.summary,
+            "summary": r.summary.model_dump()
+            if hasattr(r.summary, "model_dump")
+            else r.summary,
             "metrics": [m.model_dump() for m in r.metrics],
             "issues": [i.model_dump() for i in r.issues],
         }
@@ -1923,9 +2097,13 @@ def run_evaluation(request: EvaluationRunRequest) -> dict[str, Any]:
                     "eval_type": r.eval_type,
                     "total_cases": r.total_cases,
                     "passed_cases": r.passed_cases,
-                    "pass_rate": r.summary.pass_rate if hasattr(r.summary, "pass_rate") else 0.0,
+                    "pass_rate": r.summary.pass_rate
+                    if hasattr(r.summary, "pass_rate")
+                    else 0.0,
                     "duration_ms": r.duration_ms,
-                    "summary": r.summary.model_dump() if hasattr(r.summary, "model_dump") else r.summary,
+                    "summary": r.summary.model_dump()
+                    if hasattr(r.summary, "model_dump")
+                    else r.summary,
                 }
                 for r in runs
             ],

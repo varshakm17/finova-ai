@@ -212,9 +212,18 @@ class EvidenceVerifier:
                     p_alias = ticker_aliases.get(p_ticker, "")
                     if p_ticker or p_name or p_alias:
                         company_match = (
-                            (p_ticker and (claim_comp in p_ticker or p_ticker in claim_comp))
-                            or (p_name and (claim_comp in p_name or p_name in claim_comp))
-                            or (p_alias and (claim_comp in p_alias or p_alias in claim_comp))
+                            (
+                                p_ticker
+                                and (claim_comp in p_ticker or p_ticker in claim_comp)
+                            )
+                            or (
+                                p_name
+                                and (claim_comp in p_name or p_name in claim_comp)
+                            )
+                            or (
+                                p_alias
+                                and (claim_comp in p_alias or p_alias in claim_comp)
+                            )
                         )
                         if not company_match:
                             return ClaimVerificationResult(
@@ -227,7 +236,9 @@ class EvidenceVerifier:
                                 ),
                                 confidence_score=0.98,
                                 verification_method="company_verifier",
-                                warnings=[f"Company attribution mismatch: {claim.mentioned_company} vs {passage.ticker}"],
+                                warnings=[
+                                    f"Company attribution mismatch: {claim.mentioned_company} vs {passage.ticker}"
+                                ],
                             )
 
         # Check 5: Numerical Verification

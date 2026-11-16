@@ -4,8 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Session 12 Evaluation & Hardening Complete](https://img.shields.io/badge/Status-Evaluation%20%26%20Hardening%20Complete-brightgreen.svg)]()
-[![Tests: 396 Passed](https://img.shields.io/badge/Tests-396%20Passed%20(100%25%20offline)-brightgreen.svg)]()
+[![Status: Session 13 Real-World Validation Complete](https://img.shields.io/badge/Status-Real--World%20SEC%20Validation%20Complete-brightgreen.svg)]()
+[![Tests: 405 Passed](https://img.shields.io/badge/Tests-405%20Passed%20(100%25%20offline)-brightgreen.svg)]()
 
 Finova AI is a modular, production-oriented financial intelligence platform designed to extract, compute, cross-verify, and synthesize evidence-backed corporate financial research from SEC EDGAR company filings (Forms 10-K and 10-Q).
 
@@ -532,26 +532,77 @@ pytest -v --cov=backend --cov=config
 - [x] Production hardening with question length limits (2000 chars), path traversal protection, and safe HTML escaping.
 - [x] 396 unit and integration tests executing 100% offline with 100% pass rate (`tests/`).
 - [x] Comprehensive documentation in `docs/evaluation-and-reliability-framework.md`.
+- [x] Curated Real-World SEC Benchmark dataset with 24 statutory queries covering AAPL, MSFT, TSLA, and NVDA Form 10-K filings (`evaluation/datasets/real_sec_benchmark.json`).
+- [x] Regulatory benchmark data validator checking SEC URLs, accession numbers, CIK mappings, and chunk correspondence (`evaluation/real_sec_benchmark_validator.py`).
+- [x] Upgraded Information Retrieval Evaluator supporting certified real SEC filings while strictly isolating pending annotations (`evaluation/retrieval_evaluator.py`).
+- [x] Optional Live SEC Integration test suite validating 12 capabilities under SEC EDGAR fair-access rules (`tests/integration/test_live_sec_pipeline.py`).
+- [x] Four reproducible end-to-end corporate research demonstrations for Apple, Microsoft, Tesla, and NVIDIA with Markdown and executive HTML exports (`evaluation/demo_scenarios/`).
+- [x] Production `/api/v1/health` diagnostics inspecting Database, SEC Client, Retrieval Index, LLM, and Verification subsystems with configuration masking (`backend/api/routes.py`).
+- [x] Multi-container Docker deployment topology with healthchecks and volume persistence (`Dockerfile.backend`, `Dockerfile.frontend`, `docker-compose.yml`).
+- [x] Interactive Portfolio Demonstration Hub and live subsystem health panel in Streamlit UI (`frontend/app.py`, `frontend/evaluation_view.py`).
+- [x] 405 unit and offline integration tests executing with 100% pass rate (`tests/`).
+- [x] Comprehensive documentation in `docs/real-world-validation-and-deployment.md`.
 
 ---
 
 ## 11. System Evaluation & Benchmarking
 
-Finova AI features an offline, reproducible evaluation framework:
+Finova AI features an offline, reproducible evaluation framework supporting both synthetic fixtures and statutory real-world Form 10-K filings:
 
 ```bash
-# Run all benchmark suites
+# Run all standard benchmark suites (100% offline)
 python -m evaluation.run_evaluation --eval-type all
 
-# Run specific benchmark suite
+# Run real SEC benchmark retrieval suite
+python -m evaluation.run_evaluation --eval-type retrieval --dataset real_sec
+
+# Run full SEC integration audit & certified retrieval evaluation
+python -m evaluation.run_evaluation --eval-type integration
+
+# Execute real company demonstration case studies (AAPL, MSFT, TSLA, NVDA)
+python -m evaluation.demo_scenarios.demo_scenarios --scenario all
+
+# Run specific domain benchmarks
 python -m evaluation.run_evaluation --eval-type financial_calculation
 python -m evaluation.run_evaluation --eval-type verification
-python -m evaluation.run_evaluation --eval-type retrieval --top-k 5
 python -m evaluation.run_evaluation --eval-type report
+```
+
+### Live SEC EDGAR Integration (Optional)
+To execute the 12 live capabilities connecting to official SEC EDGAR endpoints:
+```bash
+pytest tests/integration/test_live_sec_pipeline.py --run-live-sec
+```
+
+### Production Deployment (Docker Compose)
+```bash
+# Build and launch multi-container stack (FastAPI on 8000, Streamlit on 8501)
+docker compose up -d --build
+
+# Inspect backend diagnostics
+curl http://localhost:8000/api/v1/health
 ```
 
 ---
 
-## 12. License
+## 12. Documentation Sitemap
+
+- [architecture.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/architecture.md) — Multi-agent system topology.
+- [sec-data-pipeline.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/sec-data-pipeline.md) — Numerical XBRL ingestion pipeline and schema specification.
+- [filing-ingestion.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/filing-ingestion.md) — Document downloading, HTML parsing, section extraction, and chunking specification.
+- [financial-calculation-engine.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/financial-calculation-engine.md) — Deterministic financial arithmetic engine, receipts schema, and API specification.
+- [embeddings-and-vector-indexing.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/embeddings-and-vector-indexing.md) — Local sentence embeddings, persistent FAISS/NumPy indexing, and dense semantic search.
+- [hybrid-retrieval.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/hybrid-retrieval.md) — BM25 sparse search, domain-aware financial tokenization, and Reciprocal Rank Fusion (RRF).
+- [retrieval-evaluation-and-evidence-quality.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/retrieval-evaluation-and-evidence-quality.md) — Empirical IR evaluation metrics, cross-encoder reranking, and deterministic evidence quality audits.
+- [grounded-rag-and-llm-integration.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/grounded-rag-and-llm-integration.md) — Local LLM provider integration, multi-modal context building, citation verification, and evidence-grounded financial RAG.
+- [answer-verification-and-anti-hallucination.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/answer-verification-and-anti-hallucination.md) — Claim-level anti-hallucination engine, numerical verification, and contradiction detection.
+- [langgraph-multi-agent-architecture.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/langgraph-multi-agent-architecture.md) — LangGraph Supervisor orchestration and multi-agent execution tracing.
+- [autonomous-financial-research-and-report-generation.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/autonomous-financial-research-and-report-generation.md) — Autonomous multi-task planning, longitudinal financial trends, and multi-section Markdown/HTML brief generation.
+- [evaluation-and-reliability-framework.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/evaluation-and-reliability-framework.md) — Comprehensive offline evaluation framework and metrics documentation.
+- [real-world-validation-and-deployment.md](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/docs/real-world-validation-and-deployment.md) — Real-world SEC benchmark dataset, live pipeline integration, demo briefs, and containerized deployment.
+
+---
+
+## 13. License
 
 Distributed under the MIT License. See [LICENSE](file:///c:/Users/LENOVO/OneDrive/Desktop/Finova%20AI/LICENSE) for more details.

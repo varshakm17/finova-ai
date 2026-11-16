@@ -112,3 +112,4 @@ python -m evaluation.run_evaluation --eval-type report
 - **Parameterized SQL**: All SQLite database queries in `backend/data/storage.py` utilize parameterized `?` binds.
 - **XSS Prevention in HTML Reports**: All dynamically rendered strings (`company_name`, `ticker`, `period`) are escaped via `html.escape`.
 - **Zero-Budget Offline Independence**: Zero live network calls to SEC EDGAR or external LLM APIs are required for tests and benchmarks.
+
