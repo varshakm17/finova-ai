@@ -141,18 +141,138 @@ The Docker setup encapsulates the FastAPI backend and Streamlit frontend in hard
                           +-------------------------------------------------+
 ```
 
-### Configurable Host Port Mappings
-Finova AI containers listen internally on standard ports (backend: 8000, frontend: 8501). Host published ports are fully configurable without modifying container internals:
-- `PORT` (default `8000`): Host port mapped to backend container port 8000 (`"${PORT:-8000}:8000"`).
-- `FRONTEND_PORT` (default `8501`): Host port mapped to frontend container port 8501 (`"${FRONTEND_PORT:-8501}:8501"`).
-This allows the acceptance suite or multi-tenant deployments to override host ports (e.g., 18000 and 18501) with zero risk of port collision.
+### 5.1 Host System Prerequisites (Windows 11 Baseline)
 
-### Compose Project Isolation
+To run the containerized Finova AI stack on Windows 11, the host machine must satisfy the following baseline specifications:
+
+| Component | Minimum Requirement | Recommended Specification |
+|---|---|---|
+| **Operating System** | Windows 11 64-bit (Build 22000+) Home, Pro, or Enterprise | Windows 11 Pro 64-bit with WSL 2 |
+| **Virtualization** | Hardware Virtualization (VT-x / AMD-V) enabled in BIOS/UEFI | Enabled |
+| **WSL 2 Subsystem** | WSL 2 Linux kernel installed (`wsl --status`) | Ubuntu or Debian distro installed |
+| **Container Engine** | Docker Desktop 4.x+ for Windows with WSL 2 backend | Docker Desktop 4.35+ |
+| **Memory (RAM)** | 16 GB Physical RAM (allocated: 4 GB+ to WSL 2 engine) | 16 GB+ |
+| **Available Storage** | 20 GB free disk space on system drive | 30 GB+ SSD |
+| **Compute Type** | CPU-only laptop execution supported (no discrete GPU required) | Multi-core x86_64 CPU |
+
+### 5.2 Docker Desktop for Windows Installation & WSL 2 Setup
+
+If Docker is not currently installed on the host system:
+
+1. **Verify or Install WSL 2:**
+   Open PowerShell as Administrator and run:
+   ```powershell
+   wsl --install --no-distribution
+   wsl --status
+   ```
+   Ensure `Default Version: 2` is reported. If no Linux distribution exists, install Ubuntu:
+   ```powershell
+   wsl --install -d Ubuntu
+   ```
+
+2. **Download & Install Docker Desktop:**
+   - Download the official installer from [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/).
+   - During installation, ensure the option **"Use WSL 2 instead of Hyper-V"** is checked.
+   - Restart the machine if prompted.
+
+3. **Configure Docker Desktop Settings:**
+   - Open Docker Desktop.
+   - Navigate to **Settings > General** and verify **"Use the WSL 2 based engine"** is enabled.
+   - Navigate to **Settings > Resources > WSL Integration** and enable integration with your default WSL 2 distribution.
+   - Optional: Limit WSL 2 memory consumption to prevent host laptop memory pressure by creating `%USERPROFILE%\.wslconfig`:
+     ```ini
+     [wsl2]
+     memory=6GB
+     processors=4
+     ```
+
+4. **Verify Docker Installation in PowerShell:**
+   ```powershell
+   docker --version
+   docker compose version
+   docker info
+   docker context ls
+   ```
+
+### 5.3 Environment Configuration & SEC Identity Setup
+
+Before building or launching containers:
+
+1. **Create Container Environment File:**
+   Copy the Docker Compose template:
+   ```powershell
+   copy .env.docker.example .env
+   ```
+
+2. **Configure SEC Regulatory Identity:**
+   Edit `.env` and provide a genuine researcher or institutional identity adhering to the SEC EDGAR fair-access policy (`SampleCompany AdminContact@<sample company domain>.com`):
+   ```env
+   SEC_USER_AGENT=FinovaAI-Research/1.0.0 (researcher@myorganization.org)
+   ```
+   > [!IMPORTANT]
+   > Do not use placeholder emails (such as `contact@example.com` or `user@test.com`). Live SEC EDGAR queries will be rejected with HTTP 403 Forbidden.
+
+3. **Review Configurable Host Port Bindings:**
+   The container stack listens internally on standard ports (backend: 8000, frontend: 8501). Host published ports can be modified in `.env` to avoid host port collisions:
+   ```env
+   PORT=8000
+   FRONTEND_PORT=8501
+   ```
+
+### 5.4 Build, Container Startup & Health Verification Commands
+
+1. **Build Container Images (Clean Build):**
+   ```bash
+   docker compose build --no-cache
+   ```
+
+2. **Start Services in Detached Mode:**
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Inspect Running Containers & Startup Logs:**
+   ```bash
+   docker compose ps
+   docker compose logs --no-color
+   ```
+
+4. **Verify Health Endpoints from Host Browser or CLI:**
+   - **FastAPI Backend Health:**
+     ```powershell
+     curl -f http://localhost:8000/api/v1/health
+     ```
+     Expected JSON response: `{"status": "healthy", ...}`.
+   - **Streamlit Frontend Health:**
+     ```powershell
+     curl -f http://localhost:8501/_stcore/health
+     ```
+     Expected HTTP status: `200 OK`.
+   - **Interactive Frontend UI:** Open `http://localhost:8501` in your web browser.
+   - **Interactive API Documentation:** Open `http://localhost:8000/docs`.
+
+5. **Execute Automated Deployment Acceptance Suite:**
+   ```powershell
+   python evaluation/docker_acceptance.py
+   # Or via the unified smoke test runner:
+   python evaluation/deployment_smoke_tests.py --mode docker
+   ```
+
+6. **Scoped Project Teardown (Preserving Persistent Data):**
+   ```bash
+   docker compose down
+   ```
+   > [!WARNING]
+   > Do not pass `-v` or `--volumes` during normal teardown unless you explicitly intend to delete the persistent SQLite database and indexed filings.
+
+### 5.5 Compose Project Isolation & Resource Boundaries
+
 - **No Fixed Container Names:** Explicit `container_name` declarations are omitted from `docker-compose.yml`. Standard deployments use the default directory project name (`finova-ai`).
-- **Acceptance Isolation:** The automated acceptance test suite instantiates isolated UUID-based project identifiers (`finova-acc-<uuid>`).
+- **Acceptance Isolation:** The automated acceptance test runner (`evaluation/docker_acceptance.py`) instantiates isolated UUID-based project identifiers (`finova-acc-<uuid>`).
 - **Resource Boundary:** Test teardown targets only the isolated project (`docker compose -p <project> down -v`). Destructive global operations (such as `docker system prune` or global volume removal) are strictly prohibited.
 
-### Acceptance Verification Suite
+### 5.6 Acceptance Verification Suite Gates
+
 When Docker is available, `evaluation/docker_acceptance.py` verifies 10 mandatory deployment gates:
 1. **Docker CLI & Daemon Availability:** Verifies Docker CLI path and active daemon connectivity.
 2. **Dynamic Host Port Validation:** Validates port ranges (1–65535), detects collisions, and tests local socket occupancy.
@@ -166,10 +286,43 @@ When Docker is available, `evaluation/docker_acceptance.py` verifies 10 mandator
 10. **Hardened SQLite Volume Persistence:** Writes a unique per-run marker (`acc_persist_<uuid>`), restarts the backend container, polls for health recovery, reads the marker back, and asserts an exact byte match.
 11. **Guaranteed Scoped Teardown:** Executes `docker compose -p <project> down -v` in a `finally` block, reporting warnings if teardown encounters errors.
 
+### 5.7 Actual Acceptance Results (Session 17 Audit)
+
+A live audit of the current developer workstation was conducted during Session 17:
+
+- **Host Environment:** Windows 11 (NT 10.0.26200.0), 16 GB Physical RAM, CPU-only laptop.
+- **Docker Engine State:** Docker CLI and Docker Desktop daemon are **not installed** on this host (`CommandNotFoundException`).
+- **WSL Status:** WSL 2 kernel is present (`Default Version: 2`), but no Linux distributions are currently installed.
+- **Static Configuration Checks:** 10/10 static deployment and Compose configuration checks **PASSED** (1 non-critical warning for development placeholder SEC User-Agent).
+- **Offline Test Suite:** 504 passed, 12 skipped, 0 failed in 213 seconds.
+- **Overall Deployment Status:** **`NOT_VERIFIED`** (Process exit code: `2`).
+
 > [!NOTE]
 > On host machines without Docker CLI or a running Docker daemon, live Docker acceptance checks report `SKIPPED` with overall state `NOT_VERIFIED` (exit code 2). This prevents false deployment certifications. In offline test environments, the frontend-to-backend probe script is independently compiled and executed against simulated responses and standalone HTTP subprocesses in `tests/test_docker_acceptance.py`. Live internal Docker network verification occurs exclusively when the container suite is launched on a host with an active Docker daemon.
 
-### Dependency Integrity Strategy
+### 5.8 Container Security & Non-Root Execution
+
+Both `Dockerfile.backend` and `Dockerfile.frontend` enforce unprivileged execution:
+- **Dedicated Application User:** Creates user `appuser` with explicit UID `1000` and GID `1000`.
+- **Directory Ownership:** Pre-creates `/app/data`, `/app/datasets/filings`, `/app/datasets/indexes`, `/app/logs`, and `/app/reports` with ownership assigned to `appuser:appuser`.
+- **User Instruction:** Enforces `USER appuser` prior to exposing ports or declaring runtime entrypoints.
+- **No Secret Baking:** Build context excludes `.env`, `*.db`, `*.sqlite*`, and credentials via `.dockerignore`.
+- **Unprivileged Ports:** Exposed ports 8000 and 8501 are non-privileged (> 1024).
+
+### 5.9 SQLite Persistence & Volume Management
+
+- **Named Volume Topology:** `finova_data` volume is mounted to container path `/app/data/`.
+- **Database Connection String:** `DATABASE_URL=sqlite:////app/data/finova.db`.
+- **Write-Ahead Logging:** `DATABASE_WAL_MODE=true` ensures database integrity and concurrent access across processes.
+- **Restart Survival:** Stopping and restarting containers (`docker compose restart` or `docker compose down` followed by `docker compose up -d`) preserves all SQLite data, cached filings, and analytical runs in `finova_data`.
+
+### 5.10 Known Limitations & Operational Constraints
+
+1. **CPU-Only Execution:** Finova AI embeddings (`all-MiniLM-L6-v2`) and cross-encoder reranking (`ms-marco-MiniLM-L-6-v2`) execute purely on CPU. Vector indexing and search are optimized with FAISS CPU and numpy; GPU acceleration is neither required nor enabled in the default containers.
+2. **Container Memory Footprint:** The combined container stack requires ~2.5 GB to 3.5 GB of RAM under active multi-agent research operations. On Windows 11 with WSL 2, ensure `.wslconfig` allocates at least 4 GB to the WSL 2 virtual machine.
+3. **Local Deployment Scope:** Finova AI container deployment is scoped to local single-host Docker Compose operation. Cloud clustering, Kubernetes orchestration, or multi-node distributed storage are outside current project scope.
+
+### 5.11 Dependency Integrity Strategy
 - **Pip Pinning:** Docker builds explicitly pin `pip==24.3.1` in `Dockerfile.backend` and `Dockerfile.frontend` to eliminate build-time installer drift.
 - **Exact Lockfile:** Runtime dependencies are locked to exact versions in `requirements.lock` (99 runtime packages).
 - **Evaluation of Hash-Checking:** While `--require-hashes` enhances supply-chain security, multi-platform wheels for packages such as PyTorch, FAISS-CPU, and SciPy produce distinct platform-specific SHA256 hashes across Linux (x86_64 Debian containers) and development hosts (Windows 11). Pinning exact versions combined with a pinned pip installer provides stable, reproducible resolution in CPU-only containers without cross-platform wheel mismatch failures.
@@ -183,21 +336,6 @@ pip install -r requirements.txt
 # 3. Freeze runtime dependencies:
 pip freeze > requirements.lock
 # 4. Verify dev tools (pytest, ruff) are not in requirements.lock
-```
-
-### Execution
-```bash
-# 1. Copy Docker template
-cp .env.docker.example .env
-
-# 2. Build and launch
-docker compose up --build -d
-
-# 3. Check container status
-docker compose ps
-
-# 4. View logs
-docker compose logs -f backend
 ```
 
 ---
@@ -294,3 +432,40 @@ The URL resolver (`frontend/backend_client.py`) provides robust resolution:
   ```bash
   docker compose -p my_finova_project up -d
   ```
+
+### 8. Docker CLI Not Recognized in PowerShell
+- **Cause:** Docker Desktop is not installed, or its binaries directory is not added to the Windows system `PATH`.
+- **Resolution:**
+  1. Verify whether Docker Desktop is installed in `C:\Program Files\Docker\Docker`.
+  2. If missing, download and install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/).
+  3. Ensure `C:\Program Files\Docker\Docker\resources\bin` is present in the `PATH` environment variable.
+  4. Restart your PowerShell terminal and run `docker --version`.
+
+### 9. WSL 2 Subsystem Reports "No Installed Distributions"
+- **Cause:** The WSL 2 kernel is enabled, but no default Linux distribution exists to run containerized workloads.
+- **Resolution:**
+  1. Open PowerShell as Administrator.
+  2. Install the standard Ubuntu distribution:
+     ```powershell
+     wsl --install -d Ubuntu
+     ```
+  3. Set WSL 2 as the default architecture:
+     ```powershell
+     wsl --set-default-version 2
+     ```
+  4. Re-open Docker Desktop and verify WSL 2 integration under **Settings > Resources > WSL Integration**.
+
+### 10. Container Build Terminates During PyTorch / SciPy Wheel Installation
+- **Cause:** The WSL 2 virtual machine has exhausted its allocated RAM while unpacking or compiling large wheel packages.
+- **Resolution:** Create or edit `%USERPROFILE%\.wslconfig` on the Windows host to allocate sufficient memory (at least 4 GB to 6 GB) and swap:
+  ```ini
+  [wsl2]
+  memory=6GB
+  swap=4GB
+  processors=4
+  ```
+  Restart the WSL service with `wsl --shutdown` before re-running `docker compose build --no-cache`.
+
+### 11. Persistent Volume Permission Issues (Non-Root UID 1000)
+- **Cause:** Host bind mounts or named volumes created with root ownership prevent the container's unprivileged user (`appuser`, UID 1000) from writing to `/app/data`.
+- **Resolution:** The Dockerfile automatically pre-creates `/app/data` and assigns ownership to `appuser:appuser`. Use the named Docker volume `finova_data` defined in `docker-compose.yml` rather than arbitrary host folder bind-mounts to guarantee proper permission mapping.
