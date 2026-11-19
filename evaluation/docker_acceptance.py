@@ -1,20 +1,41 @@
 """Finova AI — Real Docker Deployment Acceptance Test Runner.
 
-Executes a non-destructive, isolated Docker Compose acceptance workflow:
-1. Docker CLI availability & daemon connectivity.
-2. Dynamic host port validation & collision detection.
-3. SEC identity strict validation (mandatory; rejects missing/empty/placeholders).
-4. Compose configuration syntax validation with isolated project scope.
-5. Multi-stage backend & frontend image builds.
-6. Isolated container startup with configurable host port mappings.
-7. Live health probing of backend (/api/v1/health) and frontend (_stcore/health).
-8. Non-root user validation (UID 1000 appuser) for both backend and frontend.
-9. Frontend-to-backend Docker network communication & BACKEND_API_URL validation.
-10. Hardened SQLite data volume mounting & restart persistence validation.
-11. Container resource utilization audit (memory and CPU stats).
-12. Guaranteed teardown and volume cleanup restricted strictly to the acceptance project (mandatory PASS).
+Executes a non-destructive, isolated Docker Compose acceptance workflow evaluating
+16 discrete check results across 12 functional operational stages:
 
-If Docker is unavailable, tests are cleanly marked SKIPPED with explicit prerequisite explanations.
+1. Host Prerequisites:
+   - `docker_cli_availability` (Mandatory): CLI discovery & executable resolution.
+   - `docker_daemon_connectivity` (Mandatory): Live Docker daemon status via `docker info`.
+2. Host Port Validation:
+   - `docker_host_port_validation` (Mandatory): Dynamic collision detection & socket binding.
+3. SEC Identity Strict Validation:
+   - `docker_sec_identity_validation` (Mandatory): SEC Fair Access compliance (strictly rejecting empty or placeholder identities).
+4. Compose Configuration Validation:
+   - `docker_compose_config_validation` (Mandatory): docker-compose.yml syntax & variable interpolation.
+5. Multi-Stage Container Builds:
+   - `docker_build_backend_image` (Mandatory): Backend Docker image build (`Dockerfile.backend`).
+   - `docker_build_frontend_image` (Mandatory): Frontend Docker image build (`Dockerfile.frontend`).
+6. Isolated Container Startup:
+   - `docker_container_startup` (Mandatory): Detached launch under UUID project scope (`finova-acc-<uuid>`).
+7. Subsystem Health Probing:
+   - `docker_backend_health_check` (Mandatory): HTTP 200 OK polling at `/api/v1/health`.
+   - `docker_frontend_health_check` (Mandatory): HTTP 200 OK polling at `/_stcore/health`.
+8. Non-Root Security Enforcement:
+   - `docker_backend_non_root_execution` (Mandatory): Backend process executes strictly as UID 1000 (`appuser`).
+   - `docker_frontend_non_root_execution` (Mandatory): Frontend process executes strictly as UID 1000 (`appuser`).
+9. Internal Network Connectivity:
+   - `docker_frontend_backend_connectivity` (Mandatory): Internal Docker DNS & bridge network HTTP communication.
+10. Data Persistence Across Restart:
+    - `docker_data_volume_persistence` (Mandatory): SQLite volume data retention across container restart.
+11. Container Observability & Telemetry:
+    - `docker_resource_usage` (Informational): Container CPU and memory utilization stats via `docker stats`.
+12. Guaranteed Scoped Teardown:
+    - `docker_environment_cleanup` (Mandatory): Isolated container & volume removal via `docker compose down -v`.
+
+Summary of Verification Gates:
+- Total Individual Checks Emitted: 16 (15 Mandatory Gates + 1 Informational Telemetry Check).
+- Acceptance Gate Pass Requirement: All 15 mandatory gates must report PASS for deployment verification.
+- Absence of Docker: Cleanly marked SKIPPED with overall state NOT_VERIFIED (exit code 2).
 """
 
 from __future__ import annotations

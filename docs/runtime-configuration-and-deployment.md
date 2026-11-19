@@ -273,22 +273,38 @@ Before building or launching containers:
 
 ### 5.6 Acceptance Verification Suite Gates
 
-When Docker is available, `evaluation/docker_acceptance.py` enforces 12 deployment gates (11 mandatory lifecycle and security gates, plus telemetry auditing and mandatory cleanup):
+When Docker is available, `evaluation/docker_acceptance.py` evaluates **16 discrete check results** structured across **12 functional operational stages**. The suite enforces **15 mandatory deployment gates** (all 15 must evaluate to `PASS` for deployment verification; any failure or prerequisite absence causes an immediate halt or failure with exit codes 1 or 2) and **1 informational telemetry check** (capturing container CPU and RAM usage):
 
-1. **Docker CLI Availability (Mandatory):** Discovers and verifies the Docker CLI executable path (supporting automated fallback discovery on Windows in `%LOCALAPPDATA%` and `%ProgramFiles%`).
-2. **Docker Daemon Connectivity (Mandatory):** Confirms an active, responsive Docker engine daemon via `docker info`.
-3. **Dynamic Host Port Validation (Mandatory):** Validates port ranges (1–65535), detects collisions, and verifies local socket availability for backend and frontend ports.
-4. **SEC Identity Strict Validation (Mandatory):** Validates that `SEC_USER_AGENT` is configured, non-empty, and compliant with SEC Fair Access policy (strictly rejecting placeholder identities such as `example.com`, `domain.com`, `test.com`, `finova.internal`, or unconfigured defaults) before initiating container operations. All diagnostic logs mask contact emails.
-5. **Compose Configuration Validation (Mandatory):** Validates `docker-compose.yml` multi-service syntax with isolated project scope and dynamic environment variable bindings.
-6. **Multi-Stage Container Builds (Mandatory):** Builds production backend and frontend Docker images (`Dockerfile.backend`, `Dockerfile.frontend`) using pinned lockfile dependencies.
-7. **Isolated Container Startup (Mandatory):** Launches project containers in detached mode under an isolated UUID-based project identifier (`finova-acc-<uuid>`).
-8. **Backend Health Probe (Mandatory):** Probes `http://127.0.0.1:<PORT>/api/v1/health` with retry polling, verifying HTTP 200 OK and operational subsystem statuses.
-9. **Frontend Health Probe (Mandatory):** Probes `http://127.0.0.1:<FRONTEND_PORT>/_stcore/health` with retry polling, verifying HTTP 200 OK.
-10. **Non-Root Execution Validation (Mandatory):** Verifies numeric UID from `id -u` on both backend and frontend containers, failing on non-zero exit codes, non-numeric outputs, or UID 0 (root). Both containers execute strictly as UID 1000 (`appuser`).
-11. **Frontend-to-Backend Network Connectivity (Mandatory):** Executes an internal lightweight probe inside the frontend container, validating `BACKEND_API_URL` propagation and internal Docker DNS resolution across the bridge network to `http://backend:8000/api/v1/health`.
-12. **Hardened SQLite Volume Persistence (Mandatory):** Writes a unique per-run cryptographic marker (`acc_persist_<uuid>`), restarts the backend container, polls for health recovery, reads the marker back, and asserts an exact byte match.
-13. **Container Resource Observability (Informational):** Captures CPU and memory utilization telemetry (`docker stats --no-stream`) prior to teardown.
-14. **Guaranteed Scoped Teardown (Mandatory):** Executes `docker compose -p <project> down -v` in a `finally` block, failing the acceptance suite (exit code 1) if teardown encounters non-zero return codes, timeouts, or exceptions.
+| # | Check Result Identifier (`name`) | Functional Stage | Gate Classification | Evaluation Target & Verification Objective |
+|---|---|---|:---:|---|
+| 1 | `docker_cli_availability` | 1. Host Prerequisites | **Mandatory** | Discovers and verifies the Docker CLI executable path (supporting automated fallback discovery on Windows in `%LOCALAPPDATA%` and `%ProgramFiles%`). |
+| 2 | `docker_daemon_connectivity` | 1. Host Prerequisites | **Mandatory** | Confirms an active, responsive Docker engine daemon via `docker info`. Cleanly SKIPPED if daemon is unreachable. |
+| 3 | `docker_host_port_validation` | 2. Host Port Validation | **Mandatory** | Validates port ranges (1–65535), detects collisions, and verifies local socket availability for backend and frontend ports. |
+| 4 | `docker_sec_identity_validation` | 3. SEC Identity Validation | **Mandatory** | Validates `SEC_USER_AGENT` compliance with SEC Fair Access policy (strictly rejecting empty or placeholder identities). Diagnostic output masks contact emails. |
+| 5 | `docker_compose_config_validation` | 4. Compose Syntax & Config | **Mandatory** | Validates `docker-compose.yml` multi-service syntax with isolated project scope and dynamic environment variable bindings. |
+| 6 | `docker_build_backend_image` | 5. Multi-Stage Container Builds | **Mandatory** | Builds production backend image (`Dockerfile.backend`) with pinned lockfile dependencies. |
+| 7 | `docker_build_frontend_image` | 5. Multi-Stage Container Builds | **Mandatory** | Builds production frontend image (`Dockerfile.frontend`) with pinned lockfile dependencies. |
+| 8 | `docker_container_startup` | 6. Isolated Container Startup | **Mandatory** | Launches project containers in detached mode under an isolated UUID project identifier (`finova-acc-<uuid>`). |
+| 9 | `docker_backend_health_check` | 7. Service Health Probes | **Mandatory** | Probes `http://127.0.0.1:<PORT>/api/v1/health` with retry polling, asserting HTTP 200 OK and healthy subsystem status. |
+| 10 | `docker_frontend_health_check` | 7. Service Health Probes | **Mandatory** | Probes `http://127.0.0.1:<FRONTEND_PORT>/_stcore/health` with retry polling, asserting HTTP 200 OK. |
+| 11 | `docker_backend_non_root_execution` | 8. Non-Root Security | **Mandatory** | Inspects numeric UID (`id -u`) inside backend container; asserts strictly unprivileged UID 1000 (`appuser`), failing on UID 0 (root). |
+| 12 | `docker_frontend_non_root_execution` | 8. Non-Root Security | **Mandatory** | Inspects numeric UID (`id -u`) inside frontend container; asserts strictly unprivileged UID 1000 (`appuser`), failing on UID 0 (root). |
+| 13 | `docker_frontend_backend_connectivity` | 9. Internal Network Connectivity | **Mandatory** | Probes internal Docker bridge network from frontend container to `http://backend:8000/api/v1/health`, validating `BACKEND_API_URL` and internal DNS resolution. |
+| 14 | `docker_data_volume_persistence` | 10. Volume Data Persistence | **Mandatory** | Writes cryptographic marker (`acc_persist_<uuid>`), restarts backend container, waits for health recovery, and asserts exact byte-level SQLite data retention. |
+| 15 | `docker_resource_usage` | 11. Container Observability | **Informational** | Captures container CPU% and memory utilization metrics (`docker stats --no-stream`) prior to teardown. Non-blocking telemetry check (`is_mandatory=False`). |
+| 16 | `docker_environment_cleanup` | 12. Guaranteed Scoped Teardown | **Mandatory** | Executes `docker compose -p <project> down -v` in a `finally` block; strictly asserts clean container and volume teardown without impacting external Docker resources. |
+
+#### Architectural Reconciliation of Gate Groupings
+
+The taxonomy above reconciles previous documentation references that described 12 deployment stages or 14 enumerated checkpoints:
+- **12 Functional Stages:** Grouping related checks by operational domain yields 12 stages (Prerequisites, Ports, SEC Identity, Compose Config, Builds, Startup, Health Probes, Non-Root Security, Internal Networking, Persistence, Observability, and Teardown).
+- **Grouped Check Categories:** Four of the 12 stages evaluate two distinct services or functions:
+  - *Stage 1 (Host Prerequisites):* Evaluates both CLI availability (`docker_cli_availability`) and daemon connectivity (`docker_daemon_connectivity`).
+  - *Stage 5 (Multi-Stage Builds):* Evaluates backend image build (`docker_build_backend_image`) and frontend image build (`docker_build_frontend_image`).
+  - *Stage 7 (Service Health Probes):* Evaluates backend health endpoint (`docker_backend_health_check`) and frontend health endpoint (`docker_frontend_health_check`).
+  - *Stage 8 (Non-Root Security):* Evaluates backend container UID (`docker_backend_non_root_execution`) and frontend container UID (`docker_frontend_non_root_execution`).
+- **16 Emitted Results:** In a complete end-to-end acceptance run, the runner outputs exactly 16 discrete result items.
+- **15 Mandatory Gates vs 1 Informational:** Exactly 15 gates are classified as `is_mandatory=True`. Only `docker_resource_usage` is classified as `is_mandatory=False` (observability telemetry).
 
 ### 5.7 Actual Acceptance Results (Session 17 & 17.1 Verification)
 
@@ -298,7 +314,7 @@ An authentic live deployment acceptance run was executed on the Windows 11 host 
 - **Docker Engine State:** Docker Desktop 29.9.3 active, running on `desktop-linux` context.
 - **Docker Compose:** Version 5.7.0.
 - **WSL Status:** WSL 2 Linux container engine with Ubuntu distribution active (`Kernel 6.6.87.2-microsoft-standard-WSL2`).
-- **Live Acceptance Gates:** All 15 reported acceptance checks **PASSED** (Exit code `0`).
+- **Live Acceptance Gates:** All 16 reported acceptance checks **PASSED** (15 mandatory deployment gates + 1 informational telemetry check; Exit code `0`).
 - **Health Probes:**
   - Backend: `http://127.0.0.1:18000/api/v1/health` responded HTTP 200 OK (`healthy`, 25 DB tables, masked SEC contact `v***@g***.com`).
   - Frontend: `http://127.0.0.1:18501/_stcore/health` responded HTTP 200 OK (`body: ok`).
