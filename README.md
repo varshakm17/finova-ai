@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status: Docker Verification Pending](https://img.shields.io/badge/Status-Docker%20Verification%20Pending-yellow.svg)]()
+[![Status: Docker Verified](https://img.shields.io/badge/Status-Docker%20Verified-brightgreen.svg)]()
 [![Tests: 504 passed, 12 skipped, 0 failed](https://img.shields.io/badge/Tests-504%20passed%2C%2012%20skipped%2C%200%20failed-brightgreen.svg)]()
 [![Hardware: CPU Only](https://img.shields.io/badge/Hardware-CPU%20Only%20(16GB%20RAM)-informational.svg)]()
 

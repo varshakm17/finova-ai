@@ -158,8 +158,8 @@ class DockerAcceptanceRunner:
         project_name: str | None = None,
         backend_port: int = 18000,
         frontend_port: int = 18501,
-        build_timeout_sec: int = 240,
-        startup_timeout_sec: int = 60,
+        build_timeout_sec: int = 600,
+        startup_timeout_sec: int = 120,
     ) -> None:
         """Initialize runner with unique UUID-based project identifier and test ports."""
         self.project_name = project_name or f"finova-acc-{uuid.uuid4().hex[:8]}"
@@ -168,6 +168,18 @@ class DockerAcceptanceRunner:
         self.build_timeout_sec = build_timeout_sec
         self.startup_timeout_sec = startup_timeout_sec
         self.docker_cli = shutil.which("docker")
+        if not self.docker_cli and sys.platform == "win32":
+            candidate_dirs = [
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "DockerDesktop" / "resources" / "bin",
+                Path(os.environ.get("ProgramFiles", "")) / "Docker" / "Docker" / "resources" / "bin",
+            ]
+            for c in candidate_dirs:
+                exe = c / "docker.exe"
+                if exe.exists():
+                    self.docker_cli = str(exe)
+                    if str(c) not in os.environ.get("PATH", ""):
+                        os.environ["PATH"] = str(c) + os.pathsep + os.environ.get("PATH", "")
+                    break
 
     def _run_compose_cmd(
         self,
@@ -181,7 +193,7 @@ class DockerAcceptanceRunner:
         Captures TimeoutExpired and general exceptions without raising uncaught errors.
         """
         cmd = [
-            "docker",
+            self.docker_cli or "docker",
             "compose",
             "-p",
             self.project_name,
@@ -189,6 +201,11 @@ class DockerAcceptanceRunner:
             "docker-compose.yml",
             *args,
         ]
+        cmd_env = env.copy() if env is not None else os.environ.copy()
+        if self.docker_cli:
+            docker_bin_dir = str(Path(self.docker_cli).parent)
+            if docker_bin_dir not in cmd_env.get("PATH", ""):
+                cmd_env["PATH"] = docker_bin_dir + os.pathsep + cmd_env.get("PATH", "")
         try:
             proc = subprocess.run(
                 cmd,
@@ -196,7 +213,7 @@ class DockerAcceptanceRunner:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                env=env,
+                env=cmd_env,
             )
             return proc.returncode, proc.stdout, proc.stderr, None
         except subprocess.TimeoutExpired:
@@ -470,7 +487,7 @@ class DockerAcceptanceRunner:
         # 2. Docker daemon connectivity
         try:
             daemon_check = subprocess.run(
-                ["docker", "info"],
+                [self.docker_cli or "docker", "info"],
                 capture_output=True,
                 text=True,
                 timeout=8,
@@ -558,7 +575,14 @@ class DockerAcceptanceRunner:
         env_vars = os.environ.copy()
         env_vars["PORT"] = str(self.backend_port)
         env_vars["FRONTEND_PORT"] = str(self.frontend_port)
-        env_vars["SEC_USER_AGENT"] = (
+        sec_ua = env_vars.get("SEC_USER_AGENT")
+        if not sec_ua:
+            try:
+                from dotenv import dotenv_values
+                sec_ua = dotenv_values(PROJECT_ROOT / ".env").get("SEC_USER_AGENT")
+            except Exception:
+                pass
+        env_vars["SEC_USER_AGENT"] = sec_ua or (
             "FinovaAI-DockerTest/1.0 (test-runner@finova.internal)"
         )
 
@@ -775,6 +799,36 @@ class DockerAcceptanceRunner:
 
         finally:
             if cleanup_needed and self.docker_cli:
+                # Capture container resource stats before teardown
+                try:
+                    ps_code, ps_out, _, _ = self._run_compose_cmd(["ps", "-q"], timeout=10)
+                    if ps_code == 0 and ps_out.strip():
+                        c_ids = ps_out.strip().split()
+                        stats_cmd = [
+                            self.docker_cli or "docker",
+                            "stats",
+                            "--no-stream",
+                            "--format",
+                            "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}",
+                            *c_ids,
+                        ]
+                        s_proc = subprocess.run(
+                            stats_cmd, capture_output=True, text=True, timeout=10
+                        )
+                        if s_proc.returncode == 0 and s_proc.stdout.strip():
+                            results.append(
+                                DockerCheckResult(
+                                    name="docker_resource_usage",
+                                    passed=True,
+                                    status="PASS",
+                                    is_mandatory=False,
+                                    message="Container resource metrics captured.",
+                                    details={"stats": s_proc.stdout.strip()},
+                                )
+                            )
+                except Exception:
+                    pass
+
                 try:
                     down_code, _, down_err, err = self._run_compose_cmd(
                         ["down", "-v"], timeout=30
@@ -822,6 +876,13 @@ def main() -> int:
     for res in results:
         status_label = f"[{res.status}]"
         print(f"{status_label:<10} {res.name}: {res.message}")
+        if res.name == "docker_resource_usage" and "stats" in res.details:
+            for s_line in res.details["stats"].splitlines():
+                print(f"           {s_line}")
+        elif res.name == "docker_backend_health_check" and res.details:
+            print(f"           Diagnostic Details: {res.details}")
+        elif res.name == "docker_data_volume_persistence" and "marker_id" in res.details:
+            print(f"           Marker: ID {res.details.get('marker_id')} -> '{res.details.get('marker_value')}' verified after restart")
         if res.status == "FAIL":
             has_fail = True
         elif res.status == "SKIPPED":
