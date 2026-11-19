@@ -74,12 +74,14 @@ PLACEHOLDER_EMAILS = {
     "admincontact@domain.com",
     "user@example.com",
     "your-email@example.com",
+    "your-email@yourdomain.com",
     "email@domain.com",
     "sample@samplecompany.com",
     "admin@samplecompany.com",
     "test@test.com",
     "user@domain.com",
     "admin@domain.com",
+    "test-runner@finova.internal",
 }
 
 PLACEHOLDER_DOMAINS = {
@@ -96,6 +98,8 @@ PLACEHOLDER_DOMAINS = {
     "test.net",
     "placeholder.com",
     "invalid.com",
+    "finova.internal",
+    "internal",
 }
 
 
@@ -107,10 +111,22 @@ def is_placeholder_user_agent(user_agent: str | None) -> bool:
     for placeholder in PLACEHOLDER_EMAILS:
         if placeholder in ua_clean:
             return True
+    if any(
+        kw in ua_clean
+        for kw in (
+            "your-email",
+            "youremail",
+            "your_email",
+            "finova.internal",
+            "example.com",
+            "contact@example",
+        )
+    ):
+        return True
     match = re.search(r"@([a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)", ua_clean)
     if match:
         domain = match.group(1).rstrip(")>]")
-        if domain in PLACEHOLDER_DOMAINS:
+        if domain in PLACEHOLDER_DOMAINS or domain.endswith(".internal"):
             return True
     return False
 
@@ -156,18 +172,19 @@ def validate_user_agent(
         )
 
     ua_clean = user_agent.strip()
+    masked_ua = mask_user_agent(ua_clean)
     # Check for email presence (user@domain.tld)
     email_pattern = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
     if not re.search(email_pattern, ua_clean):
         raise SECConfigurationError(
-            f"SEC_USER_AGENT '{ua_clean}' does not contain a valid contact email. "
+            f"SEC_USER_AGENT '{masked_ua}' does not contain a valid contact email. "
             "SEC EDGAR guidelines require a valid contact email in the User-Agent header "
             "(e.g., 'FinovaAI-Research/0.1.0 (admin@myfirm.org)')."
         )
 
     if not allow_placeholder and is_placeholder_user_agent(ua_clean):
         raise SECConfigurationError(
-            f"SEC_USER_AGENT '{ua_clean}' contains an unconfigured placeholder identity. "
+            f"SEC_USER_AGENT '{masked_ua}' contains an unconfigured placeholder identity. "
             "SEC EDGAR fair-access policy requires a valid, genuine institutional or researcher contact email. "
             "Please configure SEC_USER_AGENT in your .env file with your actual name/organization and email."
         )

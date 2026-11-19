@@ -3,14 +3,16 @@
 Executes a non-destructive, isolated Docker Compose acceptance workflow:
 1. Docker CLI availability & daemon connectivity.
 2. Dynamic host port validation & collision detection.
-3. Compose configuration syntax validation with isolated project scope.
-4. Multi-stage backend & frontend image builds.
-5. Isolated container startup with configurable host port mappings.
-6. Live health probing of backend (/api/v1/health) and frontend (_stcore/health).
-7. Non-root user validation (UID 1000 appuser) for both backend and frontend.
-8. Frontend-to-backend Docker network communication & BACKEND_API_URL validation.
-9. Hardened SQLite data volume mounting & restart persistence validation.
-10. Guaranteed teardown and volume cleanup restricted strictly to the acceptance project.
+3. SEC identity strict validation (mandatory; rejects missing/empty/placeholders).
+4. Compose configuration syntax validation with isolated project scope.
+5. Multi-stage backend & frontend image builds.
+6. Isolated container startup with configurable host port mappings.
+7. Live health probing of backend (/api/v1/health) and frontend (_stcore/health).
+8. Non-root user validation (UID 1000 appuser) for both backend and frontend.
+9. Frontend-to-backend Docker network communication & BACKEND_API_URL validation.
+10. Hardened SQLite data volume mounting & restart persistence validation.
+11. Container resource utilization audit (memory and CPU stats).
+12. Guaranteed teardown and volume cleanup restricted strictly to the acceptance project (mandatory PASS).
 
 If Docker is unavailable, tests are cleanly marked SKIPPED with explicit prerequisite explanations.
 """
@@ -32,6 +34,14 @@ import httpx
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from backend.data.sec_client import (
+    SECConfigurationError,
+    mask_user_agent,
+    validate_user_agent,
+)
 
 
 @dataclass
@@ -170,15 +180,25 @@ class DockerAcceptanceRunner:
         self.docker_cli = shutil.which("docker")
         if not self.docker_cli and sys.platform == "win32":
             candidate_dirs = [
-                Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "DockerDesktop" / "resources" / "bin",
-                Path(os.environ.get("ProgramFiles", "")) / "Docker" / "Docker" / "resources" / "bin",
+                Path(os.environ.get("LOCALAPPDATA", ""))
+                / "Programs"
+                / "DockerDesktop"
+                / "resources"
+                / "bin",
+                Path(os.environ.get("ProgramFiles", ""))
+                / "Docker"
+                / "Docker"
+                / "resources"
+                / "bin",
             ]
             for c in candidate_dirs:
                 exe = c / "docker.exe"
                 if exe.exists():
                     self.docker_cli = str(exe)
                     if str(c) not in os.environ.get("PATH", ""):
-                        os.environ["PATH"] = str(c) + os.pathsep + os.environ.get("PATH", "")
+                        os.environ["PATH"] = (
+                            str(c) + os.pathsep + os.environ.get("PATH", "")
+                        )
                     break
 
     def _run_compose_cmd(
@@ -225,6 +245,80 @@ class DockerAcceptanceRunner:
             )
         except Exception as exc:
             return -1, "", "", f"Command execution failed: {exc}"
+
+    def _validate_sec_identity(
+        self, env_vars: dict[str, str] | None = None
+    ) -> tuple[DockerCheckResult, str | None]:
+        """Validate SEC_USER_AGENT strictly without dummy fallbacks or leaking raw contact emails."""
+        sec_ua: str | None = None
+        if env_vars is not None:
+            sec_ua = env_vars.get("SEC_USER_AGENT")
+        elif os.environ.get("SEC_USER_AGENT"):
+            sec_ua = os.environ["SEC_USER_AGENT"]
+        else:
+            try:
+                from dotenv import dotenv_values
+
+                dot_vals = dotenv_values(PROJECT_ROOT / ".env")
+                sec_ua = dot_vals.get("SEC_USER_AGENT")
+            except Exception:
+                sec_ua = None
+
+        if not sec_ua or not sec_ua.strip():
+            return (
+                DockerCheckResult(
+                    name="docker_sec_identity_validation",
+                    passed=False,
+                    status="FAIL",
+                    is_mandatory=True,
+                    message=(
+                        "SEC identity validation failed: SEC_USER_AGENT is not configured. "
+                        "SEC EDGAR fair-access policy requires a declared User-Agent in the format: "
+                        "'ApplicationName/Version (admin@yourdomain.com)'. "
+                        "Please configure SEC_USER_AGENT in your .env file or process environment."
+                    ),
+                    details={
+                        "prerequisite": "SEC_USER_AGENT_REQUIRED",
+                        "sec_user_agent_masked": "[NOT CONFIGURED]",
+                    },
+                ),
+                None,
+            )
+
+        sec_ua_clean = sec_ua.strip()
+        masked_ua = mask_user_agent(sec_ua_clean)
+        try:
+            validate_user_agent(sec_ua_clean, allow_placeholder=False)
+            return (
+                DockerCheckResult(
+                    name="docker_sec_identity_validation",
+                    passed=True,
+                    status="PASS",
+                    is_mandatory=True,
+                    message=f"SEC_USER_AGENT is configured and compliant ({masked_ua}).",
+                    details={"sec_user_agent_masked": masked_ua},
+                ),
+                sec_ua_clean,
+            )
+        except SECConfigurationError as exc:
+            return (
+                DockerCheckResult(
+                    name="docker_sec_identity_validation",
+                    passed=False,
+                    status="FAIL",
+                    is_mandatory=True,
+                    message=(
+                        f"SEC identity validation failed: {exc} "
+                        "Please configure SEC_USER_AGENT in your .env file with your genuine "
+                        "name/organization and contact email."
+                    ),
+                    details={
+                        "error": str(exc),
+                        "sec_user_agent_masked": masked_ua,
+                    },
+                ),
+                None,
+            )
 
     def _validate_non_root(self, service: str) -> DockerCheckResult:
         """Validate that a container service executes under an unprivileged non-root user (UID 1000)."""
@@ -571,20 +665,17 @@ class DockerAcceptanceRunner:
             )
         )
 
-        # 4. Docker Compose Configuration Validation
+        # 4. SEC Identity Strict Validation (Mandatory Gate)
+        sec_result, sec_ua = self._validate_sec_identity()
+        results.append(sec_result)
+        if not sec_result.passed or not sec_ua:
+            return results
+
+        # 5. Docker Compose Configuration Validation
         env_vars = os.environ.copy()
         env_vars["PORT"] = str(self.backend_port)
         env_vars["FRONTEND_PORT"] = str(self.frontend_port)
-        sec_ua = env_vars.get("SEC_USER_AGENT")
-        if not sec_ua:
-            try:
-                from dotenv import dotenv_values
-                sec_ua = dotenv_values(PROJECT_ROOT / ".env").get("SEC_USER_AGENT")
-            except Exception:
-                pass
-        env_vars["SEC_USER_AGENT"] = sec_ua or (
-            "FinovaAI-DockerTest/1.0 (test-runner@finova.internal)"
-        )
+        env_vars["SEC_USER_AGENT"] = sec_ua
 
         code, stdout, stderr, err = self._run_compose_cmd(
             ["config"], timeout=15, env=env_vars
@@ -801,7 +892,9 @@ class DockerAcceptanceRunner:
             if cleanup_needed and self.docker_cli:
                 # Capture container resource stats before teardown
                 try:
-                    ps_code, ps_out, _, _ = self._run_compose_cmd(["ps", "-q"], timeout=10)
+                    ps_code, ps_out, _, _ = self._run_compose_cmd(
+                        ["ps", "-q"], timeout=10
+                    )
                     if ps_code == 0 and ps_out.strip():
                         c_ids = ps_out.strip().split()
                         stats_cmd = [
@@ -838,14 +931,18 @@ class DockerAcceptanceRunner:
                         DockerCheckResult(
                             name="docker_environment_cleanup",
                             passed=cleanup_ok,
-                            status="PASS" if cleanup_ok else "WARN",
-                            is_mandatory=False,
+                            status="PASS" if cleanup_ok else "FAIL",
+                            is_mandatory=True,
                             message=(
                                 f"Isolated test project '{self.project_name}' and volumes removed cleanly."
                                 if cleanup_ok
-                                else f"Cleanup warning for project '{self.project_name}': {err or down_err[:200]}"
+                                else f"Cleanup failed for project '{self.project_name}': {err or down_err[:200]}"
                             ),
-                            details={"project_name": self.project_name},
+                            details={
+                                "project_name": self.project_name,
+                                "returncode": down_code,
+                                "error": err,
+                            },
                         )
                     )
                 except Exception as exc:
@@ -853,9 +950,13 @@ class DockerAcceptanceRunner:
                         DockerCheckResult(
                             name="docker_environment_cleanup",
                             passed=False,
-                            status="WARN",
-                            is_mandatory=False,
+                            status="FAIL",
+                            is_mandatory=True,
                             message=f"Cleanup exception for project '{self.project_name}': {exc}",
+                            details={
+                                "project_name": self.project_name,
+                                "exception": str(exc),
+                            },
                         )
                     )
 
@@ -881,9 +982,13 @@ def main() -> int:
                 print(f"           {s_line}")
         elif res.name == "docker_backend_health_check" and res.details:
             print(f"           Diagnostic Details: {res.details}")
-        elif res.name == "docker_data_volume_persistence" and "marker_id" in res.details:
-            print(f"           Marker: ID {res.details.get('marker_id')} -> '{res.details.get('marker_value')}' verified after restart")
-        if res.status == "FAIL":
+        elif (
+            res.name == "docker_data_volume_persistence" and "marker_id" in res.details
+        ):
+            print(
+                f"           Marker: ID {res.details.get('marker_id')} -> '{res.details.get('marker_value')}' verified after restart"
+            )
+        if res.status == "FAIL" or (res.is_mandatory and not res.passed):
             has_fail = True
         elif res.status == "SKIPPED":
             has_skip = True

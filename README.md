@@ -5,7 +5,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-FF4B4B.svg)](https://streamlit.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Status: Docker Verified](https://img.shields.io/badge/Status-Docker%20Verified-brightgreen.svg)]()
-[![Tests: 504 passed, 12 skipped, 0 failed](https://img.shields.io/badge/Tests-504%20passed%2C%2012%20skipped%2C%200%20failed-brightgreen.svg)]()
+[![Tests: 516 passed, 12 skipped, 0 failed](https://img.shields.io/badge/Tests-516%20passed%2C%2012%20skipped%2C%200%20failed-brightgreen.svg)]()
 [![Hardware: CPU Only](https://img.shields.io/badge/Hardware-CPU%20Only%20(16GB%20RAM)-informational.svg)]()
 
 Finova AI is a multi-agent corporate financial research and intelligence system designed to retrieve, analyze, verify, and synthesize evidence-backed financial intelligence from statutory SEC EDGAR filings (Forms 10-K and 10-Q).

@@ -19,7 +19,9 @@ import yaml
 from evaluation.docker_acceptance import (
     PROJECT_ROOT,
     DockerAcceptanceRunner,
+    DockerCheckResult,
     generate_frontend_connectivity_probe,
+    main,
     validate_host_ports,
 )
 
@@ -701,6 +703,10 @@ def test_full_mocked_acceptance_suite_success() -> None:
     runner.docker_cli = "/usr/bin/docker"
 
     with (
+        patch.dict(
+            os.environ,
+            {"SEC_USER_AGENT": "FinovaAI-Test/1.0 (auditor@fintech-institute.org)"},
+        ),
         patch("subprocess.run") as mock_sub,
         patch.object(runner, "_run_compose_cmd") as mock_compose,
         patch(
@@ -761,6 +767,7 @@ def test_full_mocked_acceptance_suite_success() -> None:
         assert "docker_cli_availability" in names
         assert "docker_daemon_connectivity" in names
         assert "docker_host_port_validation" in names
+        assert "docker_sec_identity_validation" in names
         assert "docker_compose_config_validation" in names
         assert "docker_build_backend_image" in names
         assert "docker_build_frontend_image" in names
@@ -813,8 +820,8 @@ def test_full_mocked_acceptance_suite_frontend_health_failure() -> None:
         assert "docker_environment_cleanup" in names
 
 
-def test_cleanup_failure_reported_as_warning() -> None:
-    """Verify cleanup failures in finally block are reported as WARN without crashing."""
+def test_cleanup_failure_reported_as_mandatory_fail() -> None:
+    """Verify cleanup failures in finally block are reported as mandatory FAIL."""
     runner = DockerAcceptanceRunner()
     runner.docker_cli = "/usr/bin/docker"
 
@@ -844,8 +851,9 @@ def test_cleanup_failure_reported_as_warning() -> None:
             (r for r in results if r.name == "docker_environment_cleanup"), None
         )
         assert cleanup_res is not None
-        assert cleanup_res.status == "WARN"
+        assert cleanup_res.status == "FAIL"
         assert cleanup_res.passed is False
+        assert cleanup_res.is_mandatory is True
 
 
 def test_acceptance_sequence_frontend_health_before_connectivity() -> None:
@@ -854,6 +862,10 @@ def test_acceptance_sequence_frontend_health_before_connectivity() -> None:
     runner.docker_cli = "/usr/bin/docker"
 
     with (
+        patch.dict(
+            os.environ,
+            {"SEC_USER_AGENT": "FinovaAI-Test/1.0 (auditor@fintech-institute.org)"},
+        ),
         patch("subprocess.run") as mock_sub,
         patch.object(runner, "_run_compose_cmd") as mock_compose,
         patch(
@@ -902,6 +914,10 @@ def test_connectivity_failure_is_mandatory_fail_and_triggers_cleanup() -> None:
     down_called: list[bool] = []
 
     with (
+        patch.dict(
+            os.environ,
+            {"SEC_USER_AGENT": "FinovaAI-Test/1.0 (auditor@fintech-institute.org)"},
+        ),
         patch("subprocess.run") as mock_sub,
         patch.object(runner, "_run_compose_cmd") as mock_compose,
         patch(
@@ -980,3 +996,249 @@ def test_compose_project_name_propagation_in_probe() -> None:
         assert cmd_args[p_idx + 1] == "finova-acc-probe-proj-scope"
         assert "exec" in cmd_args
         assert "frontend" in cmd_args
+
+
+# ---------------------------------------------------------------------------
+# Session 17.1 — SEC Identity & Cleanup Policy Hardening Tests
+# ---------------------------------------------------------------------------
+
+
+def test_sec_identity_valid_configured() -> None:
+    """Verify valid configured SEC identity passes validation and returns clean identity."""
+    runner = DockerAcceptanceRunner()
+    res, sec_ua = runner._validate_sec_identity(
+        env_vars={"SEC_USER_AGENT": "FinovaAI/1.0.0 (auditor@fintech-research.org)"}
+    )
+    assert res.passed is True
+    assert res.status == "PASS"
+    assert res.is_mandatory is True
+    assert sec_ua == "FinovaAI/1.0.0 (auditor@fintech-research.org)"
+    assert "auditor@" not in res.message
+    assert "a***@f***.org" in res.message
+
+
+def test_sec_identity_missing() -> None:
+    """Verify missing SEC_USER_AGENT fails validation and prevents execution."""
+    runner = DockerAcceptanceRunner()
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch("dotenv.dotenv_values", return_value={}),
+    ):
+        res, sec_ua = runner._validate_sec_identity()
+        assert res.passed is False
+        assert res.status == "FAIL"
+        assert res.is_mandatory is True
+        assert sec_ua is None
+        assert "not configured" in res.message.lower()
+
+
+def test_sec_identity_empty_and_whitespace() -> None:
+    """Verify empty or whitespace-only SEC_USER_AGENT fails validation."""
+    runner = DockerAcceptanceRunner()
+    for empty_val in ["", "   ", "\t\n"]:
+        res, sec_ua = runner._validate_sec_identity(
+            env_vars={"SEC_USER_AGENT": empty_val}
+        )
+        assert res.passed is False
+        assert res.status == "FAIL"
+        assert sec_ua is None
+
+
+def test_sec_identity_placeholders_rejected() -> None:
+    """Verify known placeholder identities are strictly rejected."""
+    runner = DockerAcceptanceRunner()
+    placeholders = [
+        "FinovaAI/1.0 (contact@example.com)",
+        "FinovaAI-DockerTest/1.0 (test-runner@finova.internal)",
+        "Finova/1.0 (admin@domain.com)",
+        "Finova/1.0 (user@test.com)",
+        "Finova/1.0 (your-email@sample.com)",
+        "Finova/1.0 (sample@samplecompany.com)",
+    ]
+    for ph in placeholders:
+        res, sec_ua = runner._validate_sec_identity(env_vars={"SEC_USER_AGENT": ph})
+        assert res.passed is False
+        assert res.status == "FAIL"
+        assert sec_ua is None
+        assert "placeholder" in res.message.lower() or "internal" in res.message.lower()
+
+
+def test_sec_identity_loaded_from_dotenv() -> None:
+    """Verify SEC_USER_AGENT is resolved from .env when absent from process environment."""
+    runner = DockerAcceptanceRunner()
+    with (
+        patch.dict(os.environ, {}, clear=True),
+        patch(
+            "dotenv.dotenv_values",
+            return_value={
+                "SEC_USER_AGENT": "FinovaDotEnv/1.0 (researcher@quant-fund.com)"
+            },
+        ),
+    ):
+        res, sec_ua = runner._validate_sec_identity()
+        assert res.passed is True
+        assert res.status == "PASS"
+        assert sec_ua == "FinovaDotEnv/1.0 (researcher@quant-fund.com)"
+
+
+def test_sec_identity_provided_through_process_env() -> None:
+    """Verify SEC_USER_AGENT provided in os.environ takes precedence."""
+    runner = DockerAcceptanceRunner()
+    with (
+        patch.dict(
+            os.environ, {"SEC_USER_AGENT": "FinovaEnv/1.0 (env-lead@analytics.org)"}
+        ),
+        patch(
+            "dotenv.dotenv_values",
+            return_value={"SEC_USER_AGENT": "Wrong/1.0 (wrong@domain.com)"},
+        ),
+    ):
+        res, sec_ua = runner._validate_sec_identity()
+        assert res.passed is True
+        assert res.status == "PASS"
+        assert sec_ua == "FinovaEnv/1.0 (env-lead@analytics.org)"
+
+
+def test_sec_identity_secret_masking_in_output() -> None:
+    """Verify email address is always masked in check results and diagnostic details."""
+    runner = DockerAcceptanceRunner()
+    sensitive_email = "very.secret.officer@proprietary-fund.com"
+    res, _ = runner._validate_sec_identity(
+        env_vars={"SEC_USER_AGENT": f"FinovaSec/1.0 ({sensitive_email})"}
+    )
+    assert sensitive_email not in res.message
+    assert sensitive_email not in str(res.details)
+    assert "v***@p***.com" in res.message
+
+
+def test_sec_identity_invalid_prevents_build_and_startup() -> None:
+    """Verify invalid/missing identity halts suite before Docker Compose build or up commands."""
+    runner = DockerAcceptanceRunner(project_name="finova-acc-sec-guard")
+    runner.docker_cli = "/usr/bin/docker"
+
+    executed_cmds: list[list[str]] = []
+
+    def mock_cmd(args, **kwargs):
+        executed_cmds.append(args)
+        return 0, "", "", None
+
+    with (
+        patch.dict(os.environ, {"SEC_USER_AGENT": "Finova/1.0 (contact@example.com)"}),
+        patch.object(runner, "_run_compose_cmd", side_effect=mock_cmd),
+        patch("subprocess.run") as mock_sub,
+        patch(
+            "evaluation.docker_acceptance.validate_host_ports",
+            return_value=(True, "Ports available"),
+        ),
+    ):
+        mock_sub.return_value = subprocess.CompletedProcess(
+            args=["docker", "info"],
+            returncode=0,
+            stdout="Server Version: 24.0\n",
+            stderr="",
+        )
+
+        results = runner.run_acceptance_suite()
+        names = [r.name for r in results]
+
+        # Check that SEC validation failed
+        assert "docker_sec_identity_validation" in names
+        sec_res = next(r for r in results if r.name == "docker_sec_identity_validation")
+        assert sec_res.passed is False
+        assert sec_res.status == "FAIL"
+
+        # Check that build, up, health, and down were NEVER executed
+        assert not any("build" in cmd for cmd in executed_cmds)
+        assert not any("up" in cmd for cmd in executed_cmds)
+        assert "docker_build_backend_image" not in names
+        assert "docker_container_startup" not in names
+
+
+def test_cleanup_success_mandatory_pass() -> None:
+    """Verify clean project teardown produces mandatory PASS."""
+    runner = DockerAcceptanceRunner(project_name="finova-acc-clean-pass")
+    runner.docker_cli = "/usr/bin/docker"
+
+    with patch.object(runner, "_run_compose_cmd") as mock_compose:
+        mock_compose.return_value = (0, "Removed containers and volumes", "", None)
+        down_code, _, down_err, err = runner._run_compose_cmd(
+            ["down", "-v"], timeout=30
+        )
+        cleanup_ok = down_code == 0 and err is None
+
+        res = DockerCheckResult(
+            name="docker_environment_cleanup",
+            passed=cleanup_ok,
+            status="PASS" if cleanup_ok else "FAIL",
+            is_mandatory=True,
+            message="Cleaned up cleanly.",
+        )
+        assert res.passed is True
+        assert res.status == "PASS"
+        assert res.is_mandatory is True
+
+
+def test_cleanup_nonzero_returncode_causes_main_failure() -> None:
+    """Verify non-zero returncode in docker compose down -v causes main() to exit with 1."""
+    failed_cleanup = [
+        DockerCheckResult(name="docker_cli_availability", passed=True, status="PASS"),
+        DockerCheckResult(
+            name="docker_environment_cleanup",
+            passed=False,
+            status="FAIL",
+            is_mandatory=True,
+            message="docker compose down -v returned code 1: volume busy",
+            details={"returncode": 1},
+        ),
+    ]
+
+    with patch(
+        "evaluation.docker_acceptance.DockerAcceptanceRunner.run_acceptance_suite",
+        return_value=failed_cleanup,
+    ):
+        exit_code = main()
+        assert exit_code == 1
+
+
+def test_cleanup_timeout_causes_main_failure() -> None:
+    """Verify cleanup timeout produces mandatory FAIL and causes main() to exit with 1."""
+    timeout_cleanup = [
+        DockerCheckResult(name="docker_cli_availability", passed=True, status="PASS"),
+        DockerCheckResult(
+            name="docker_environment_cleanup",
+            passed=False,
+            status="FAIL",
+            is_mandatory=True,
+            message="Cleanup failed: Command timed out after 30s: docker compose down -v",
+            details={"error": "timeout"},
+        ),
+    ]
+
+    with patch(
+        "evaluation.docker_acceptance.DockerAcceptanceRunner.run_acceptance_suite",
+        return_value=timeout_cleanup,
+    ):
+        exit_code = main()
+        assert exit_code == 1
+
+
+def test_cleanup_exception_causes_main_failure() -> None:
+    """Verify cleanup exception produces mandatory FAIL and causes main() to exit with 1."""
+    exc_cleanup = [
+        DockerCheckResult(name="docker_cli_availability", passed=True, status="PASS"),
+        DockerCheckResult(
+            name="docker_environment_cleanup",
+            passed=False,
+            status="FAIL",
+            is_mandatory=True,
+            message="Cleanup exception for project 'finova-acc-test': Connection refused",
+            details={"exception": "Connection refused"},
+        ),
+    ]
+
+    with patch(
+        "evaluation.docker_acceptance.DockerAcceptanceRunner.run_acceptance_suite",
+        return_value=exc_cleanup,
+    ):
+        exit_code = main()
+        assert exit_code == 1
