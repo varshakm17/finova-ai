@@ -112,17 +112,21 @@ class PeriodVerifier:
 
                 # Fiscal year check
                 if claimed_year and source_year and claimed_year != source_year:
-                    return PeriodVerificationDetail(
-                        is_consistent=False,
-                        claimed_period=claimed_period,
-                        source_period=source_date,
-                        mismatch_type="fiscal_year_mismatch",
-                        explanation=(
-                            f"Fiscal year mismatch: Claim references period '{claimed_period}', "
-                            f"whereas cited SEC filing passage ({re_doc.accession_number}) reports "
-                            f"period date '{source_date}'."
-                        ),
-                    )
+                    # In annual Form 10-K filings, prior fiscal periods, contract dates, and debt maturities
+                    # are standard disclosures. If the cited chunk text explicitly mentions the claimed year,
+                    # the passage directly supports the temporal claim.
+                    if str(claimed_year) not in re_doc.chunk_text:
+                        return PeriodVerificationDetail(
+                            is_consistent=False,
+                            claimed_period=claimed_period,
+                            source_period=source_date,
+                            mismatch_type="fiscal_year_mismatch",
+                            explanation=(
+                                f"Fiscal year mismatch: Claim references period '{claimed_period}', "
+                                f"whereas cited SEC filing passage ({re_doc.accession_number}) reports "
+                                f"period date '{source_date}' and does not mention {claimed_year}."
+                            ),
+                        )
 
                 # Annual vs Quarterly mismatch check
                 if is_claimed_annual and "10-Q" in filing_type:

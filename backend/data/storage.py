@@ -183,6 +183,70 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_obs_fy ON financial_observations (fiscal_year);"
             )
 
+            # Ensure financial_observations table has period_type unique constraint for legacy databases
+            table_sql = cursor.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='financial_observations'"
+            ).fetchone()
+            if table_sql and "filing_type, period_start" in table_sql[0]:
+                cursor.execute(
+                    "ALTER TABLE financial_observations RENAME TO _legacy_fin_obs;"
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE financial_observations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        cik TEXT NOT NULL,
+                        ticker TEXT NOT NULL,
+                        company_name TEXT NOT NULL,
+                        metric_name TEXT NOT NULL,
+                        statement_type TEXT NOT NULL,
+                        original_tag TEXT NOT NULL,
+                        numeric_value REAL NOT NULL,
+                        unit TEXT NOT NULL,
+                        period_start TEXT NOT NULL DEFAULT '',
+                        period_end TEXT NOT NULL,
+                        duration_days INTEGER,
+                        period_type TEXT NOT NULL,
+                        fiscal_year INTEGER,
+                        fiscal_period TEXT,
+                        filing_date TEXT NOT NULL,
+                        filing_type TEXT NOT NULL,
+                        accession_number TEXT NOT NULL,
+                        source_url TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        FOREIGN KEY (cik) REFERENCES companies (cik) ON DELETE CASCADE,
+                        UNIQUE(cik, metric_name, period_end, period_type, period_start)
+                    );
+                    """
+                )
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO financial_observations (
+                        id, cik, ticker, company_name, metric_name, statement_type,
+                        original_tag, numeric_value, unit, period_start, period_end,
+                        duration_days, period_type, fiscal_year, fiscal_period,
+                        filing_date, filing_type, accession_number, source_url, created_at
+                    ) SELECT id, cik, ticker, company_name, metric_name, statement_type,
+                        original_tag, numeric_value, unit, period_start, period_end,
+                        duration_days, period_type, fiscal_year, fiscal_period,
+                        filing_date, filing_type, accession_number, source_url, created_at
+                    FROM _legacy_fin_obs;
+                    """
+                )
+                cursor.execute("DROP TABLE _legacy_fin_obs;")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_obs_cik_metric ON financial_observations (cik, metric_name);"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_obs_ticker ON financial_observations (ticker);"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_obs_period_end ON financial_observations (period_end);"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_obs_fy ON financial_observations (fiscal_year);"
+                )
+
             # 4. Financial Calculations Table
             cursor.execute(
                 """
@@ -902,7 +966,8 @@ class Database:
                     calculation_status, unavailable_reason, input_observations_json,
                     warnings_json, calculated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(cik, metric_name, period_end, period_type, period_start) DO UPDATE SET
+                ON CONFLICT(calculation_id) DO UPDATE SET
+                    period_start = excluded.period_start,
                     calculated_value = excluded.calculated_value,
                     calculation_status = excluded.calculation_status,
                     unavailable_reason = excluded.unavailable_reason,

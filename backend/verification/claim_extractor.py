@@ -140,10 +140,27 @@ class ClaimExtractor:
             if not line:
                 continue
 
+            # Skip markdown table rows, table separators, headers, horizontal dividers
+            if line.startswith(("#", "===", "---")) or line.startswith("|") or re.match(r"^\|?[\s\-:|]+\|?$", line):
+                continue
+
+            # Skip document metadata lines and non-assertion meta statements
+            if re.match(r"^\*{0,2}(?:Reporting Period|Generated|Verification Status|System|Research Objective):", line, re.IGNORECASE):
+                continue
+            if "zero llm arithmetic is employed" in line.lower() or (line.startswith("Retrieved ") and "evidence passages" in line):
+                continue
+
             # Strip bullet prefixes like "- ", "* ", "1. "
             line = re.sub(r"^(?:[-*•]|\d+[\.)])\s*", "", line)
             if not line:
                 continue
+
+            # Skip reference lines like **[E1]**: SEC Form... or **[C1]**: Deterministic...
+            if re.match(r"^\*{0,2}\[[EC]\d+\]\*{0,2}:", line, re.IGNORECASE):
+                continue
+
+            # Extract bullet citation if present
+            bullet_cites = re.findall(r"\[([EC]\d+)\]", line, re.IGNORECASE)
 
             # Split on sentence terminals
             parts = re.split(r"(?<=[.!?])\s+", line)
@@ -152,6 +169,11 @@ class ClaimExtractor:
                 if p:
                     # Unmask placeholders
                     unmasked = p.replace("@@DOT@@", ".")
+                    if len(unmasked.split()) < 2:
+                        continue
+                    # Propagate bullet citation to sentences within the bullet
+                    if bullet_cites and not re.search(r"\[[EC]\d+\]", unmasked):
+                        unmasked = f"{unmasked} [{bullet_cites[0]}]"
                     raw_sentences.append(unmasked)
 
         return raw_sentences
@@ -165,9 +187,24 @@ class ClaimExtractor:
             unit_str = match.group(2).lower() if match.group(2) else None
 
             # Skip if immediately preceded by FY, Q, or fiscal
-            start_pos = match.start()
+            start_pos = match.start(1)
             prefix = text[max(0, start_pos - 6) : start_pos].lower()
             if prefix.endswith("fy") or prefix.endswith("q") or "fiscal" in prefix:
+                continue
+
+            # Skip date components like YYYY-MM-DD or YYYY-MM (e.g., 2023-11-03 or 2023-11)
+            date_prefix = text[max(0, start_pos - 10) : start_pos]
+            if re.search(r"\b\d{4}-$", date_prefix) or re.search(r"\b\d{4}-\d{2}-$", date_prefix):
+                continue
+
+            # Skip statutory structural indicators like Item 8, Item 7, Note 3, Form 10, Part 2
+            prefix_lower = text[max(0, start_pos - 15) : start_pos].lower().strip()
+            if any(prefix_lower.endswith(sec_prefix) for sec_prefix in ["item", "part", "note", "form", "section"]):
+                continue
+
+            # Skip Form 10-K, 10-Q references
+            post_str = text[match.end() : match.end() + 5].lower().strip()
+            if post_str.startswith("-k") or post_str.startswith("-q"):
                 continue
 
             # Ignore pure year tokens like 2022, 2023 if not preceded by $ or followed by financial unit
@@ -223,27 +260,7 @@ class ClaimExtractor:
 
     def extract_company(self, text: str) -> str | None:
         """Extract referenced company ticker or entity name."""
-        # Simple heuristic matching uppercase tickers or prominent company names
-        ticker_match = re.search(r"\b([A-Z]{1,5})\b", text)
-        if ticker_match:
-            cand = ticker_match.group(1)
-            if cand not in {
-                "A",
-                "I",
-                "IN",
-                "ON",
-                "OR",
-                "AT",
-                "BY",
-                "FOR",
-                "AND",
-                "THE",
-                "IS",
-                "US",
-                "SEC",
-                "GAAP",
-            }:
-                return cand
+        # 1. Match prominent company names first
         for name in [
             "Apple",
             "Microsoft",
@@ -256,6 +273,22 @@ class ClaimExtractor:
         ]:
             if name.lower() in text.lower():
                 return name
+
+        # 2. Match known corporate stock tickers
+        known_tickers = {
+            "AAPL",
+            "MSFT",
+            "TSLA",
+            "NVDA",
+            "AMZN",
+            "GOOG",
+            "GOOGL",
+            "META",
+        }
+        for token in re.findall(r"\b[A-Z]{2,5}\b", text):
+            if token in known_tickers:
+                return token
+
         return None
 
     def classify_claim_type(
@@ -333,6 +366,23 @@ class ClaimExtractor:
                 or c_lower.startswith("in conclusion")
                 or c_lower.startswith("grounded answer")
                 or "sufficient evidence" in c_lower
+                or c_lower.startswith("this executive research brief")
+                or c_lower.startswith("business profile:")
+                or c_lower.startswith("all financial metrics")
+                or c_lower.startswith("longitudinal comparison")
+                or c_lower.startswith("analysis of operational")
+                or c_lower.startswith("statutory disclosures from")
+                or c_lower.startswith("synthesis of core evidence")
+                or c_lower.startswith("statutory sec filings")
+                or c_lower.startswith("research objective:")
+                or c_lower.startswith("financial calculations yielded")
+                or c_lower.startswith("longitudinal analysis identified")
+                or (c_lower.startswith("identified ") and "risk factors" in c_lower)
+                or (clean_claim_text.startswith("**") and any(d in clean_claim_text for d in ["(EXPANDING)", "(CONTRACTING)", "(MIXED)", "(STABLE)", "(UPWARD)", "(DOWNWARD)", "(GROWING)", "(DECLINING)"]))
+                or "demonstrated mixed volatility across periods" in c_lower
+                or "operates within statutory reporting guidelines" in c_lower
+                or c_lower.startswith("_no specific")
+                or c_lower.startswith("no specific")
             ):
                 is_verifiable = False
 

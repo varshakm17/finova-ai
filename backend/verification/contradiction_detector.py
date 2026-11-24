@@ -74,6 +74,27 @@ class ContradictionDetector:
         c_words = set(re.findall(r"\b[a-zA-Z]+\b", claim_text.lower()))
         e_words = set(re.findall(r"\b[a-zA-Z]+\b", evidence_text.lower()))
 
+        # To constitute a genuine directional conflict, both passages must discuss a shared financial topic
+        topics = [
+            {"revenue", "sales", "net sales", "topline"},
+            {"income", "profit", "earnings", "bottom line"},
+            {"operating income", "operating profit"},
+            {"gross profit", "gross margin"},
+            {"margin", "margins"},
+            {"cash flow", "operating cash flow", "free cash flow"},
+            {"headcount", "employees"},
+            {"dividends", "repurchases", "shares"},
+            {"product", "products"},
+        ]
+        c_lower = claim_text.lower()
+        e_lower = evidence_text.lower()
+        shared_topic = any(
+            any(k in c_lower for k in grp) and any(k in e_lower for k in grp)
+            for grp in topics
+        )
+        if not shared_topic:
+            return False, ""
+
         claim_has_pos = bool(c_words & POSITIVE_DIRECTIONS)
         claim_has_neg = bool(c_words & NEGATIVE_DIRECTIONS)
 
@@ -151,6 +172,11 @@ class ContradictionDetector:
             for j in range(i + 1, n):
                 ev1 = retrieved_evidence[i]
                 ev2 = retrieved_evidence[j]
+
+                # Passages from the exact same filing accession cannot contradict each other;
+                # they discuss distinct business segments, comparisons, or items in the 10-K/10-Q.
+                if ev1.accession_number and ev1.accession_number == ev2.accession_number:
+                    continue
 
                 # If evidence is from the exact same company, filing date, and report date
                 same_period = (

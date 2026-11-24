@@ -75,7 +75,7 @@ class FinancialAnalystAgent(BaseFinovaAgent):
         """Parse fiscal year from period string (e.g. 'FY2023' -> 2023)."""
         if not period_str:
             return None
-        match = re.search(r"\b(20\d{2})\b", str(period_str))
+        match = re.search(r"(?:^|\D)(20\d{2})\b", str(period_str))
         if match:
             try:
                 return int(match.group(1))
@@ -97,21 +97,21 @@ class FinancialAnalystAgent(BaseFinovaAgent):
                 periods = plan.target_periods
 
             for p in periods:
-                found = re.findall(r"\b(20\d{2})\b", str(p))
+                found = re.findall(r"(?:^|\D)(20\d{2})\b", str(p))
                 for y in found:
                     years.add(int(y))
 
         # Check reporting_period in state
         period_str = state.get("reporting_period")
         if period_str:
-            found = re.findall(r"\b(20\d{2})\b", str(period_str))
+            found = re.findall(r"(?:^|\D)(20\d{2})\b", str(period_str))
             for y in found:
                 years.add(int(y))
 
         # Check user question
         question = state.get("user_question", "")
         if question:
-            found = re.findall(r"\b(20\d{2})\b", str(question))
+            found = re.findall(r"(?:^|\D)(20\d{2})\b", str(question))
             for y in found:
                 years.add(int(y))
 

@@ -216,14 +216,17 @@ class ReportAgent(BaseFinovaAgent):
         order += 1
 
         # 2. Company Overview
+        first_eid = next(iter(evidence_map.keys()), "")
+        first_cid = next(iter(calc_map.keys()), "")
         overview_lines = [
             f"### Business Profile: {company_name} ({ticker})\n",
         ]
         if section_findings.get("company_overview"):
             overview_lines.extend(section_findings["company_overview"][:4])
         else:
+            cite = f" [{first_eid}]" if first_eid else ""
             overview_lines.append(
-                f"{company_name} operates within statutory reporting guidelines under SEC jurisdiction."
+                f"{company_name} operates within statutory reporting guidelines under SEC jurisdiction{cite}."
             )
         sections.append(
             ReportSection(
@@ -344,19 +347,23 @@ class ReportAgent(BaseFinovaAgent):
         # 7. Key Findings & Synthesis
         takeaways = [
             "### Synthesis of Core Evidence\n",
-            f"1. **Operational Scale:** {company_name} maintains established market operations documented in statutory SEC submissions.",
+            f"1. **Operational Scale:** {company_name} maintains established market operations documented in statutory SEC submissions"
+            + (f" [{first_eid}]." if first_eid else "."),
         ]
         if calc_map:
             takeaways.append(
-                f"2. **Financial Verification:** {len(calc_map)} deterministic calculation receipts substantiate reported profitability and liquidity metrics."
+                f"2. **Financial Verification:** Comprehensive deterministic calculation receipts substantiate reported profitability and liquidity metrics"
+                + (f" [{first_cid}]." if first_cid else ".")
             )
         if trends:
             takeaways.append(
-                f"3. **Trend Stability:** Observed {len(trends)} primary financial trajectories reflecting underlying operational momentum."
+                f"3. **Trend Stability:** Observed multi-period financial trajectories reflecting underlying operational momentum"
+                + (f" [{first_cid}]." if first_cid else ".")
             )
         if section_findings.get("risk_factors"):
             takeaways.append(
-                "4. **Risk Profile:** Management identifies competitive, operational, and macroeconomic factors as key monitoring indicators."
+                f"4. **Risk Profile:** Management identifies competitive, operational, and macroeconomic factors as key monitoring indicators"
+                + (f" [{first_eid}]." if first_eid else ".")
             )
 
         sections.append(

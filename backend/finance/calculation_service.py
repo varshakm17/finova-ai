@@ -95,15 +95,31 @@ class CalculationService:
         ]
 
         # 3. Partition observations into flow (Income/CashFlow) and instant (Balance Sheet)
+        def get_obs_year(o: FinancialObservation) -> int:
+            if o.period_end and len(o.period_end) >= 4 and o.period_end[:4].isdigit():
+                return int(o.period_end[:4])
+            return o.fiscal_year or 0
+
         flow_obs = [
             o
             for o in all_obs
             if o.period_type == clean_period_type
-            and (start_year is None or (o.fiscal_year and o.fiscal_year >= start_year))
-            and (end_year is None or (o.fiscal_year and o.fiscal_year <= end_year))
+            and (start_year is None or get_obs_year(o) >= start_year)
+            and (end_year is None or get_obs_year(o) <= end_year)
         ]
 
-        instant_obs = [o for o in all_obs if o.period_type == "instant"]
+        instant_obs = [
+            o
+            for o in all_obs
+            if o.period_type == "instant"
+            and (
+                clean_period_type != "annual"
+                or o.filing_type == "10-K"
+                or o.fiscal_period in ("FY", "annual", None)
+            )
+            and (start_year is None or get_obs_year(o) >= start_year)
+            and (end_year is None or get_obs_year(o) <= end_year)
+        ]
 
         # Group flow observations by period_end
         periods_dict: dict[str, dict[str, FinancialObservation]] = {}
@@ -115,18 +131,20 @@ class CalculationService:
         # Also group instant observations by period_end for balance sheet-only metrics (Current Ratio, Debt-to-Equity)
         instant_by_date: dict[str, dict[str, FinancialObservation]] = {}
         for o in instant_obs:
-            if (
-                start_year is None or (o.fiscal_year and o.fiscal_year >= start_year)
-            ) and (end_year is None or (o.fiscal_year and o.fiscal_year <= end_year)):
-                if o.period_end not in instant_by_date:
-                    instant_by_date[o.period_end] = {}
-                instant_by_date[o.period_end][o.metric_name] = o
+            if o.period_end not in instant_by_date:
+                instant_by_date[o.period_end] = {}
+            instant_by_date[o.period_end][o.metric_name] = o
 
-        # Combine all unique target reporting dates
-        all_period_ends = sorted(
-            set(periods_dict.keys()) | set(instant_by_date.keys()),
-            reverse=True,
-        )
+        # Combine target reporting dates (for annual, restrict to annual statement dates)
+        if clean_period_type == "annual":
+            all_period_ends = sorted(periods_dict.keys(), reverse=True)
+            if not all_period_ends:
+                all_period_ends = sorted(instant_by_date.keys(), reverse=True)
+        else:
+            all_period_ends = sorted(
+                set(periods_dict.keys()) | set(instant_by_date.keys()),
+                reverse=True,
+            )
 
         receipts: list[CalculationReceipt] = []
 
@@ -139,7 +157,11 @@ class CalculationService:
             rep_obs = next(iter(period_flow.values()), None) or next(
                 iter(period_instant.values()), None
             )
-            fiscal_year = rep_obs.fiscal_year if rep_obs else None
+            fiscal_year = (
+                int(period_end[:4])
+                if period_end and len(period_end) >= 4 and period_end[:4].isdigit()
+                else (rep_obs.fiscal_year if rep_obs else None)
+            )
             fiscal_period = rep_obs.fiscal_period if rep_obs else None
             period_start = rep_obs.period_start if rep_obs else None
 

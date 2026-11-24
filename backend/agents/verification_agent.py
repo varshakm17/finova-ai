@@ -44,19 +44,20 @@ class VerificationAgent(BaseFinovaAgent):
         """Convert dictionary evidence representations into typed RetrievedEvidence models."""
         converted = []
         for idx, ev in enumerate(raw_evidence, start=1):
+            eid = str(ev.get("citation_id") or f"E{idx}")
             converted.append(
                 RetrievedEvidence(
-                    evidence_id=f"E{idx}",
+                    evidence_id=eid,
                     chunk_id=str(ev.get("chunk_id", f"chunk_{idx}")),
-                    ticker=str(ev.get("ticker", "AAPL")),
-                    company_name=str(ev.get("company_name", "Target Company")),
+                    ticker=str(ev.get("ticker") or ""),
+                    company_name=str(ev.get("company_name") or ""),
                     filing_type=str(
-                        ev.get("filing_type") or ev.get("form_type", "10-K")
+                        ev.get("filing_type") or ev.get("form_type") or "10-K"
                     ),
-                    filing_date=str(ev.get("filing_date", "2023-11-03")),
-                    report_date=ev.get("report_date", "2023-09-30"),
+                    filing_date=str(ev.get("filing_date") or ""),
+                    report_date=ev.get("report_date"),
                     accession_number=str(
-                        ev.get("accession_number", "0000320193-23-000106")
+                        ev.get("accession_number") or ""
                     ),
                     section_identifier=str(ev.get("section_identifier", "ITEM_7")),
                     section_title=str(ev.get("section_title", "Disclosures")),
@@ -72,6 +73,7 @@ class VerificationAgent(BaseFinovaAgent):
         """Convert dictionary calculation receipts into typed CalculationEvidence models."""
         converted = []
         for idx, ce in enumerate(raw_calcs, start=1):
+            cid = str(ce.get("citation_id") or f"C{idx}")
             val = ce.get("calculated_value", 0.0)
             try:
                 fval = float(val) if val is not None else 0.0
@@ -80,15 +82,16 @@ class VerificationAgent(BaseFinovaAgent):
 
             converted.append(
                 CalculationEvidence(
-                    evidence_id=f"C{idx}",
+                    evidence_id=cid,
                     calculation_id=str(ce.get("calculation_id", f"calc_{idx}")),
                     metric_name=str(ce.get("metric_name", "Metric")),
                     calculated_value=fval,
                     unit=str(ce.get("unit", "ratio")),
                     formula=str(
-                        ce.get("formula_definition")
+                        ce.get("formula_expression")
+                        or ce.get("formula_definition")
                         or ce.get("formula")
-                        or ce.get("formula_expression", "N/A")
+                        or ce.get("formula_name", "N/A")
                     ),
                     period_start=ce.get("period_start"),
                     period_end=str(ce.get("period_end", "2023-09-30")),
@@ -108,9 +111,28 @@ class VerificationAgent(BaseFinovaAgent):
     ) -> dict[str, Any]:
         """Verify all claims and numbers across an autonomous research report."""
         report_id = report_data.get("report_id", str(uuid.uuid4()))
-        markdown_text = report_data.get("markdown_content") or ""
         retrieved_objs = self._convert_retrieved_evidence(evidence)
         calc_objs = self._convert_calculation_evidence(receipts)
+
+        # Collect substantive narrative sections to verify (Sections 1-7, excluding tables and Section 8 reference lists)
+        substantive_parts: list[str] = []
+        if "sections" in report_data and isinstance(report_data["sections"], list):
+            for sec in report_data["sections"]:
+                sk = sec.get("section_key") if isinstance(sec, dict) else getattr(sec, "section_key", "")
+                if sk in ("sources_and_references", "sources_references"):
+                    continue
+                c_md = sec.get("content_markdown", "") if isinstance(sec, dict) else getattr(sec, "content_markdown", "")
+                clean_lines = [
+                    l for l in c_md.split("\n")
+                    if not l.strip().startswith("|")
+                    and not l.strip().startswith("---")
+                    and not (l.startswith("Retrieved ") and "evidence passages" in l)
+                ]
+                clean_sec_text = "\n".join(clean_lines).strip()
+                if clean_sec_text:
+                    substantive_parts.append(clean_sec_text)
+
+        markdown_text = "\n\n".join(substantive_parts) if substantive_parts else (report_data.get("markdown_content") or "")
 
         run_result = self.verifier.verify_answer(
             answer_id=report_id,
@@ -154,10 +176,13 @@ class VerificationAgent(BaseFinovaAgent):
 
         # Check for report workflow
         if generated_report and isinstance(generated_report, dict):
+            consolidated = state.get("consolidated_findings") or {}
+            ev_source = list(consolidated.get("evidence_map", {}).values()) if consolidated.get("evidence_map") else raw_retrieved
+            calc_source = list(consolidated.get("calculation_map", {}).values()) if consolidated.get("calculation_map") else raw_calcs
             verification_audit = self.verify_report(
                 report_data=generated_report,
-                evidence=raw_retrieved,
-                receipts=raw_calcs,
+                evidence=ev_source,
+                receipts=calc_source,
                 question=question,
             )
             is_valid = verification_audit.get("is_valid", True)

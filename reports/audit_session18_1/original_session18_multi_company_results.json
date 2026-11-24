@@ -1,0 +1,44 @@
+[
+  {
+    "ticker": "MSFT",
+    "company_name": "Microsoft Corporation",
+    "period": "FY2023",
+    "status": "COMPLETED",
+    "verification_status": "partially_verified",
+    "report_id": "95e93fa6-8c67-42b1-89cb-7438b60056f6",
+    "total_sections": 8,
+    "total_evidence_cited": 16,
+    "total_calculations_cited": 3,
+    "execution_time_s": 27.43,
+    "warnings_count": 2,
+    "errors_count": 0
+  },
+  {
+    "ticker": "TSLA",
+    "company_name": "Tesla, Inc.",
+    "period": "FY2023",
+    "status": "COMPLETED",
+    "verification_status": "verified",
+    "report_id": "6e67949a-d8c3-4f0c-a7e4-3bc0acb8c964",
+    "total_sections": 8,
+    "total_evidence_cited": 26,
+    "total_calculations_cited": 12,
+    "execution_time_s": 9.87,
+    "warnings_count": 0,
+    "errors_count": 0
+  },
+  {
+    "ticker": "NVDA",
+    "company_name": "NVIDIA Corporation",
+    "period": "FY2024",
+    "status": "COMPLETED",
+    "verification_status": "partially_verified",
+    "report_id": "408d09df-08ac-4a6e-8418-2d45e43e6e29",
+    "total_sections": 8,
+    "total_evidence_cited": 14,
+    "total_calculations_cited": 6,
+    "execution_time_s": 10.55,
+    "warnings_count": 2,
+    "errors_count": 0
+  }
+]

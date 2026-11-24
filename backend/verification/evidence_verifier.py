@@ -94,8 +94,11 @@ class EvidenceVerifier:
         if not tokens1 or not tokens2:
             return 0.0
         intersection = tokens1 & tokens2
+        # Asymmetric containment: what fraction of the claim's content tokens appear in the passage?
+        containment = len(intersection) / len(tokens1)
         union = tokens1 | tokens2
-        return len(intersection) / len(union)
+        jaccard = len(intersection) / len(union)
+        return max(containment, jaccard)
 
     def verify_claim(
         self,

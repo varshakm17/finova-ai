@@ -1,0 +1,505 @@
+{
+  "audit_timestamp": "2026-11-19T12:04:37Z",
+  "total_queries": 24,
+  "classification_summary": {
+    "VERIFIED_SOURCE_AND_CHUNKS": 0,
+    "VERIFIED_SOURCE_MISSING_CHUNKS": 10,
+    "INVALID_SOURCE_METADATA": 12,
+    "INVALID_CHUNK_MAPPING": 0,
+    "PENDING_ANNOTATION": 2
+  },
+  "queries": [
+    {
+      "query_id": "REAL-SEC-AAPL-001",
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "accession_number": "0000320193-23-000106",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_aapl_2023_item7_rev_001"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-AAPL-002",
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "accession_number": "0000320193-23-000106",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_aapl_2023_item7_margin_002"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-AAPL-003",
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "accession_number": "0000320193-23-000106",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_aapl_2023_item8_cashflow_003"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-AAPL-004",
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "accession_number": "0000320193-23-000106",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_aapl_2023_item1a_supply_004"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-AAPL-005",
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "accession_number": "0000320193-23-000106",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_aapl_2023_item7_rd_005"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-AAPL-006",
+      "ticker": "AAPL",
+      "cik": "0000320193",
+      "accession_number": "0000320193-23-000106",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm",
+      "http_status": 200,
+      "declared_status": "pending_annotation",
+      "classification": "PENDING_ANNOTATION",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_aapl_2023_item8_legal_006"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-MSFT-001",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "accession_number": "0000789019-23-000085",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_msft_2023_item7_segments_001"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0000789019-23-000085 not found in SEC EDGAR submissions for MSFT (CIK 0000789019)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-MSFT-002",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "accession_number": "0000789019-23-000085",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_msft_2023_item7_operating_002"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0000789019-23-000085 not found in SEC EDGAR submissions for MSFT (CIK 0000789019)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-MSFT-003",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "accession_number": "0000789019-23-000085",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_msft_2023_item8_cashflow_003"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0000789019-23-000085 not found in SEC EDGAR submissions for MSFT (CIK 0000789019)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-MSFT-004",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "accession_number": "0000789019-23-000085",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_msft_2023_item1a_cyber_004"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0000789019-23-000085 not found in SEC EDGAR submissions for MSFT (CIK 0000789019)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-MSFT-005",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "accession_number": "0000789019-23-000085",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_msft_2023_item1_strategy_005"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0000789019-23-000085 not found in SEC EDGAR submissions for MSFT (CIK 0000789019)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-MSFT-006",
+      "ticker": "MSFT",
+      "cik": "0000789019",
+      "accession_number": "0000789019-23-000085",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm",
+      "http_status": 404,
+      "declared_status": "pending_annotation",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_msft_2023_item8_activision_006"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0000789019-23-000085 not found in SEC EDGAR submissions for MSFT (CIK 0000789019)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/789019/000078901923000085/msft-20230630.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-TSLA-001",
+      "ticker": "TSLA",
+      "cik": "0001318605",
+      "accession_number": "0001318605-24-000006",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_tsla_2023_item7_rev_001"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0001318605-24-000006 not found in SEC EDGAR submissions for TSLA (CIK 0001318605)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-TSLA-002",
+      "ticker": "TSLA",
+      "cik": "0001318605",
+      "accession_number": "0001318605-24-000006",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_tsla_2023_item7_margin_002"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0001318605-24-000006 not found in SEC EDGAR submissions for TSLA (CIK 0001318605)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-TSLA-003",
+      "ticker": "TSLA",
+      "cik": "0001318605",
+      "accession_number": "0001318605-24-000006",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_tsla_2023_item8_cashflow_003"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0001318605-24-000006 not found in SEC EDGAR submissions for TSLA (CIK 0001318605)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-TSLA-004",
+      "ticker": "TSLA",
+      "cik": "0001318605",
+      "accession_number": "0001318605-24-000006",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_tsla_2023_item1a_risks_004"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0001318605-24-000006 not found in SEC EDGAR submissions for TSLA (CIK 0001318605)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-TSLA-005",
+      "ticker": "TSLA",
+      "cik": "0001318605",
+      "accession_number": "0001318605-24-000006",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm",
+      "http_status": 404,
+      "declared_status": "validated_real_filing",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_tsla_2023_item8_balance_005"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0001318605-24-000006 not found in SEC EDGAR submissions for TSLA (CIK 0001318605)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-TSLA-006",
+      "ticker": "TSLA",
+      "cik": "0001318605",
+      "accession_number": "0001318605-24-000006",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm",
+      "http_status": 404,
+      "declared_status": "pending_annotation",
+      "classification": "INVALID_SOURCE_METADATA",
+      "is_source_metadata_valid": false,
+      "url_resolves": false,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_tsla_2023_item8_investigations_006"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": [
+        "Accession 0001318605-24-000006 not found in SEC EDGAR submissions for TSLA (CIK 0001318605)",
+        "SEC URL does not resolve (HTTP 404): https://www.sec.gov/Archives/edgar/data/1318605/000131860524000006/tsla-20231231.htm"
+      ]
+    },
+    {
+      "query_id": "REAL-SEC-NVDA-001",
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "accession_number": "0001045810-24-000029",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_nvda_2024_item7_rev_001"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-NVDA-002",
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "accession_number": "0001045810-24-000029",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_nvda_2024_item7_margin_002"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-NVDA-003",
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "accession_number": "0001045810-24-000029",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_nvda_2024_item8_cashflow_003"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-NVDA-004",
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "accession_number": "0001045810-24-000029",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_nvda_2024_item1a_export_004"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-NVDA-005",
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "accession_number": "0001045810-24-000029",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+      "http_status": 200,
+      "declared_status": "validated_real_filing",
+      "classification": "VERIFIED_SOURCE_MISSING_CHUNKS",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_nvda_2024_item1a_tsmc_005"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    },
+    {
+      "query_id": "REAL-SEC-NVDA-006",
+      "ticker": "NVDA",
+      "cik": "0001045810",
+      "accession_number": "0001045810-24-000029",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+      "http_status": 200,
+      "declared_status": "pending_annotation",
+      "classification": "PENDING_ANNOTATION",
+      "is_source_metadata_valid": true,
+      "url_resolves": true,
+      "db_document_found": false,
+      "expected_chunk_ids": [
+        "real_chunk_nvda_2024_item8_cust_concentration_006"
+      ],
+      "db_chunks_found": [],
+      "is_placeholder_chunk": true,
+      "issues": []
+    }
+  ]
+}

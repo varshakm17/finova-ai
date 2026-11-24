@@ -7,6 +7,7 @@ Guarantees verified evidence mapping and provenance tracking for report generati
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from backend.agents.base_agent import BaseFinovaAgent
@@ -155,14 +156,21 @@ class ResearchCoordinator(BaseFinovaAgent):
                     else "the period"
                 )
                 pct_str = f" ({pct_chg:+.1f}%)" if pct_chg is not None else ""
-                t_str = f"{metric} showed a {direction.lower()} trend across {p_span} with a net change of {abs_chg:+.2f} {unit}{pct_str}. {notes}"
+                matching_cids = [
+                    cid
+                    for cid, cinfo in calc_map.items()
+                    if cinfo.get("metric_name") == metric
+                ]
+                cite_str = f" [{matching_cids[0]}]" if matching_cids else ""
+                t_str = f"{metric} showed a {direction.lower()} trend across {p_span} with a net change of {abs_chg:+.2f} {unit}{pct_str}{cite_str}. {notes}"
                 sections["historical_comparison"].append(t_str)
 
         # 3. Narrative findings by section identifier from SEC filings
         for eid, einfo in evidence_map.items():
             sec_id = str(einfo.get("section_identifier", "")).lower()
             text = einfo.get("text", "").strip()
-            summary_snippet = text[:280] + ("..." if len(text) > 280 else "")
+            clean_snippet = re.sub(r"\s+", " ", text[:280]).strip()
+            summary_snippet = clean_snippet + ("..." if len(text) > 280 else "")
 
             if "item 1a" in sec_id or "risk" in sec_id:
                 sections["risk_factors"].append(
@@ -194,19 +202,21 @@ class ResearchCoordinator(BaseFinovaAgent):
                 target_sec = "financial_performance"
 
             for f in findings:
+                if f.startswith("Retrieved ") and "evidence passages" in f:
+                    continue
                 if f not in sections[target_sec]:
                     sections[target_sec].append(f)
 
         # 5. Executive summary compilation
-        if sections["financial_performance"]:
+        if sections["financial_performance"] and calc_map:
             sections["executive_summary"].append(
                 f"Financial calculations yielded {len(calc_map)} verified deterministic receipts across key ratios and profitability metrics."
             )
-        if sections["historical_comparison"]:
+        if sections["historical_comparison"] and calc_map:
             sections["executive_summary"].append(
                 f"Longitudinal analysis identified {len(sections['historical_comparison'])} multi-period metric trends."
             )
-        if sections["risk_factors"]:
+        if sections["risk_factors"] and evidence_map:
             sections["executive_summary"].append(
                 f"Identified {len(sections['risk_factors'])} primary operational and statutory risk factors."
             )
