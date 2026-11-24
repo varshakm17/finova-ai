@@ -19,6 +19,7 @@ def make_evidence(
     filing_type: str = "10-K",
     filing_date: str = "2023-11-03",
     report_date: str | None = "2023-09-30",
+    accession_number: str = "0000320193-23-000106",
 ) -> RetrievedEvidence:
     return RetrievedEvidence(
         evidence_id=evidence_id,
@@ -28,7 +29,7 @@ def make_evidence(
         filing_type=filing_type,
         filing_date=filing_date,
         report_date=report_date,
-        accession_number="0000320193-23-000106",
+        accession_number=accession_number,
         section_identifier="ITEM_7",
         section_title="MD&A",
         chunk_text=chunk_text,
@@ -90,16 +91,18 @@ def test_contradiction_no_conflict_when_supported():
 
 def test_contradiction_cross_evidence_directional_conflict():
     detector = ContradictionDetector()
-    # Two pieces of evidence for the same reporting period stating opposing directions
+    # Two pieces of evidence from distinct filings for the same reporting period stating opposing directions
     ev1 = make_evidence(
         evidence_id="E1",
         chunk_text="In the fiscal period ended September 30, 2023, product sales increased rapidly.",
         report_date="2023-09-30",
+        accession_number="0000320193-23-000106",
     )
     ev2 = make_evidence(
         evidence_id="E2",
         chunk_text="In the fiscal period ended September 30, 2023, product sales decreased across categories.",
         report_date="2023-09-30",
+        accession_number="0000320193-23-000107",
     )
     cross_conflicts = detector.detect_cross_evidence_contradictions([ev1, ev2])
     assert len(cross_conflicts) == 1

@@ -37,9 +37,11 @@ class ResearchCoordinator(BaseFinovaAgent):
 
         # Gather from state retrieved_evidence
         for ev in retrieved_evidence:
-            chunk_id = str(
-                ev.get("chunk_id") or ev.get("id") or hash(ev.get("text", ""))
-            )
+            cid_val = ev.get("chunk_id") or ev.get("id")
+            if not cid_val or not isinstance(cid_val, str) or cid_val.startswith("synthetic_"):
+                logger.warning("Rejecting untraceable evidence passage lacking valid chunk_id: %s", ev)
+                continue
+            chunk_id = str(cid_val)
             if chunk_id not in seen_chunks:
                 seen_chunks.add(chunk_id)
                 deduped_evidence.append(ev)
@@ -48,9 +50,11 @@ class ResearchCoordinator(BaseFinovaAgent):
         for tr in task_results:
             t_evidence = tr.get("retrieved_evidence", [])
             for ev in t_evidence:
-                chunk_id = str(
-                    ev.get("chunk_id") or ev.get("id") or hash(ev.get("text", ""))
-                )
+                cid_val = ev.get("chunk_id") or ev.get("id")
+                if not cid_val or not isinstance(cid_val, str) or cid_val.startswith("synthetic_"):
+                    logger.warning("Rejecting untraceable evidence passage lacking valid chunk_id: %s", ev)
+                    continue
+                chunk_id = str(cid_val)
                 if chunk_id not in seen_chunks:
                     seen_chunks.add(chunk_id)
                     deduped_evidence.append(ev)
@@ -58,17 +62,20 @@ class ResearchCoordinator(BaseFinovaAgent):
         evidence_map: dict[str, dict[str, Any]] = {}
         for idx, ev in enumerate(deduped_evidence, start=1):
             cid = f"E{idx}"
+            chunk_id = str(ev.get("chunk_id") or ev.get("id"))
             evidence_map[cid] = {
                 "citation_id": cid,
-                "chunk_id": ev.get("chunk_id") or ev.get("id"),
-                "company_name": ev.get("company_name", "Target Company"),
+                "chunk_id": chunk_id,
+                "company_name": ev.get("company_name", ""),
                 "ticker": ev.get("ticker", ""),
                 "section_identifier": ev.get("section_identifier", "Disclosures"),
-                "accession_number": ev.get("accession_number", "N/A"),
-                "filing_date": ev.get("filing_date", "N/A"),
+                "section_title": ev.get("section_title", "Disclosures"),
+                "accession_number": ev.get("accession_number", ""),
+                "filing_date": ev.get("filing_date", ""),
+                "report_date": ev.get("report_date"),
                 "filing_type": ev.get("filing_type") or ev.get("form_type", "10-K"),
                 "text": ev.get("text") or ev.get("chunk_text", ""),
-                "source_url": ev.get("source_url") or ev.get("filing_url"),
+                "source_url": ev.get("source_url") or ev.get("filing_url", "https://www.sec.gov"),
             }
 
         return evidence_map, deduped_evidence
@@ -167,10 +174,35 @@ class ResearchCoordinator(BaseFinovaAgent):
 
         # 3. Narrative findings by section identifier from SEC filings
         for eid, einfo in evidence_map.items():
-            sec_id = str(einfo.get("section_identifier", "")).lower()
+            sec_id = (
+                str(einfo.get("section_identifier", ""))
+                .lower()
+                .replace("_", " ")
+                .replace("-", " ")
+            )
             text = einfo.get("text", "").strip()
-            clean_snippet = re.sub(r"\s+", " ", text[:280]).strip()
-            summary_snippet = clean_snippet + ("..." if len(text) > 280 else "")
+
+            # Clean snippet for narrative findings: extract non-table sentences if tabular
+            raw_lines = [line_item.strip() for line_item in text.splitlines() if line_item.strip()]
+            narrative_lines = [
+                line_item
+                for line_item in raw_lines
+                if not line_item.startswith("|") and line_item.count("|") < 2
+            ]
+            narrative_text = " ".join(narrative_lines).strip()
+            if not narrative_text or len(narrative_text.split()) < 4:
+                # Chunk is purely tabular; it remains in evidence_map for reference, but not as narrative text
+                continue
+
+            if len(narrative_text) > 280:
+                # Find last space within first 280 chars to avoid truncating numbers mid-digit
+                cut_idx = narrative_text.rfind(" ", 0, 280)
+                if cut_idx <= 0:
+                    cut_idx = 280
+                clean_snippet = re.sub(r"\s+", " ", narrative_text[:cut_idx]).strip()
+                summary_snippet = clean_snippet + "..."
+            else:
+                summary_snippet = re.sub(r"\s+", " ", narrative_text).strip()
 
             if "item 1a" in sec_id or "risk" in sec_id:
                 sections["risk_factors"].append(

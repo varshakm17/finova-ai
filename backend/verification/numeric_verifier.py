@@ -45,9 +45,15 @@ class NumericVerifier:
         val2: float,
         tolerance_pct: float | None = None,
     ) -> bool:
-        """Evaluate if two numbers are identical within a relative percentage threshold."""
+        """Evaluate if two numbers are identical within a relative percentage threshold or presentation rounding."""
         tol = tolerance_pct if tolerance_pct is not None else self.tolerance_pct
         if math.isclose(val1, val2, abs_tol=1e-5):
+            return True
+
+        # Check standard 2-decimal-place presentation rounding (e.g. 0.22 vs 0.2229)
+        if math.isclose(val1, round(val2, 2), abs_tol=1e-4) or math.isclose(
+            round(val1, 2), val2, abs_tol=1e-4
+        ):
             return True
 
         if abs(val2) > 1e-9:

@@ -114,7 +114,8 @@ class PeriodVerifier:
                 if claimed_year and source_year and claimed_year != source_year:
                     # In annual Form 10-K filings, prior fiscal periods, contract dates, and debt maturities
                     # are standard disclosures. If the cited chunk text explicitly mentions the claimed year,
-                    # the passage directly supports the temporal claim.
+                    # the passage directly supports the temporal claim unless the claimed numerical figure
+                    # is explicitly attributed to a different year in the passage.
                     if str(claimed_year) not in re_doc.chunk_text:
                         return PeriodVerificationDetail(
                             is_consistent=False,
@@ -127,6 +128,36 @@ class PeriodVerifier:
                                 f"period date '{source_date}' and does not mention {claimed_year}."
                             ),
                         )
+                    elif claim.numeric_values:
+                        passage_years = [
+                            (int(m.group(1)), (m.start(1) + m.end(1)) / 2)
+                            for m in re.finditer(r"\b(20\d\d)\b", re_doc.chunk_text)
+                        ]
+                        if len(passage_years) > 1:
+                            for cv in claim.numeric_values:
+                                if cv.numeric_value and cv.numeric_value >= 1.0:
+                                    num_str = f"{cv.numeric_value:,.0f}".replace(",", r"[,\.]?")
+                                    for m in re.finditer(r"\b" + num_str + r"\b", re_doc.chunk_text):
+                                        m_center = (m.start() + m.end()) / 2
+                                        closest_year = None
+                                        min_dist = float("inf")
+                                        for y, y_center in passage_years:
+                                            d = abs(m_center - y_center)
+                                            if d < min_dist:
+                                                min_dist = d
+                                                closest_year = y
+                                        if closest_year and closest_year != claimed_year and min_dist < 45:
+                                            return PeriodVerificationDetail(
+                                                is_consistent=False,
+                                                claimed_period=claimed_period,
+                                                source_period=f"{closest_year} (via passage)",
+                                                mismatch_type="fiscal_year_mismatch",
+                                                explanation=(
+                                                    f"Fiscal year mismatch: Claim associates {cv.raw_text} with "
+                                                    f"period '{claimed_period}' (year {claimed_year}), but cited passage "
+                                                    f"explicitly reports this figure for fiscal year {closest_year}."
+                                                ),
+                                            )
 
                 # Annual vs Quarterly mismatch check
                 if is_claimed_annual and "10-Q" in filing_type:

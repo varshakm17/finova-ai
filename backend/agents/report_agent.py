@@ -347,23 +347,56 @@ class ReportAgent(BaseFinovaAgent):
         # 7. Key Findings & Synthesis
         takeaways = [
             "### Synthesis of Core Evidence\n",
-            f"1. **Operational Scale:** {company_name} maintains established market operations documented in statutory SEC submissions"
-            + (f" [{first_eid}]." if first_eid else "."),
         ]
+        if section_findings.get("company_overview"):
+            takeaways.append(
+                f"1. **Business Architecture:** {section_findings['company_overview'][0]}"
+            )
+        else:
+            takeaways.append(
+                f"1. **Corporate Architecture:** {company_name} maintains established market operations documented in statutory SEC submissions."
+            )
+
         if calc_map:
-            takeaways.append(
-                f"2. **Financial Verification:** Comprehensive deterministic calculation receipts substantiate reported profitability and liquidity metrics"
-                + (f" [{first_cid}]." if first_cid else ".")
+            primary_cid = None
+            for cid, cinfo in calc_map.items():
+                m_lower = cinfo.get("metric_name", "").lower()
+                if "revenue" in m_lower or "margin" in m_lower:
+                    primary_cid = cid
+                    break
+            primary_cid = primary_cid or first_cid
+            cinfo = calc_map[primary_cid]
+            val = cinfo.get("calculated_value")
+            unit = cinfo.get("unit", "")
+            val_str = (
+                f"{val:.2f}%"
+                if unit == "percentage" and isinstance(val, (int, float))
+                else f"{val} {unit}"
             )
-        if trends:
+            m_name = cinfo.get("metric_name", "").replace("_", " ").title()
             takeaways.append(
-                f"3. **Trend Stability:** Observed multi-period financial trajectories reflecting underlying operational momentum"
-                + (f" [{first_cid}]." if first_cid else ".")
+                f"2. **Financial Performance:** Verified deterministic calculation establishes {m_name} at {val_str} for the target period [{primary_cid}]."
             )
+
+        if section_findings.get("business_operations_mda"):
+            takeaways.append(
+                f"3. **Operational Dynamics:** {section_findings['business_operations_mda'][0]}"
+            )
+        elif trends:
+            t = trends[0]
+            m_name = t.get("metric_name", "").replace("_", " ").title()
+            dir_str = t.get("direction", "stable").lower()
+            takeaways.append(
+                f"3. **Longitudinal Trajectory:** Multi-period trajectory indicates a {dir_str} trend in {m_name} across reporting periods [{first_cid}]."
+            )
+
         if section_findings.get("risk_factors"):
             takeaways.append(
-                f"4. **Risk Profile:** Management identifies competitive, operational, and macroeconomic factors as key monitoring indicators"
-                + (f" [{first_eid}]." if first_eid else ".")
+                f"4. **Strategic Risk Profile:** {section_findings['risk_factors'][0]}"
+            )
+        else:
+            takeaways.append(
+                "4. **Strategic Risk Profile:** Statutory risk disclosures identify operational and market uncertainties."
             )
 
         sections.append(

@@ -224,79 +224,83 @@ class FinancialExtractor:
             is_instant,
             candidate_tags,
         ) in METRIC_DEFINITIONS:
-            # Find the best available tag in order of precedence
-            matched_tag: str | None = None
-            tag_data: dict[str, Any] | None = None
+            # Iterate through candidate tags in order of precedence to capture
+            # all reporting periods across SEC taxonomy shifts (e.g. ASC 606 migration).
+            metric_records: list[FinancialObservation] = []
+            seen_periods: set[tuple[str, str, str]] = set()
 
             for tag in candidate_tags:
-                if tag in facts_us_gaap:
-                    matched_tag = tag
-                    tag_data = facts_us_gaap[tag]
-                    break
+                if tag not in facts_us_gaap:
+                    continue
+                tag_data = facts_us_gaap[tag]
+                units_dict: dict[str, list[dict[str, Any]]] = tag_data.get("units", {})
+                if not units_dict:
+                    continue
 
-            if not matched_tag or not tag_data:
-                continue
+                # Iterate through reported units (e.g., 'USD', 'shares')
+                for unit_name, facts_list in units_dict.items():
+                    for item in facts_list:
+                        # Filter out non-statutory forms (we focus on 10-K, 10-Q, and amendments)
+                        form = item.get("form", "")
+                        if not form or not form.startswith(("10-K", "10-Q")):
+                            continue
 
-            units_dict: dict[str, list[dict[str, Any]]] = tag_data.get("units", {})
-            if not units_dict:
-                continue
+                        val = item.get("val")
+                        end_date = item.get("end")
+                        if val is None or not end_date:
+                            continue
 
-            # Iterate through reported units (e.g., 'USD', 'shares')
-            for unit_name, facts_list in units_dict.items():
-                for item in facts_list:
-                    # Filter out non-statutory forms (we focus on 10-K, 10-Q, and amendments)
-                    form = item.get("form", "")
-                    if not form or not form.startswith(("10-K", "10-Q")):
-                        continue
+                        start_date = item.get("start")
+                        filed_date = item.get("filed", end_date)
+                        accn = item.get("accn", "")
+                        fiscal_year = item.get("fy")
+                        fiscal_period = item.get("fp")
 
-                    val = item.get("val")
-                    end_date = item.get("end")
-                    if val is None or not end_date:
-                        continue
+                        duration_days = calculate_duration_days(start_date, end_date)
+                        period_type = classify_period_type(
+                            is_instant=is_instant,
+                            duration_days=duration_days,
+                            form=form,
+                            fiscal_period=fiscal_period,
+                        )
 
-                    start_date = item.get("start")
-                    filed_date = item.get("filed", end_date)
-                    accn = item.get("accn", "")
-                    fiscal_year = item.get("fy")
-                    fiscal_period = item.get("fp")
+                        # Deduplicate by period within this metric, prioritizing earlier candidate tags
+                        period_key = (end_date, period_type, start_date or "")
+                        if period_key in seen_periods:
+                            continue
+                        seen_periods.add(period_key)
 
-                    duration_days = calculate_duration_days(start_date, end_date)
-                    period_type = classify_period_type(
-                        is_instant=is_instant,
-                        duration_days=duration_days,
-                        form=form,
-                        fiscal_period=fiscal_period,
-                    )
+                        # Build direct archive URL for the filing directory
+                        accn_nodash = accn.replace("-", "") if accn else ""
+                        source_url = (
+                            f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accn_nodash}/"
+                            if accn_nodash
+                            else f"https://data.sec.gov/submissions/CIK{formatted_cik}.json"
+                        )
 
-                    # Build direct archive URL for the filing directory
-                    accn_nodash = accn.replace("-", "") if accn else ""
-                    source_url = (
-                        f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accn_nodash}/"
-                        if accn_nodash
-                        else f"https://data.sec.gov/submissions/CIK{formatted_cik}.json"
-                    )
+                        observation = FinancialObservation(
+                            company_ticker=ticker.upper(),
+                            company_cik=formatted_cik,
+                            company_name=resolved_name,
+                            metric_name=metric_name,
+                            statement_type=statement_type,
+                            original_tag=f"us-gaap:{tag}",
+                            numeric_value=float(val),
+                            unit=unit_name,
+                            period_start=start_date,
+                            period_end=end_date,
+                            duration_days=duration_days,
+                            period_type=period_type,
+                            fiscal_year=fiscal_year,
+                            fiscal_period=fiscal_period,
+                            filing_date=filed_date,
+                            filing_type=form,
+                            accession_number=accn,
+                            source_url=source_url,
+                        )
+                        metric_records.append(observation)
 
-                    observation = FinancialObservation(
-                        company_ticker=ticker.upper(),
-                        company_cik=formatted_cik,
-                        company_name=resolved_name,
-                        metric_name=metric_name,
-                        statement_type=statement_type,
-                        original_tag=f"us-gaap:{matched_tag}",
-                        numeric_value=float(val),
-                        unit=unit_name,
-                        period_start=start_date,
-                        period_end=end_date,
-                        duration_days=duration_days,
-                        period_type=period_type,
-                        fiscal_year=fiscal_year,
-                        fiscal_period=fiscal_period,
-                        filing_date=filed_date,
-                        filing_type=form,
-                        accession_number=accn,
-                        source_url=source_url,
-                    )
-                    extracted_records.append(observation)
+            extracted_records.extend(metric_records)
 
         logger.info(
             "Extracted %d raw observations for %s (%s). Deduplicating...",

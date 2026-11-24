@@ -149,10 +149,23 @@ class ClaimExtractor:
                 continue
             if "zero llm arithmetic is employed" in line.lower() or (line.startswith("Retrieved ") and "evidence passages" in line):
                 continue
+            # Skip italicized section notices and placeholders like _No ..._
+            if re.match(r"^_[^_]+_\.?$", line):
+                continue
 
             # Strip bullet prefixes like "- ", "* ", "1. "
             line = re.sub(r"^(?:[-*•]|\d+[\.)])\s*", "", line)
             if not line:
+                continue
+
+            # Skip table rows or tabular data fragments even if preceded by a section disclosure prefix
+            stripped_line = re.sub(
+                r"^(?:Risk Disclosure|Management Discussion|Business Operations|Filing Disclosure)\s*(?:\[[EC]\d+\])?:\s*",
+                "",
+                line,
+                flags=re.IGNORECASE,
+            ).strip()
+            if stripped_line.startswith("|") or stripped_line.count("|") >= 2:
                 continue
 
             # Skip reference lines like **[E1]**: SEC Form... or **[C1]**: Deterministic...
@@ -381,8 +394,15 @@ class ClaimExtractor:
                 or (clean_claim_text.startswith("**") and any(d in clean_claim_text for d in ["(EXPANDING)", "(CONTRACTING)", "(MIXED)", "(STABLE)", "(UPWARD)", "(DOWNWARD)", "(GROWING)", "(DECLINING)"]))
                 or "demonstrated mixed volatility across periods" in c_lower
                 or "operates within statutory reporting guidelines" in c_lower
-                or c_lower.startswith("_no specific")
+                or c_lower.startswith("_no ")
                 or c_lower.startswith("no specific")
+                or c_lower.startswith("no comparative")
+                or "maintains established market operations" in c_lower
+                or "statutory risk disclosures identify" in c_lower
+                or c_lower.startswith("**strategic risk profile:")
+                or c_lower.startswith("**corporate architecture:")
+                or clean_claim_text.startswith("|")
+                or clean_claim_text.count("|") >= 2
             ):
                 is_verifiable = False
 

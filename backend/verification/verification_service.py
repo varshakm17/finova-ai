@@ -165,7 +165,7 @@ class VerificationService:
         ):
             overall_status = OverallVerificationStatus.PARTIALLY_VERIFIED
             all_warnings.append(
-                f"Partial verification: {supported_count}/{total_claims} claims supported; "
+                f"Partial verification: {supported_count}/{total_claims} claims supported ({not_verifiable_count} non-verifiable meta-statements); "
                 f"{unsupported_count} unsupported, {partially_supported_count} partially supported."
             )
         else:
