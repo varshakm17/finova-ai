@@ -117,6 +117,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.NOT_VERIFIABLE,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=False,
                 verification_reason="Claim is an introductory remark, greeting, or subjective meta-statement.",
                 confidence_score=0.5,
                 verification_method="unverifiable_filter",
@@ -128,6 +130,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.UNSUPPORTED,
+                citation_ids=[],
+                is_verifiable=True,
                 verification_reason="Claim makes factual assertions without providing any supporting citation.",
                 confidence_score=1.0,
                 verification_method="citation_presence_check",
@@ -147,6 +151,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.UNSUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 contradicting_evidence_ids=[],
                 verification_reason=f"Claim references non-existent or fabricated citation ID(s): {', '.join(missing_ids)}.",
                 confidence_score=1.0,
@@ -165,6 +171,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.CONTRADICTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 supporting_evidence_ids=[],
                 contradicting_evidence_ids=[contra_detail.contradicting_evidence_id]
                 if contra_detail.contradicting_evidence_id
@@ -187,6 +195,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.UNSUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 verification_reason=f"Reporting period inconsistency: {period_detail.explanation}",
                 confidence_score=0.95,
                 verification_method="period_verifier",
@@ -233,6 +243,8 @@ class EvidenceVerifier:
                                 claim_id=claim.claim_id,
                                 claim_text=claim.claim_text,
                                 outcome=VerificationOutcome.CONTRADICTED,
+                                citation_ids=list(claim.citation_ids),
+                                is_verifiable=True,
                                 verification_reason=(
                                     f"Company attribution mismatch: Claim refers to '{claim.mentioned_company}' "
                                     f"but cited passage {cid} belongs to '{passage.company_name}' ({passage.ticker})."
@@ -263,6 +275,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=outcome,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 verification_reason=f"Numerical mismatch: {first_fail.discrepancy_details}",
                 confidence_score=0.98,
                 verification_method="numeric_verifier",
@@ -279,6 +293,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.SUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 supporting_evidence_ids=[calc.evidence_id],
                 verification_reason=(
                     f"Claim supported by deterministic calculation receipt {calc.calculation_id} "
@@ -298,6 +314,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.UNSUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 verification_reason="Claim has no verifiable source passages attached.",
                 confidence_score=1.0,
                 verification_method="citation_resolution",
@@ -321,6 +339,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.PARTIALLY_SUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=f"Passage {best_passage.evidence_id} has questionable provenance status: {best_passage.provenance_status}.",
                 confidence_score=0.6,
@@ -336,6 +356,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.SUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=(
                     f"Numerical figures matched and lexical overlap ({best_overlap:.1%}) confirms "
@@ -353,6 +375,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.SUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=(
                     f"Lexical overlap ({best_overlap:.1%}) with passage {best_passage.evidence_id} "
@@ -367,6 +391,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.PARTIALLY_SUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=(
                     f"Partial lexical overlap ({best_overlap:.1%}) found in passage {best_passage.evidence_id}. "
@@ -382,6 +408,8 @@ class EvidenceVerifier:
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
                 outcome=VerificationOutcome.UNSUPPORTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
                 supporting_evidence_ids=[],
                 verification_reason=(
                     f"Insufficient evidence overlap ({best_overlap:.1%}) with cited passage {best_passage.evidence_id}. "

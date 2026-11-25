@@ -121,6 +121,44 @@ class NumericVerifier:
                 tolerance_pct_applied=self.tolerance_pct,
             )
 
+        # Case 3.5: Match against calculation input observations (e.g. underlying components, deltas, or trend metrics)
+        for obs in getattr(calc, "input_observations", []):
+            obs_val = obs.get("value")
+            if obs_val is not None and isinstance(obs_val, (int, float)):
+                obs_unit = obs.get("unit", calc.unit)
+                is_obs_pct = obs_unit.lower() == "percentage" or "%" in str(obs_unit)
+                if self.is_close_within_tolerance(claimed_val, obs_val):
+                    return NumericVerificationDetail(
+                        matched=True,
+                        claimed_value=claimed_val,
+                        source_value=obs_val,
+                        claimed_unit=claim_num.unit,
+                        source_unit=obs_unit,
+                        error_type="none",
+                        discrepancy_details=(
+                            f"Matched input observation '{obs.get('input_name', 'input')}' ({obs_val}) "
+                            f"in calculation receipt {calc.calculation_id}."
+                        ),
+                        tolerance_pct_applied=self.tolerance_pct,
+                    )
+                if is_obs_pct and (
+                    math.isclose(claimed_val * 100.0, obs_val, rel_tol=0.05)
+                    or math.isclose(claimed_val, obs_val * 100.0, rel_tol=0.05)
+                ):
+                    return NumericVerificationDetail(
+                        matched=False,
+                        claimed_value=claimed_val,
+                        source_value=obs_val,
+                        claimed_unit=claim_num.unit or "%",
+                        source_unit=obs_unit,
+                        error_type="scale_error_percentage_vs_fraction",
+                        discrepancy_details=(
+                            f"Scale error on input '{obs.get('input_name', 'input')}': Claimed {claimed_val} "
+                            f"appears to be a fraction mistaken for a percentage (source: {obs_val}%)."
+                        ),
+                        tolerance_pct_applied=self.tolerance_pct,
+                    )
+
         # Case 4: Value discrepancy
         return NumericVerificationDetail(
             matched=False,

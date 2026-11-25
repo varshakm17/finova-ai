@@ -661,6 +661,64 @@ class Database:
                 "CREATE INDEX IF NOT EXISTS idx_ei_run_id ON evaluation_issues (run_id);"
             )
 
+            # Historical Audit Integrity Reconciliations (Session 18.1.1)
+            # 1. Reconcile historical answer_claims where outcome was 'not_verifiable' but is_verifiable was stored as 1
+            cursor.execute(
+                """
+                UPDATE answer_claims
+                SET is_verifiable = 0
+                WHERE is_verifiable = 1 AND claim_id IN (
+                    SELECT claim_id FROM claim_verification_results WHERE outcome = 'not_verifiable'
+                );
+                """
+            )
+            # 2. Reconcile citation_ids_json in answer_claims where citation_ids_json was '[]' but supporting_evidence_json exists
+            cursor.execute(
+                """
+                UPDATE answer_claims
+                SET citation_ids_json = (
+                    SELECT cvr.supporting_evidence_json
+                    FROM claim_verification_results cvr
+                    JOIN verification_runs vr ON cvr.run_id = vr.run_id
+                    WHERE vr.answer_id = answer_claims.answer_id
+                      AND cvr.claim_id = answer_claims.claim_id
+                      AND cvr.supporting_evidence_json IS NOT NULL
+                      AND cvr.supporting_evidence_json != '[]'
+                    LIMIT 1
+                )
+                WHERE citation_ids_json = '[]'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM claim_verification_results cvr
+                    JOIN verification_runs vr ON cvr.run_id = vr.run_id
+                    WHERE vr.answer_id = answer_claims.answer_id
+                      AND cvr.claim_id = answer_claims.claim_id
+                      AND cvr.supporting_evidence_json IS NOT NULL
+                      AND cvr.supporting_evidence_json != '[]'
+                  );
+                """
+            )
+            # 3. Reconcile total_calculations_cited and total_evidence_cited in financial_research_reports
+            cursor.execute(
+                """
+                UPDATE financial_research_reports
+                SET
+                    total_calculations_cited = (
+                        SELECT COUNT(*) FROM report_references
+                        WHERE report_references.report_id = financial_research_reports.report_id
+                        AND report_references.ref_type = 'calculation_receipt'
+                    ),
+                    total_evidence_cited = (
+                        SELECT COUNT(*) FROM report_references
+                        WHERE report_references.report_id = financial_research_reports.report_id
+                        AND report_references.ref_type != 'calculation_receipt'
+                    )
+                WHERE total_calculations_cited = 0 AND report_id IN (
+                    SELECT report_id FROM report_references WHERE ref_type = 'calculation_receipt'
+                );
+                """
+            )
+
         logger.info("Database initialized successfully at: %s", self.db_path)
 
     def save_company(self, company_data: dict[str, Any]) -> None:
@@ -1229,6 +1287,16 @@ class Database:
                     )
 
                 # Insert/update answer_claims
+                is_v_val = (
+                    0
+                    if outcome_val == "not_verifiable"
+                    or not cr.get("is_verifiable", True)
+                    else 1
+                )
+                cits = cr.get("citation_ids")
+                if cits is None:
+                    cits = cr.get("supporting_evidence_ids", [])
+
                 conn.execute(
                     """
                     INSERT INTO answer_claims (
@@ -1240,7 +1308,8 @@ class Database:
                         claim_text = excluded.claim_text,
                         claim_type = excluded.claim_type,
                         numeric_values_json = excluded.numeric_values_json,
-                        citation_ids_json = excluded.citation_ids_json;
+                        citation_ids_json = excluded.citation_ids_json,
+                        is_verifiable = excluded.is_verifiable;
                     """,
                     (
                         claim_id,
@@ -1250,8 +1319,8 @@ class Database:
                         json.dumps(cr.get("numeric_values", [])),
                         cr.get("mentioned_company"),
                         cr.get("mentioned_period"),
-                        json.dumps(cr.get("citation_ids", [])),
-                        1 if cr.get("is_verifiable", True) else 0,
+                        json.dumps(cits),
+                        is_v_val,
                         now_iso,
                     ),
                 )
@@ -1626,11 +1695,30 @@ class Database:
             references = report_data.get("references")
 
         total_sec = len(sections) if sections else report_data.get("total_sections", 0)
-        total_ev = (
-            len(references)
-            if references
-            else report_data.get("total_evidence_cited", 0)
-        )
+        if references:
+            total_calc = sum(
+                1
+                for r in references
+                if (
+                    r.get("ref_type")
+                    if isinstance(r, dict)
+                    else getattr(r, "ref_type", None)
+                )
+                == "calculation_receipt"
+            )
+            total_ev = sum(
+                1
+                for r in references
+                if (
+                    r.get("ref_type")
+                    if isinstance(r, dict)
+                    else getattr(r, "ref_type", None)
+                )
+                != "calculation_receipt"
+            )
+        else:
+            total_ev = report_data.get("total_evidence_cited", 0)
+            total_calc = report_data.get("total_calculations_cited", 0)
 
         with self.connection() as conn:
             conn.execute(
@@ -1668,7 +1756,7 @@ class Database:
                     report_data.get("html_content"),
                     total_sec,
                     total_ev,
-                    report_data.get("total_calculations_cited", 0),
+                    total_calc,
                     report_data.get("created_at", now_iso),
                     report_data.get("updated_at", now_iso),
                 ),

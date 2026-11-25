@@ -123,10 +123,13 @@ class VerificationAgent(BaseFinovaAgent):
                     continue
                 c_md = sec.get("content_markdown", "") if isinstance(sec, dict) else getattr(sec, "content_markdown", "")
                 clean_lines = [
-                    l for l in c_md.split("\n")
-                    if not l.strip().startswith("|")
-                    and not l.strip().startswith("---")
-                    and not (l.startswith("Retrieved ") and "evidence passages" in l)
+                    line
+                    for line in c_md.split("\n")
+                    if not line.strip().startswith("|")
+                    and not line.strip().startswith("---")
+                    and not (
+                        line.startswith("Retrieved ") and "evidence passages" in line
+                    )
                 ]
                 clean_sec_text = "\n".join(clean_lines).strip()
                 if clean_sec_text:

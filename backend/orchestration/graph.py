@@ -745,8 +745,16 @@ class FinovaOrchestrationEngine:
             markdown_content=final_state.get("report_markdown"),
             html_content=final_state.get("report_html"),
             total_sections=len(report_obj.sections) if report_obj else 0,
-            total_evidence_cited=len(report_obj.references) if report_obj else 0,
-            total_calculations_cited=len(final_state.get("calculation_results", [])),
+            total_evidence_cited=sum(
+                1 for r in report_obj.references if r.ref_type != "calculation_receipt"
+            )
+            if report_obj
+            else 0,
+            total_calculations_cited=sum(
+                1 for r in report_obj.references if r.ref_type == "calculation_receipt"
+            )
+            if report_obj
+            else len(final_state.get("calculation_results", [])),
             execution_time_ms=duration_ms,
             trace=trace_events,
             warnings=final_state.get("warnings", []),

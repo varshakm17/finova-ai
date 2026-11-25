@@ -121,6 +121,17 @@ class CalculationService:
             and (end_year is None or get_obs_year(o) <= end_year)
         ]
 
+        all_candidate_instant = [
+            o
+            for o in all_obs
+            if o.period_type == "instant"
+            and (
+                clean_period_type != "annual"
+                or o.filing_type == "10-K"
+                or o.fiscal_period in ("FY", "annual", None)
+            )
+        ]
+
         # Group flow observations by period_end
         periods_dict: dict[str, dict[str, FinancialObservation]] = {}
         for o in flow_obs:
@@ -306,7 +317,7 @@ class CalculationService:
                         fiscal_year,
                         fiscal_period,
                         period_flow,
-                        instant_obs,
+                        all_candidate_instant,
                     )
                 )
 
@@ -323,7 +334,7 @@ class CalculationService:
                         fiscal_year,
                         fiscal_period,
                         period_flow,
-                        instant_obs,
+                        all_candidate_instant,
                     )
                 )
 

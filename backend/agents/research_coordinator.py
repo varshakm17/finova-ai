@@ -83,8 +83,9 @@ class ResearchCoordinator(BaseFinovaAgent):
     def build_calculation_map(
         self,
         calculation_results: list[dict[str, Any]],
+        trends: list[Any] | None = None,
     ) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
-        """Map deterministic calculation receipts to citation IDs (C1, C2, ...)."""
+        """Map deterministic calculation receipts and multi-period trends to citation IDs (C1, C2, ...)."""
         calc_map: dict[str, dict[str, Any]] = {}
         valid_receipts: list[dict[str, Any]] = []
 
@@ -110,6 +111,70 @@ class ResearchCoordinator(BaseFinovaAgent):
                 "period_end": r.get("period_end", ""),
                 "inputs": r.get("inputs", []),
             }
+
+        # Session 18.1.1: Register longitudinal trend calculations as auditable receipts
+        if trends:
+            for tr in trends:
+                tr_dict = (
+                    tr
+                    if isinstance(tr, dict)
+                    else tr.model_dump()
+                    if hasattr(tr, "model_dump")
+                    else {}
+                )
+                m_name = tr_dict.get("metric_name", "")
+                if not m_name:
+                    continue
+                next_idx = len(calc_map) + 1
+                cid = f"C{next_idx}"
+                pct_chg = tr_dict.get("percentage_change")
+                abs_chg = tr_dict.get("absolute_change")
+                unit = tr_dict.get("unit", "")
+                periods = tr_dict.get("periods", [])
+                p_end = str(periods[-1]) if periods else ""
+                p_start = str(periods[0]) if len(periods) >= 2 else None
+                p_label = (
+                    f"{periods[0]}-{periods[-1]}"
+                    if len(periods) >= 2
+                    else (periods[0] if periods else "")
+                )
+                calc_val = pct_chg if pct_chg is not None else abs_chg
+
+                inputs = [
+                    {"input_name": "absolute_change", "value": abs_chg, "unit": unit},
+                    {
+                        "input_name": "percentage_change",
+                        "value": pct_chg,
+                        "unit": "%" if pct_chg is not None else "",
+                    },
+                ]
+                vals = tr_dict.get("values", [])
+                if len(vals) >= 2:
+                    inputs.append(
+                        {"input_name": "start_value", "value": vals[0], "unit": unit}
+                    )
+                    inputs.append(
+                        {"input_name": "end_value", "value": vals[-1], "unit": unit}
+                    )
+
+                clean_metric_id = re.sub(r"[^a-zA-Z0-9_]", "_", m_name)
+                clean_p_label = re.sub(r"[^a-zA-Z0-9_]", "_", p_label)
+                trend_receipt = {
+                    "citation_id": cid,
+                    "calculation_id": f"calc_trend_{clean_metric_id}_{clean_p_label}",
+                    "metric_name": f"{m_name} Trend",
+                    "formula_name": "Multi-Period Longitudinal Trend Analysis",
+                    "formula_expression": "((V_end - V_start) / abs(V_start)) * 100",
+                    "calculated_value": calc_val,
+                    "unit": "%" if pct_chg is not None else unit,
+                    "fiscal_year": p_end or p_label,
+                    "fiscal_period": "MULTI",
+                    "period_start": p_start,
+                    "period_end": p_end or p_label,
+                    "inputs": inputs,
+                }
+                calc_map[cid] = trend_receipt
+                valid_receipts.append(trend_receipt)
 
         return calc_map, valid_receipts
 
@@ -166,6 +231,10 @@ class ResearchCoordinator(BaseFinovaAgent):
                 matching_cids = [
                     cid
                     for cid, cinfo in calc_map.items()
+                    if cinfo.get("metric_name") == f"{metric} Trend"
+                ] or [
+                    cid
+                    for cid, cinfo in calc_map.items()
                     if cinfo.get("metric_name") == metric
                 ]
                 cite_str = f" [{matching_cids[0]}]" if matching_cids else ""
@@ -195,12 +264,22 @@ class ResearchCoordinator(BaseFinovaAgent):
                 continue
 
             if len(narrative_text) > 280:
-                # Find last space within first 280 chars to avoid truncating numbers mid-digit
-                cut_idx = narrative_text.rfind(" ", 0, 280)
-                if cut_idx <= 0:
-                    cut_idx = 280
-                clean_snippet = re.sub(r"\s+", " ", narrative_text[:cut_idx]).strip()
-                summary_snippet = clean_snippet + "..."
+                # Look for sentence boundary (. , ? , ! ) within first 280 chars if after char 80
+                period_matches = [
+                    m.end()
+                    for m in re.finditer(r"\.\s+|\?\s+|\!\s+", narrative_text[:280])
+                    if m.end() > 80
+                ]
+                if period_matches:
+                    cut_idx = period_matches[-1]
+                    clean_snippet = re.sub(r"\s+", " ", narrative_text[:cut_idx]).strip()
+                    summary_snippet = clean_snippet
+                else:
+                    cut_idx = narrative_text.rfind(" ", 0, 280)
+                    if cut_idx <= 0:
+                        cut_idx = 280
+                    clean_snippet = re.sub(r"\s+", " ", narrative_text[:cut_idx]).strip()
+                    summary_snippet = clean_snippet + "..."
             else:
                 summary_snippet = re.sub(r"\s+", " ", narrative_text).strip()
 
@@ -325,7 +404,12 @@ class ResearchCoordinator(BaseFinovaAgent):
         evidence_map, deduped_evidence = self.build_evidence_map(
             retrieved_evidence, task_results
         )
-        calc_map, valid_receipts = self.build_calculation_map(calculation_results)
+        trends_raw = (
+            financial_analysis.get("trends", []) if financial_analysis else []
+        )
+        calc_map, valid_receipts = self.build_calculation_map(
+            calculation_results, trends=trends_raw
+        )
 
         section_findings = self.organize_section_findings(
             evidence_map=evidence_map,

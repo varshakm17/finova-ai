@@ -188,6 +188,14 @@ class ClaimVerificationResult(BaseModel):
     claim_id: str = Field(..., description="Evaluated claim identifier")
     claim_text: str = Field(..., description="Text of evaluated claim")
     outcome: VerificationOutcome = Field(..., description="Verdict")
+    citation_ids: list[str] = Field(
+        default_factory=list,
+        description="Original citations linked to the claim",
+    )
+    is_verifiable: bool = Field(
+        default=True,
+        description="Whether claim is eligible for empirical verification",
+    )
     supporting_evidence_ids: list[str] = Field(
         default_factory=list,
         description="Evidence IDs confirming the claim",

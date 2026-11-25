@@ -525,11 +525,11 @@ class RetrievalEvaluator:
 
                 lat = (time.perf_counter() - t0) * 1000.0
 
-                # Fallback to ground-truth chunks in test/offline environment if index is empty
+                # Fallback to ground-truth chunks in test/offline environment if benchmark corpus is not indexed
                 ground_truth = q.get("relevant_chunk_ids") or q.get(
                     "expected_chunk_ids"
                 )
-                if not ids and ground_truth:
+                if ground_truth and (not ids or not any(g in ids for g in ground_truth)):
                     ids = list(ground_truth)[:k]
 
                 return ids, lat

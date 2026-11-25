@@ -272,10 +272,24 @@ class ReportAgent(BaseFinovaAgent):
         if trends:
             hist_lines.append("#### Directional Trend Interpretations\n")
             for tr in trends:
-                metric = tr.get("metric_name", "").replace("_", " ").title()
+                m_raw = tr.get("metric_name", "")
+                metric = m_raw.replace("_", " ").title()
                 dir_label = tr.get("direction", "")
                 notes = tr.get("interpretation_notes", "")
-                hist_lines.append(f"- **{metric} ({dir_label})**: {notes}")
+                matching_cids = [
+                    cid
+                    for cid, cinfo in calc_map.items()
+                    if cinfo.get("metric_name") == f"{m_raw} Trend"
+                ]
+                if not matching_cids:
+                    matching_cids = [
+                        cid
+                        for cid, cinfo in calc_map.items()
+                        if cinfo.get("metric_name") == m_raw
+                        or cinfo.get("metric_name") == metric
+                    ]
+                cite_suffix = f" [{matching_cids[0]}]" if matching_cids else ""
+                hist_lines.append(f"- **{metric} ({dir_label})**: {notes}{cite_suffix}")
 
         sections.append(
             ReportSection(
@@ -284,6 +298,11 @@ class ReportAgent(BaseFinovaAgent):
                 order_index=order,
                 content_markdown="\n\n".join(hist_lines),
                 tables=[comp_table] if comp_table.rows else [],
+                calculation_ids=[
+                    cid
+                    for cid, cinfo in calc_map.items()
+                    if "Trend" in cinfo.get("metric_name", "")
+                ],
             )
         )
         order += 1
@@ -667,6 +686,11 @@ class ReportAgent(BaseFinovaAgent):
             verification_status="UNVERIFIED",
         )
 
+        total_ev = sum(1 for r in references if r.ref_type != "calculation_receipt")
+        total_calc = sum(
+            1 for r in references if r.ref_type == "calculation_receipt"
+        )
+
         report = FinancialResearchReport(
             report_id=report_id,
             request_id=request_id,
@@ -682,6 +706,8 @@ class ReportAgent(BaseFinovaAgent):
             html_content=html_content,
             sections=sections,
             references=references,
+            total_evidence_cited=total_ev,
+            total_calculations_cited=total_calc,
             metadata=metadata,
             warnings=warnings,
         )

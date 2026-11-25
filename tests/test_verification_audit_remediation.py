@@ -209,3 +209,150 @@ def test_report_agent_takeaway_grounding():
     assert "[E1]" in sec7.content_markdown
     assert "[C1]" in sec7.content_markdown
     assert "[E2]" in sec7.content_markdown
+
+
+# =========================================================================
+# Session 18.1.1 Tests: Audit Integrity, Schema Consistency & Provenance
+# =========================================================================
+
+
+def test_schema_consistency_verifiable_flag():
+    """Verify that is_verifiable is False if outcome is NOT_VERIFIABLE, and True otherwise."""
+    from backend.verification.evidence_verifier import EvidenceVerifier
+    from backend.verification.verification_models import ExtractedClaim
+
+    verifier = EvidenceVerifier()
+
+    # Case 1: Unverifiable meta claim
+    unverifiable_claim = ExtractedClaim(
+        claim_id="CLM-01",
+        claim_text="All financial metrics, margins, and ratios are calculated using Finova AI engine.",
+        claim_type="general_fact",
+        is_verifiable=False,
+    )
+    res1 = verifier.verify_claim(unverifiable_claim, [], [])
+    assert res1.outcome.value == "not_verifiable"
+    assert res1.is_verifiable is False
+
+    # Case 2: Verifiable claim with citation
+    verifiable_claim = ExtractedClaim(
+        claim_id="CLM-02",
+        claim_text="Total revenue was $211.9 billion [C1].",
+        claim_type="financial_metric",
+        citation_ids=["C1"],
+        is_verifiable=True,
+    )
+    # Even if missing evidence, it should be unsupported, but is_verifiable=True
+    res2 = verifier.verify_claim(verifiable_claim, [], [])
+    assert res2.outcome.value == "unsupported"
+    assert res2.is_verifiable is True
+    assert res2.citation_ids == ["C1"]
+
+
+def test_substantive_trend_claims_not_suppressed():
+    """Verify substantive trend claims in Section 4 are marked verifiable and extracted."""
+    extractor = ClaimExtractor()
+    text = (
+        "- **Revenue Growth (DOWNWARD)**: Top-line revenue expansion decelerated (-87.5%) [C5].\n"
+        "- **Operating Profit Margin (EXPANDING)**: Margin expanded by +3.2% [C6].\n"
+        "4. **Strategic Risk Profile:** Risk Disclosure [E7]: Operational risks disclosed on Form 10-K [E7].\n"
+    )
+    result = extractor.extract_claims(text)
+    claims = result.claims
+
+    # Ensure all three substantive claims are extracted and verifiable
+    assert len(claims) == 3
+    for c in claims:
+        assert c.is_verifiable is True
+
+    trend_claim = next(c for c in claims if "Revenue Growth" in c.claim_text)
+    assert "C5" in trend_claim.citation_ids
+    assert any(n.numeric_value == -87.5 for n in trend_claim.numeric_values)
+
+
+def test_abbreviation_protection_form_10k():
+    """Verify Form 10-K. and Form 10-Q. abbreviations do not trigger premature sentence splits."""
+    extractor = ClaimExtractor()
+    text = (
+        "Operating risks are detailed on Form 10-K. Additional operational factors include supply chain dependencies [E1].\n"
+        "Quarterly trends reported on Form 10-Q. Disclosures show steady deliveries [E2].\n"
+    )
+    result = extractor.extract_claims(text)
+    # The first line should not orphan 'Operating risks are detailed on Form 10-K.' without citation
+    e1_claims = [c for c in result.claims if "E1" in c.citation_ids]
+    assert len(e1_claims) == 1
+    assert "Form 10-K" in e1_claims[0].claim_text
+
+
+def test_multi_period_trend_receipt_numeric_verification():
+    """Verify NumericVerifier validates claims against registered trend receipts with inputs."""
+    from backend.rag.rag_models import CalculationEvidence
+    from backend.verification.verification_models import (
+        ExtractedClaim,
+        NumericClaimValue,
+    )
+
+    verifier = NumericVerifier()
+
+    trend_calc = CalculationEvidence(
+        evidence_id="C5",
+        calculation_id="calc_trend_revenue_growth_2021_2023",
+        metric_name="revenue_growth Trend",
+        calculated_value=-87.5,
+        unit="percentage",
+        formula="((V_end - V_start) / abs(V_start)) * 100",
+        period_end="2023",
+        input_observations=[
+            {"input_name": "absolute_change", "value": -7000000000.0, "unit": "USD"},
+            {"input_name": "percentage_change", "value": -87.5, "unit": "%"},
+        ],
+    )
+
+    claim = ExtractedClaim(
+        claim_id="CLM-T1",
+        claim_text="Top-line revenue expansion decelerated (-87.5%) [C5].",
+        citation_ids=["C5"],
+        numeric_values=[
+            NumericClaimValue(raw_text="-87.5%", numeric_value=-87.5, unit="%")
+        ],
+        is_verifiable=True,
+    )
+
+    details = verifier.verify_claim_numbers(claim, [], [trend_calc])
+    assert len(details) == 1
+    assert details[0].matched is True
+    assert details[0].claimed_value == -87.5
+
+
+def test_storage_calculation_and_evidence_partitioning():
+    """Verify save_research_report accurately separates total_evidence_cited and total_calculations_cited."""
+    from backend.data.storage import Database
+
+    db = Database(db_path=":memory:")
+    db.init_db()
+
+    rep_data = {
+        "report_id": "test_rep_partitioning",
+        "request_id": "test_req",
+        "company_name": "Test Co",
+        "title": "Test Brief",
+        "ticker": "TEST",
+    }
+    references = [
+        {"ref_type": "filing_passage", "citation_id": "E1", "reference_id": "r1"},
+        {"ref_type": "filing_passage", "citation_id": "E2", "reference_id": "r2"},
+        {"ref_type": "calculation_receipt", "citation_id": "C1", "reference_id": "r3"},
+        {"ref_type": "calculation_receipt", "citation_id": "C2", "reference_id": "r4"},
+        {"ref_type": "calculation_receipt", "citation_id": "C3", "reference_id": "r5"},
+    ]
+
+    db.save_research_report(rep_data, sections=[], references=references)
+
+    with db.connection() as conn:
+        row = conn.execute(
+            "SELECT total_evidence_cited, total_calculations_cited FROM financial_research_reports WHERE report_id = ?",
+            ("test_rep_partitioning",),
+        ).fetchone()
+        assert row is not None
+        assert row["total_evidence_cited"] == 2
+        assert row["total_calculations_cited"] == 3

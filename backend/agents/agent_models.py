@@ -388,6 +388,8 @@ class FinancialResearchReport(BaseModel):
     html_content: str | None = None
     sections: list[ReportSection] = Field(default_factory=list)
     references: list[ReportReference] = Field(default_factory=list)
+    total_evidence_cited: int = 0
+    total_calculations_cited: int = 0
     metadata: ReportMetadata | None = None
     warnings: list[str] = Field(default_factory=list)
 

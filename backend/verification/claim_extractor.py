@@ -19,7 +19,7 @@ from backend.verification.verification_models import (
 # Common abbreviations and financial abbreviations that should not trigger sentence boundaries
 ABBREVIATIONS = (
     r"(?:inc|corp|ltd|co|u\.s|sec|approx|vs|e\.g|i\.e|no|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec"
-    r"|q1|q2|q3|q4|fy\d{2,4})"
+    r"|q1|q2|q3|q4|fy\d{2,4}|(?:form\s+)?10-[kq]|item\s+\d+[a-z]?)"
 )
 ABBR_PATTERN = re.compile(rf"\b{ABBREVIATIONS}\.", re.IGNORECASE)
 
@@ -391,7 +391,6 @@ class ClaimExtractor:
                 or c_lower.startswith("financial calculations yielded")
                 or c_lower.startswith("longitudinal analysis identified")
                 or (c_lower.startswith("identified ") and "risk factors" in c_lower)
-                or (clean_claim_text.startswith("**") and any(d in clean_claim_text for d in ["(EXPANDING)", "(CONTRACTING)", "(MIXED)", "(STABLE)", "(UPWARD)", "(DOWNWARD)", "(GROWING)", "(DECLINING)"]))
                 or "demonstrated mixed volatility across periods" in c_lower
                 or "operates within statutory reporting guidelines" in c_lower
                 or c_lower.startswith("_no ")
@@ -399,7 +398,6 @@ class ClaimExtractor:
                 or c_lower.startswith("no comparative")
                 or "maintains established market operations" in c_lower
                 or "statutory risk disclosures identify" in c_lower
-                or c_lower.startswith("**strategic risk profile:")
                 or c_lower.startswith("**corporate architecture:")
                 or clean_claim_text.startswith("|")
                 or clean_claim_text.count("|") >= 2

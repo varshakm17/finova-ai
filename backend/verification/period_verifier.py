@@ -90,6 +90,17 @@ class PeriodVerifier:
                 source_year = self.parse_period_year(source_period_end)
 
                 if claimed_year and source_year and claimed_year != source_year:
+                    # Multi-period trend check: if calculation spans multiple years and claimed_year is in range
+                    all_ce_years = [
+                        int(m)
+                        for m in re.findall(
+                            r"\b(20\d\d)\b",
+                            f"{ce.period_start or ''} {ce.period_end} {ce.calculation_id}",
+                        )
+                    ]
+                    if claimed_year in all_ce_years:
+                        continue
+
                     return PeriodVerificationDetail(
                         is_consistent=False,
                         claimed_period=claimed_period,
