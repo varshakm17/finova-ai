@@ -12,6 +12,12 @@ from backend.finance.calculation_service import (
     ALL_CALCULATION_METRICS,
     CalculationService,
 )
+from backend.finance.financial_trends import (
+    build_trend_receipt,
+    compute_absolute_change,
+    compute_percentage_change,
+    verify_trend_math,
+)
 from backend.finance.period_validator import (
     PeriodValidationError,
     find_opening_balance_observation,
@@ -30,8 +36,12 @@ __all__ = [
     "CalculationSummaryResponse",
     "PeriodValidationError",
     "TriggerCalculationRequest",
+    "build_trend_receipt",
+    "compute_absolute_change",
+    "compute_percentage_change",
     "find_opening_balance_observation",
     "validate_flow_period_alignment",
     "validate_instant_balance_sheet_alignment",
     "validate_units",
+    "verify_trend_math",
 ]

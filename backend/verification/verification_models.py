@@ -18,6 +18,7 @@ class ClaimType(str, Enum):
     RISK_OR_BUSINESS = "risk_or_business"
     PERFORMANCE_STATEMENT = "performance_statement"
     GENERAL_FACT = "general_fact"
+    STRUCTURAL_STATEMENT = "structural_statement"
 
 
 class VerificationOutcome(str, Enum):
@@ -134,6 +135,10 @@ class NumericVerificationDetail(BaseModel):
     )
     discrepancy_details: str = Field(
         default="", description="Human-readable explanation of check"
+    )
+    matched_field: str | None = Field(
+        default=None,
+        description="Exact field or input observation that supported the claim",
     )
     tolerance_pct_applied: float = Field(
         default=1.0, description="Allowed percentage tolerance"

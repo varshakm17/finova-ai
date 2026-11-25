@@ -343,6 +343,7 @@ class ReportReference(BaseModel):
     reference_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     ref_type: str  # "filing_passage" or "calculation_receipt"
     citation_id: str  # "E1", "C1", etc.
+    chunk_id: str | None = None  # Actual persisted chunk_id from document_chunks
     filing_name: str | None = None
     form_type: str | None = None
     filing_date: str | None = None

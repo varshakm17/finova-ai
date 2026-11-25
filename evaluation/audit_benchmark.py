@@ -85,7 +85,7 @@ def audit_benchmark(
             accession = q.get("accession_number", "").strip()
             sec_url = q.get("sec_url", "").strip()
             declared_status = q.get("status", "")
-            section = q.get("expected_section", "")
+            _section = q.get("expected_section", "")
             chunk_ids = q.get("expected_chunk_ids", [])
             excerpt = q.get("ground_truth_excerpt", "").strip()
 
@@ -159,6 +159,8 @@ def audit_benchmark(
                             db_chunks_belong_to_filing = False
                         if excerpt and excerpt[:40] in c_row["chunk_text"]:
                             excerpt_found_in_chunk = True
+                if excerpt and db_chunks_found and not excerpt_found_in_chunk:
+                    issues.append("Ground truth excerpt not found in referenced database chunk text.")
             except Exception as exc:
                 issues.append(f"Database query error: {exc}")
 
@@ -221,4 +223,4 @@ if __name__ == "__main__":
     print("Classification Summary:")
     for k, v in rep["classification_summary"].items():
         print(f"  {k}: {v}")
-    print(f"\nSaved report to: reports/validation/session18_benchmark_integrity.json")
+    print("\nSaved report to: reports/validation/session18_benchmark_integrity.json")

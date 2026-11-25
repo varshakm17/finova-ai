@@ -62,6 +62,82 @@ class NumericVerifier:
 
         return False
 
+    @staticmethod
+    def classify_unit(unit: str | None) -> str:
+        """Categorize unit string into a canonical unit type."""
+        if not unit:
+            return "dimensionless"
+        u = unit.lower().strip()
+        if u in {"%", "percent", "percentage", "pct"}:
+            return "percentage"
+        if u in {
+            "pp",
+            "percentage points",
+            "percentage_points",
+            "bps",
+            "basis points",
+            "basis_points",
+        }:
+            return "percentage_points"
+        if u in {
+            "$",
+            "usd",
+            "dollar",
+            "dollars",
+            "eur",
+            "euro",
+            "cents",
+            "billion",
+            "billions",
+            "million",
+            "millions",
+            "thousand",
+            "thousands",
+            "trillion",
+            "trillions",
+        }:
+            return "currency"
+        if u in {"x", "times", "ratio", "multiple"}:
+            return "ratio"
+        if u in {"shares", "units", "count", "employees"}:
+            return "count"
+        return "other"
+
+    @classmethod
+    def are_units_compatible(
+        cls, claimed_unit: str | None, source_unit: str | None
+    ) -> tuple[bool, str]:
+        """Verify whether claimed unit is mathematically compatible with source unit.
+
+        Returns:
+            (is_compatible, discrepancy_reason)
+        """
+        c_cat = cls.classify_unit(claimed_unit)
+        s_cat = cls.classify_unit(source_unit)
+
+        if c_cat == "dimensionless" or s_cat == "dimensionless":
+            if c_cat in {"dimensionless", "ratio"} and s_cat in {
+                "dimensionless",
+                "ratio",
+            }:
+                return True, "Compatible"
+            if (c_cat == "percentage" and s_cat == "currency") or (
+                c_cat == "currency" and s_cat == "percentage"
+            ):
+                return (
+                    False,
+                    f"Unit mismatch: Claimed {claimed_unit or c_cat} cannot match {source_unit or s_cat}.",
+                )
+            return True, "Compatible"
+
+        if c_cat != s_cat:
+            return (
+                False,
+                f"Unit mismatch: Claim specifies {claimed_unit} ({c_cat}) while source specifies {source_unit} ({s_cat}).",
+            )
+
+        return True, "Compatible"
+
     def verify_against_calculation(
         self,
         claim_num: NumericClaimValue,
@@ -70,7 +146,16 @@ class NumericVerifier:
         """Audit claimed numerical value against a deterministic calculation receipt."""
         claimed_val = claim_num.numeric_value
         source_val = calc.calculated_value
-        is_pct_metric = calc.unit.lower() == "percentage" or "%" in calc.unit
+        is_pct_metric = (
+            calc.unit.lower() == "percentage"
+            or "%" in calc.unit
+            or self.classify_unit(calc.unit) == "percentage"
+        )
+
+        # Check unit compatibility with top-level calculated value
+        units_compat, unit_reason = self.are_units_compatible(
+            claim_num.unit, calc.unit
+        )
 
         # Case 1: Percentage vs Fraction error (e.g. 0.3013 instead of 30.13%, or 0.3013% instead of 30.13%)
         if is_pct_metric:
@@ -108,14 +193,26 @@ class NumericVerifier:
                     tolerance_pct_applied=self.tolerance_pct,
                 )
 
-        # Case 3: Direct or tolerance match
+        # Case 3: Direct or tolerance match on top-level calculated value (requires unit compatibility!)
         if self.is_close_within_tolerance(claimed_val, source_val):
+            if not units_compat:
+                return NumericVerificationDetail(
+                    matched=False,
+                    claimed_value=claimed_val,
+                    source_value=source_val,
+                    claimed_unit=claim_num.unit,
+                    source_unit=calc.unit,
+                    error_type="unit_mismatch",
+                    discrepancy_details=f"Numerical values equal ({claimed_val}), but {unit_reason}",
+                    tolerance_pct_applied=self.tolerance_pct,
+                )
             return NumericVerificationDetail(
                 matched=True,
                 claimed_value=claimed_val,
                 source_value=source_val,
                 claimed_unit=claim_num.unit,
                 source_unit=calc.unit,
+                matched_field="calculated_value",
                 error_type="none",
                 discrepancy_details=f"Exact match with calculation receipt {calc.calculation_id}.",
                 tolerance_pct_applied=self.tolerance_pct,
@@ -126,14 +223,37 @@ class NumericVerifier:
             obs_val = obs.get("value")
             if obs_val is not None and isinstance(obs_val, (int, float)):
                 obs_unit = obs.get("unit", calc.unit)
-                is_obs_pct = obs_unit.lower() == "percentage" or "%" in str(obs_unit)
+                obs_compat, obs_reason = self.are_units_compatible(
+                    claim_num.unit, obs_unit
+                )
+                is_obs_pct = (
+                    obs_unit.lower() == "percentage"
+                    or "%" in str(obs_unit)
+                    or self.classify_unit(obs_unit) == "percentage"
+                )
+
                 if self.is_close_within_tolerance(claimed_val, obs_val):
+                    if not obs_compat:
+                        return NumericVerificationDetail(
+                            matched=False,
+                            claimed_value=claimed_val,
+                            source_value=obs_val,
+                            claimed_unit=claim_num.unit,
+                            source_unit=obs_unit,
+                            error_type="unit_mismatch",
+                            discrepancy_details=(
+                                f"Input observation '{obs.get('input_name', 'input')}' value matches ({obs_val}), "
+                                f"but {obs_reason}"
+                            ),
+                            tolerance_pct_applied=self.tolerance_pct,
+                        )
                     return NumericVerificationDetail(
                         matched=True,
                         claimed_value=claimed_val,
                         source_value=obs_val,
                         claimed_unit=claim_num.unit,
                         source_unit=obs_unit,
+                        matched_field=f"input_observations[{obs.get('input_name', 'input')}]",
                         error_type="none",
                         discrepancy_details=(
                             f"Matched input observation '{obs.get('input_name', 'input')}' ({obs_val}) "
@@ -214,12 +334,18 @@ class NumericVerifier:
                 scale = 1e3
 
             normalized = num * scale if not is_pct else num
+            cand_unit = (
+                "%"
+                if is_pct
+                else ("USD" if "$" in match.group(0) else (unit_token or "dimensionless"))
+            )
             candidates.append(
                 {
                     "raw": match.group(0).strip(),
                     "value": num,
                     "normalized": normalized,
                     "scale": scale,
+                    "unit": cand_unit,
                     "is_percentage": is_pct,
                 }
             )
@@ -245,20 +371,43 @@ class NumericVerifier:
 
         claimed_norm = claim_num.normalized_value or claim_num.numeric_value
 
-        # Check for exact normalized match
+        # Check for exact normalized match (requires unit compatibility!)
         for cand in passage_numbers:
             cand_norm = cand["normalized"]
+            cand_unit = cand.get("unit")
+            compat, _ = self.are_units_compatible(claim_num.unit, cand_unit)
+            if not compat:
+                continue
             if self.is_close_within_tolerance(claimed_norm, cand_norm):
                 return NumericVerificationDetail(
                     matched=True,
                     claimed_value=claim_num.numeric_value,
                     source_value=cand["value"],
                     claimed_unit=claim_num.unit,
-                    source_unit=passage.section_identifier,
+                    source_unit=cand_unit or passage.section_identifier,
+                    matched_field=f"passage_number[{cand['raw']}]",
                     error_type="none",
                     discrepancy_details=f"Matched value in {passage.ticker} {passage.filing_type} passage.",
                     tolerance_pct_applied=self.tolerance_pct,
                 )
+
+        # Check if numerical value matched but unit differed
+        for cand in passage_numbers:
+            cand_norm = cand["normalized"]
+            cand_unit = cand.get("unit")
+            if self.is_close_within_tolerance(claimed_norm, cand_norm):
+                compat, reason = self.are_units_compatible(claim_num.unit, cand_unit)
+                if not compat:
+                    return NumericVerificationDetail(
+                        matched=False,
+                        claimed_value=claim_num.numeric_value,
+                        source_value=cand["value"],
+                        claimed_unit=claim_num.unit,
+                        source_unit=cand_unit,
+                        error_type="unit_mismatch",
+                        discrepancy_details=f"Numerical values equal ({cand['raw']}), but {reason}",
+                        tolerance_pct_applied=self.tolerance_pct,
+                    )
 
         # Check for scale error: thousands vs millions error
         for cand in passage_numbers:

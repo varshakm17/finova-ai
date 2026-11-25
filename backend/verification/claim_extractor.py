@@ -236,6 +236,8 @@ class ClaimExtractor:
             scale = 1.0
             if unit_str in SCALE_FACTORS:
                 scale = SCALE_FACTORS[unit_str]
+                if raw_val_str.startswith("$") or "$" in match.group(0):
+                    unit_str = "USD"
             elif raw_val_str.startswith("$"):
                 unit_str = "USD"
 
@@ -338,6 +340,65 @@ class ClaimExtractor:
 
         return ClaimType.GENERAL_FACT
 
+    def check_assertion_substance(
+        self,
+        text: str,
+        numeric_values: list[NumericClaimValue],
+    ) -> tuple[bool, str]:
+        """Evaluate if text contains an independently testable factual assertion.
+
+        Distinguishes substantive claims from fragments, headings, isolated dates,
+        and navigation artifacts.
+        """
+        # Strip common narrative section prefixes
+        stripped = re.sub(
+            r"^(?:Risk Disclosure|Management Discussion|Business Operations|Filing Disclosure)\s*:\s*",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        # Check for isolated dates (e.g. "2020.", "FY2023", "2023-12-31")
+        if re.match(r"^(?:(?:19|20)\d{2}|FY\s*\d{4}|\d{4}-\d{2}-\d{2})\.?$", stripped, re.IGNORECASE):
+            return False, "Isolated date fragment lacking factual predicate"
+
+        # Check for isolated place names / headquarters
+        if re.match(
+            r"^(?:New York|Redmond|California|Delaware|Texas|Seattle|Austin|San Jose|Santa Clara|Washington)"
+            r"(?:,\s*[A-Za-z\s]+)?\.?$",
+            stripped,
+            re.IGNORECASE,
+        ):
+            return False, "Isolated geographic place name lacking factual assertion"
+
+        # Check for statutory section headers and TOC artifacts
+        if re.match(
+            r"^(?:ITEM\s+\d+[a-z]?|PART\s+[IVX]+|Note\s+\d+|Table of Contents|Index to Financial Statements)\.?$",
+            stripped,
+            re.IGNORECASE,
+        ):
+            return False, "Statutory section header or table-of-contents artifact"
+
+        words = stripped.split()
+        if len(words) < 3:
+            # If fewer than 3 words and no numeric value, it's an incomplete fragment
+            if not numeric_values:
+                return False, "Incomplete sentence fragment lacking subject or predicate"
+
+        # Check for presence of at least one verb/action or quantitative predicate
+        common_verbs = {
+            "is", "was", "are", "were", "has", "had", "have", "operates", "provides",
+            "develops", "reported", "decreased", "increased", "faces", "includes",
+            "requires", "generates", "rose", "fell", "grew", "declined", "earned",
+            "incurred", "exceeded", "achieved", "expanded", "contracted", "showed",
+            "demonstrated", "yielded", "maintains", "serves", "manufactures",
+        }
+        has_verb_or_num = bool(numeric_values) or any(w.lower().rstrip(".,;:") in common_verbs for w in words)
+        if not has_verb_or_num and len(words) < 5:
+            return False, "Phrase lacks an active verb or verifiable quantitative figure"
+
+        return True, "Substantive factual assertion"
+
     def extract_claims(
         self,
         text: str,
@@ -369,40 +430,50 @@ class ClaimExtractor:
             company = self.extract_company(clean_claim_text)
             claim_type = self.classify_claim_type(clean_claim_text, numeric_entities)
 
+            # Check substance of assertion (fragments, headings, isolated dates/locations)
+            is_verifiable = True
+            is_substantive, substance_reason = self.check_assertion_substance(
+                clean_claim_text, numeric_entities
+            )
+            if not is_substantive:
+                claim_type = ClaimType.STRUCTURAL_STATEMENT
+                is_verifiable = False
+
             # Determine whether objectively verifiable
             # Meta statements like "Sources used:", "In summary:" are not verifiable
-            is_verifiable = True
-            c_lower = clean_claim_text.lower()
-            if (
-                len(clean_claim_text.split()) < 3
-                or c_lower.startswith("sources used")
-                or c_lower.startswith("in conclusion")
-                or c_lower.startswith("grounded answer")
-                or "sufficient evidence" in c_lower
-                or c_lower.startswith("this executive research brief")
-                or c_lower.startswith("business profile:")
-                or c_lower.startswith("all financial metrics")
-                or c_lower.startswith("longitudinal comparison")
-                or c_lower.startswith("analysis of operational")
-                or c_lower.startswith("statutory disclosures from")
-                or c_lower.startswith("synthesis of core evidence")
-                or c_lower.startswith("statutory sec filings")
-                or c_lower.startswith("research objective:")
-                or c_lower.startswith("financial calculations yielded")
-                or c_lower.startswith("longitudinal analysis identified")
-                or (c_lower.startswith("identified ") and "risk factors" in c_lower)
-                or "demonstrated mixed volatility across periods" in c_lower
-                or "operates within statutory reporting guidelines" in c_lower
-                or c_lower.startswith("_no ")
-                or c_lower.startswith("no specific")
-                or c_lower.startswith("no comparative")
-                or "maintains established market operations" in c_lower
-                or "statutory risk disclosures identify" in c_lower
-                or c_lower.startswith("**corporate architecture:")
-                or clean_claim_text.startswith("|")
-                or clean_claim_text.count("|") >= 2
-            ):
-                is_verifiable = False
+            if is_verifiable:
+                c_lower = clean_claim_text.lower()
+                if (
+                    len(clean_claim_text.split()) < 3
+                    or c_lower.startswith("sources used")
+                    or c_lower.startswith("in conclusion")
+                    or c_lower.startswith("grounded answer")
+                    or "sufficient evidence" in c_lower
+                    or c_lower.startswith("this executive research brief")
+                    or c_lower.startswith("business profile:")
+                    or c_lower.startswith("all financial metrics")
+                    or c_lower.startswith("longitudinal comparison")
+                    or c_lower.startswith("analysis of operational")
+                    or c_lower.startswith("statutory disclosures from")
+                    or c_lower.startswith("synthesis of core evidence")
+                    or c_lower.startswith("statutory sec filings")
+                    or c_lower.startswith("research objective:")
+                    or c_lower.startswith("financial calculations yielded")
+                    or c_lower.startswith("longitudinal analysis identified")
+                    or (c_lower.startswith("identified ") and "risk factors" in c_lower)
+                    or "demonstrated mixed volatility across periods" in c_lower
+                    or "operates within statutory reporting guidelines" in c_lower
+                    or c_lower.startswith("_no ")
+                    or c_lower.startswith("no specific")
+                    or c_lower.startswith("no comparative")
+                    or "maintains established market operations" in c_lower
+                    or "statutory risk disclosures identify" in c_lower
+                    or c_lower.startswith("**corporate architecture:")
+                    or clean_claim_text.startswith("|")
+                    or clean_claim_text.count("|") >= 2
+                ):
+                    is_verifiable = False
+                    claim_type = ClaimType.STRUCTURAL_STATEMENT
 
             extracted.append(
                 ExtractedClaim(

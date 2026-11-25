@@ -21,6 +21,10 @@ from backend.finance.calculation_service import (
     ALL_CALCULATION_METRICS,
     CalculationService,
 )
+from backend.finance.financial_trends import (
+    compute_absolute_change,
+    compute_percentage_change,
+)
 from backend.utils.logger import get_logger
 
 logger = get_logger("financial_analyst_agent")
@@ -224,12 +228,8 @@ class FinancialAnalystAgent(BaseFinovaAgent):
                 b_v = values[i]
                 c_p = periods[i + 1]
                 c_v = values[i + 1]
-                abs_delta = round(c_v - b_v, 4)
-                pct_delta = (
-                    round(((c_v - b_v) / abs(b_v)) * 100.0, 2)
-                    if abs(b_v) > 1e-6
-                    else None
-                )
+                abs_delta = compute_absolute_change(b_v, c_v)
+                pct_delta = compute_percentage_change(b_v, c_v)
 
                 comparisons.append(
                     MetricComparison(
@@ -238,7 +238,7 @@ class FinancialAnalystAgent(BaseFinovaAgent):
                         base_value=round(b_v, 4),
                         comparison_period=c_p,
                         comparison_value=round(c_v, 4),
-                        absolute_delta=abs_delta,
+                        absolute_delta=abs_delta or 0.0,
                         percentage_delta=pct_delta,
                         unit=unit,
                     )
@@ -248,12 +248,8 @@ class FinancialAnalystAgent(BaseFinovaAgent):
             if len(values) >= 2:
                 base_v = values[0]
                 final_v = values[-1]
-                abs_change = round(final_v - base_v, 4)
-                pct_change = (
-                    round(((final_v - base_v) / abs(base_v)) * 100.0, 2)
-                    if abs(base_v) > 1e-6
-                    else None
-                )
+                abs_change = compute_absolute_change(base_v, final_v) or 0.0
+                pct_change = compute_percentage_change(base_v, final_v)
 
                 # Direction analysis
                 deltas = [values[j + 1] - values[j] for j in range(len(values) - 1)]

@@ -12,6 +12,10 @@ from typing import Any
 
 from backend.agents.base_agent import BaseFinovaAgent
 from backend.agents.state import FinovaAgentState
+from backend.finance.financial_trends import (
+    build_trend_receipt,
+    verify_trend_math,
+)
 from backend.utils.logger import get_logger
 
 logger = get_logger("research_coordinator")
@@ -63,6 +67,21 @@ class ResearchCoordinator(BaseFinovaAgent):
         for idx, ev in enumerate(deduped_evidence, start=1):
             cid = f"E{idx}"
             chunk_id = str(ev.get("chunk_id") or ev.get("id"))
+            accn = ev.get("accession_number", "")
+            raw_url = ev.get("source_url") or ev.get("filing_url")
+            if raw_url and raw_url.strip() not in {"https://www.sec.gov", "https://www.sec.gov/"}:
+                src_url = raw_url.strip()
+            elif accn:
+                accn_no_dash = accn.replace("-", "")
+                cik = ev.get("cik", "")
+                if cik:
+                    cik_lstrip = str(int(cik)) if str(cik).isdigit() else str(cik).lstrip("0")
+                    src_url = f"https://www.sec.gov/Archives/edgar/data/{cik_lstrip}/{accn_no_dash}/"
+                else:
+                    src_url = None
+            else:
+                src_url = None
+
             evidence_map[cid] = {
                 "citation_id": cid,
                 "chunk_id": chunk_id,
@@ -70,12 +89,12 @@ class ResearchCoordinator(BaseFinovaAgent):
                 "ticker": ev.get("ticker", ""),
                 "section_identifier": ev.get("section_identifier", "Disclosures"),
                 "section_title": ev.get("section_title", "Disclosures"),
-                "accession_number": ev.get("accession_number", ""),
+                "accession_number": accn,
                 "filing_date": ev.get("filing_date", ""),
                 "report_date": ev.get("report_date"),
                 "filing_type": ev.get("filing_type") or ev.get("form_type", "10-K"),
                 "text": ev.get("text") or ev.get("chunk_text", ""),
-                "source_url": ev.get("source_url") or ev.get("filing_url", "https://www.sec.gov"),
+                "source_url": src_url,
             }
 
         return evidence_map, deduped_evidence
@@ -112,7 +131,7 @@ class ResearchCoordinator(BaseFinovaAgent):
                 "inputs": r.get("inputs", []),
             }
 
-        # Session 18.1.1: Register longitudinal trend calculations as auditable receipts
+        # Session 18.1.2: Register mathematically auditable longitudinal trend calculation receipts
         if trends:
             for tr in trends:
                 tr_dict = (
@@ -127,52 +146,28 @@ class ResearchCoordinator(BaseFinovaAgent):
                     continue
                 next_idx = len(calc_map) + 1
                 cid = f"C{next_idx}"
-                pct_chg = tr_dict.get("percentage_change")
-                abs_chg = tr_dict.get("absolute_change")
-                unit = tr_dict.get("unit", "")
                 periods = tr_dict.get("periods", [])
-                p_end = str(periods[-1]) if periods else ""
-                p_start = str(periods[0]) if len(periods) >= 2 else None
-                p_label = (
-                    f"{periods[0]}-{periods[-1]}"
-                    if len(periods) >= 2
-                    else (periods[0] if periods else "")
+                values = tr_dict.get("values", [])
+                unit = tr_dict.get("unit", "")
+                supporting_ids = tr_dict.get("supporting_receipt_ids", [])
+
+                trend_receipt = build_trend_receipt(
+                    metric_name=m_name,
+                    periods=periods,
+                    values=values,
+                    unit=unit,
+                    citation_id=cid,
+                    supporting_receipt_ids=supporting_ids,
                 )
-                calc_val = pct_chg if pct_chg is not None else abs_chg
+                if not trend_receipt:
+                    logger.warning("Omitting unverified or incomplete trend receipt for %s", m_name)
+                    continue
 
-                inputs = [
-                    {"input_name": "absolute_change", "value": abs_chg, "unit": unit},
-                    {
-                        "input_name": "percentage_change",
-                        "value": pct_chg,
-                        "unit": "%" if pct_chg is not None else "",
-                    },
-                ]
-                vals = tr_dict.get("values", [])
-                if len(vals) >= 2:
-                    inputs.append(
-                        {"input_name": "start_value", "value": vals[0], "unit": unit}
-                    )
-                    inputs.append(
-                        {"input_name": "end_value", "value": vals[-1], "unit": unit}
-                    )
+                is_valid, reason = verify_trend_math(trend_receipt)
+                if not is_valid:
+                    logger.warning("Omitting mathematically invalid trend receipt for %s: %s", m_name, reason)
+                    continue
 
-                clean_metric_id = re.sub(r"[^a-zA-Z0-9_]", "_", m_name)
-                clean_p_label = re.sub(r"[^a-zA-Z0-9_]", "_", p_label)
-                trend_receipt = {
-                    "citation_id": cid,
-                    "calculation_id": f"calc_trend_{clean_metric_id}_{clean_p_label}",
-                    "metric_name": f"{m_name} Trend",
-                    "formula_name": "Multi-Period Longitudinal Trend Analysis",
-                    "formula_expression": "((V_end - V_start) / abs(V_start)) * 100",
-                    "calculated_value": calc_val,
-                    "unit": "%" if pct_chg is not None else unit,
-                    "fiscal_year": p_end or p_label,
-                    "fiscal_period": "MULTI",
-                    "period_start": p_start,
-                    "period_end": p_end or p_label,
-                    "inputs": inputs,
-                }
                 calc_map[cid] = trend_receipt
                 valid_receipts.append(trend_receipt)
 
@@ -259,8 +254,8 @@ class ResearchCoordinator(BaseFinovaAgent):
                 if not line_item.startswith("|") and line_item.count("|") < 2
             ]
             narrative_text = " ".join(narrative_lines).strip()
-            if not narrative_text or len(narrative_text.split()) < 4:
-                # Chunk is purely tabular; it remains in evidence_map for reference, but not as narrative text
+            if not narrative_text or len(narrative_text.split()) < 6:
+                # Chunk is purely tabular or fragmentary; it remains in evidence_map for reference, but not as narrative text
                 continue
 
             if len(narrative_text) > 280:
@@ -282,6 +277,15 @@ class ResearchCoordinator(BaseFinovaAgent):
                     summary_snippet = clean_snippet + "..."
             else:
                 summary_snippet = re.sub(r"\s+", " ", narrative_text).strip()
+
+            # Ensure snippet contains a substantive statement (at least 5 words and not just dates/headers)
+            clean_test = re.sub(r"[^a-zA-Z\s]", "", summary_snippet).strip()
+            if len(clean_test.split()) < 4:
+                continue
+            if re.match(r"^(?:ITEM\s+\d+[a-z]?|PART\s+[IVX]+|\d{4})\.?$", summary_snippet, re.IGNORECASE):
+                continue
+            if summary_snippet.isupper() and len(summary_snippet.split()) < 6:
+                continue
 
             if "item 1a" in sec_id or "risk" in sec_id:
                 sections["risk_factors"].append(

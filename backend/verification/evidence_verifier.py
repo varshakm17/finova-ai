@@ -95,10 +95,46 @@ class EvidenceVerifier:
             return 0.0
         intersection = tokens1 & tokens2
         # Asymmetric containment: what fraction of the claim's content tokens appear in the passage?
-        containment = len(intersection) / len(tokens1)
+        # Enforce content length penalty: fragments with < 3 tokens cannot claim 100% containment
+        raw_containment = len(intersection) / len(tokens1)
+        if len(tokens1) < 3:
+            containment = raw_containment * 0.4
+        else:
+            containment = raw_containment
+
         union = tokens1 | tokens2
         jaccard = len(intersection) / len(union)
         return max(containment, jaccard)
+
+    @staticmethod
+    def detect_polarity_contradiction(claim_text: str, passage_text: str) -> tuple[bool, str]:
+        """Detect directional polarity conflict between claim assertion and passage disclosure."""
+        c_lower = claim_text.lower()
+        p_lower = passage_text.lower()
+
+        positive_words = {
+            "increased", "increase", "grew", "growth", "rose", "expanded",
+            "higher", "positive", "surpassed", "exceeded", "improvement", "gains",
+        }
+        negative_words = {
+            "decreased", "decrease", "declined", "decline", "fell", "contracted",
+            "lower", "negative", "dropped", "reduced", "loss", "losses", "slumped",
+        }
+
+        claim_has_pos = any(re.search(rf"\b{w}\b", c_lower) for w in positive_words)
+        claim_has_neg = any(re.search(rf"\b{w}\b", c_lower) for w in negative_words)
+        passage_has_pos = any(re.search(rf"\b{w}\b", p_lower) for w in positive_words)
+        passage_has_neg = any(re.search(rf"\b{w}\b", p_lower) for w in negative_words)
+
+        # If claim asserts increase but passage only asserts decrease
+        if claim_has_pos and not claim_has_neg and passage_has_neg and not passage_has_pos:
+            return True, "Claim asserts positive growth/increase, but cited passage reports decline/decrease."
+
+        # If claim asserts decrease but passage only asserts increase
+        if claim_has_neg and not claim_has_pos and passage_has_pos and not passage_has_neg:
+            return True, "Claim asserts decline/decrease, but cited passage reports growth/increase."
+
+        return False, ""
 
     def verify_claim(
         self,
@@ -289,6 +325,139 @@ class EvidenceVerifier:
         cited_calcs = [calc_map[cid] for cid in cited_upper if cid in calc_map]
         if cited_calcs:
             calc = cited_calcs[0]
+            c_lower = claim.claim_text.lower()
+            calc_m_clean = (
+                calc.metric_name.lower().replace("_", " ").replace(" trend", "").strip()
+            )
+
+            # Check if claim explicitly references a different financial metric
+            known_metrics = {
+                "revenue": "revenue",
+                "sales": "revenue",
+                "gross profit": "gross_profit_margin",
+                "gross margin": "gross_profit_margin",
+                "operating margin": "operating_profit_margin",
+                "operating income": "operating_profit_margin",
+                "net margin": "net_profit_margin",
+                "net income": "net_profit_margin",
+                "current ratio": "current_ratio",
+                "quick ratio": "quick_ratio",
+                "debt to equity": "debt_to_equity",
+                "free cash flow": "free_cash_flow",
+                "return on assets": "return_on_assets",
+                "return on equity": "return_on_equity",
+            }
+            mismatch_metric = None
+            for kw, canon in known_metrics.items():
+                if kw in c_lower:
+                    canon_clean = canon.replace("_", " ")
+                    if (
+                        canon_clean not in calc_m_clean
+                        and calc_m_clean not in canon_clean
+                        and kw not in calc_m_clean
+                    ):
+                        mismatch_metric = kw
+                        break
+            if mismatch_metric:
+                return ClaimVerificationResult(
+                    claim_id=claim.claim_id,
+                    claim_text=claim.claim_text,
+                    outcome=VerificationOutcome.UNSUPPORTED,
+                    citation_ids=list(claim.citation_ids),
+                    is_verifiable=True,
+                    verification_reason=(
+                        f"Metric mismatch: Claim asserts '{mismatch_metric}' which differs from cited "
+                        f"calculation receipt {calc.calculation_id} ({calc.metric_name})."
+                    ),
+                    confidence_score=0.95,
+                    verification_method="metric_alignment_check",
+                    period_check=period_detail,
+                    warnings=[f"Metric mismatch with receipt {calc.calculation_id}"],
+                )
+
+            # Polarity contradiction check against calculation value
+            if calc.calculated_value is not None:
+                # Strip metric titles so terms like 'Revenue Growth' or 'Margin Expansion' do not falsely trigger polarity
+                c_clean = c_lower
+                for metric_title in [
+                    "revenue growth",
+                    "earnings growth",
+                    "profit growth",
+                    "margin expansion",
+                    "gross margin",
+                    "operating margin",
+                ]:
+                    c_clean = c_clean.replace(metric_title, "")
+
+                pos_words = {
+                    "increased",
+                    "increase",
+                    "grew",
+                    "rose",
+                    "accelerated",
+                    "upward",
+                    "positive",
+                }
+                neg_words = {
+                    "decreased",
+                    "decrease",
+                    "declined",
+                    "decline",
+                    "fell",
+                    "contracted",
+                    "decelerated",
+                    "deceleration",
+                    "downward",
+                    "slowed",
+                    "negative",
+                    "loss",
+                }
+                has_neg_num = any(nv.numeric_value < 0 for nv in claim.numeric_values)
+                has_pos = (
+                    any(re.search(rf"\b{w}\b", c_clean) for w in pos_words)
+                    and not has_neg_num
+                )
+                has_neg = (
+                    any(re.search(rf"\b{w}\b", c_clean) for w in neg_words)
+                    or has_neg_num
+                )
+                if calc.calculated_value < 0 and has_pos and not has_neg:
+                    return ClaimVerificationResult(
+                        claim_id=claim.claim_id,
+                        claim_text=claim.claim_text,
+                        outcome=VerificationOutcome.CONTRADICTED,
+                        citation_ids=list(claim.citation_ids),
+                        is_verifiable=True,
+                        verification_reason=(
+                            f"Trend polarity contradiction: Claim asserts growth/increase, but "
+                            f"receipt {calc.calculation_id} calculated negative shift ({calc.calculated_value} {calc.unit})."
+                        ),
+                        confidence_score=0.98,
+                        verification_method="deterministic_receipt_polarity",
+                        period_check=period_detail,
+                        warnings=[
+                            f"Polarity contradiction with receipt {calc.calculation_id}"
+                        ],
+                    )
+                elif calc.calculated_value > 0 and has_neg and not has_pos:
+                    return ClaimVerificationResult(
+                        claim_id=claim.claim_id,
+                        claim_text=claim.claim_text,
+                        outcome=VerificationOutcome.CONTRADICTED,
+                        citation_ids=list(claim.citation_ids),
+                        is_verifiable=True,
+                        verification_reason=(
+                            f"Trend polarity contradiction: Claim asserts decline/decrease, but "
+                            f"receipt {calc.calculation_id} calculated positive growth ({calc.calculated_value} {calc.unit})."
+                        ),
+                        confidence_score=0.98,
+                        verification_method="deterministic_receipt_polarity",
+                        period_check=period_detail,
+                        warnings=[
+                            f"Polarity contradiction with receipt {calc.calculation_id}"
+                        ],
+                    )
+
             return ClaimVerificationResult(
                 claim_id=claim.claim_id,
                 claim_text=claim.claim_text,
@@ -321,6 +490,42 @@ class EvidenceVerifier:
                 verification_method="citation_resolution",
             )
 
+        # Content sufficiency check: fragments lacking substance cannot claim supported status
+        clean_text_no_cites = re.sub(r"\[[^\]]+\]", "", claim.claim_text)
+        claim_content_words = [
+            w
+            for w in re.findall(r"\b[a-zA-Z0-9_\-\.%]+\b", clean_text_no_cites)
+            if len(w) > 1
+            and w.lower()
+            not in {
+                "the",
+                "a",
+                "an",
+                "of",
+                "in",
+                "to",
+                "and",
+                "is",
+                "was",
+                "for",
+                "with",
+                "by",
+                "at",
+                "from",
+            }
+        ]
+        if len(claim_content_words) < 3 and not claim.numeric_values:
+            return ClaimVerificationResult(
+                claim_id=claim.claim_id,
+                claim_text=claim.claim_text,
+                outcome=VerificationOutcome.NOT_VERIFIABLE,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=False,
+                verification_reason="Claim has insufficient substantive content tokens (<3) to establish verified evidence support.",
+                confidence_score=0.5,
+                verification_method="content_sufficiency_check",
+            )
+
         # Evaluate token overlap across cited passages
         best_overlap = 0.0
         best_passage = cited_passages[0]
@@ -329,6 +534,26 @@ class EvidenceVerifier:
             if overlap > best_overlap:
                 best_overlap = overlap
                 best_passage = p
+
+        # Directional polarity conflict check between narrative claim and cited passage
+        has_polar_contra, polar_reason = self.detect_polarity_contradiction(
+            claim.claim_text, best_passage.chunk_text
+        )
+        if has_polar_contra:
+            return ClaimVerificationResult(
+                claim_id=claim.claim_id,
+                claim_text=claim.claim_text,
+                outcome=VerificationOutcome.CONTRADICTED,
+                citation_ids=list(claim.citation_ids),
+                is_verifiable=True,
+                supporting_evidence_ids=[],
+                contradicting_evidence_ids=[best_passage.evidence_id],
+                verification_reason=f"Directional polarity contradiction: {polar_reason}",
+                confidence_score=0.95,
+                verification_method="polarity_contradiction_check",
+                period_check=period_detail,
+                warnings=[polar_reason],
+            )
 
         # Check if passage has valid provenance status
         if getattr(best_passage, "provenance_status", "valid") not in {

@@ -1,0 +1,3249 @@
+{
+  "audit_metadata": {
+    "audit_name": "Session 18.1.2 Verification Quality and Calculation Receipt Integrity",
+    "system": "Finova AI \u2014 Multi-Agent Financial Research and Intelligence System",
+    "timestamp_utc": "2026-11-25T06:21:31.516687+00:00",
+    "git_branch": "session-18.1.2-verification-quality-integrity",
+    "base_commit": "3b125fb21e2812d4539f79096961dd615b7d6e28",
+    "audit_objectives": [
+      "Deterministic trend receipt integrity & independent mathematical recalculation",
+      "NumericVerifier unit safety & scale distinction (% vs $, bps, ratios)",
+      "Genuine chunk-level provenance tracing (source_chunk_id vs accession_number)",
+      "Claim extraction substance checks (fragment/heading filtering vs valid claims)",
+      "Evidence verification quality (substantive grounding & polarity contradiction checks)"
+    ]
+  },
+  "companies": {
+    "MSFT": {
+      "ticker": "MSFT",
+      "company_name": "Microsoft Corporation",
+      "cik": "0000789019",
+      "period": "FY2023",
+      "question": "Analyze Microsoft FY2023 cloud revenue, operating performance, and profitability.",
+      "status": "COMPLETED",
+      "verification_status": "verified",
+      "report_id": "1674dbea-c9ea-4ac6-b1f6-93899611e7b6",
+      "total_sections": 8,
+      "total_evidence_cited": 13,
+      "total_calculations_cited": 4,
+      "valid_chunk_citations": 23,
+      "valid_calc_receipts": 6,
+      "incomplete_provenance_claims": 0,
+      "trend_integrity_results": [
+        {
+          "citation_id": "C4",
+          "calculation_id": "calc_trend_revenue_growth_FY2021_FY2023",
+          "status": "verified"
+        },
+        {
+          "citation_id": "C4",
+          "calculation_id": "calc_trend_revenue_growth_FY2021_FY2023",
+          "status": "verified"
+        }
+      ],
+      "execution_time_s": 28.93,
+      "warnings": [],
+      "errors": [],
+      "verification_run": {
+        "run_id": "vrun_3d2d70798d88",
+        "answer_id": "1674dbea-c9ea-4ac6-b1f6-93899611e7b6",
+        "overall_status": "verified",
+        "total_claims": 36,
+        "supported_claims": 26,
+        "partially_supported_claims": 0,
+        "unsupported_claims": 0,
+        "contradicted_claims": 0,
+        "not_verifiable_claims": 10,
+        "warnings_json": "[]",
+        "verified_at": "2026-11-25T06:22:00.382799+00:00",
+        "verifier_version": "0.1.0"
+      },
+      "claims": [
+        {
+          "claim_id": "CLM-01",
+          "claim_text": "This executive research brief delivers an autonomous financial investigation of **MICROSOFT CORP** (MSFT) covering the **FY2023** reporting period.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-02",
+          "claim_text": "Financial calculations yielded 4 verified deterministic receipts across key ratios and profitability metrics.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-03",
+          "claim_text": "Longitudinal analysis identified 1 multi-period metric trends.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-04",
+          "claim_text": "Identified 6 primary operational and statutory risk factors.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-05",
+          "claim_text": "Business Operations : 2020.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1_23",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-06",
+          "claim_text": "Prior to Microsoft, he served as the Chief Executive Officer of McAfee, LLC from 2017 to 2020, and served as a Senior Vice President and General Manager of Intel Security Group from 2014 until 2017, when he led the initiative to spin out McAfee into a standalone company.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E1 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1_23",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-07",
+          "claim_text": "Business Operations : We also deliver skills training for employees based on their profession and role discipline.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (91.7%) with passage E2 supports narrative assertion.",
+          "confidence_score": 0.97,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E2"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E2",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1_9",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-08",
+          "claim_text": "Business Operations : are a leader among technology companies in pursuing patents and currently have a portfolio of over 70,000 U.S. and international patents issued and over 19,000 pending worldwide.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Numerical figures matched and lexical overlap (94.7%) confirms passage E3 (ITEM_1).",
+          "confidence_score": 0.95,
+          "verification_method": "deterministic_numeric_and_lexical",
+          "citation_ids": [
+            "E3"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E3",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1_18",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-09",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2023: 6.88%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0000789019_revenue_growth_annual_2023-06-30 (revenue_growth = 6.882 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C1",
+              "evidence_type": "calculation_receipt",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "calculation_id": "0000789019_revenue_growth_annual_2023-06-30",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-10",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2022: 17.96%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0000789019_revenue_growth_annual_2022-06-30 (revenue_growth = 17.9561 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C2"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C2",
+              "evidence_type": "calculation_receipt",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "calculation_id": "0000789019_revenue_growth_annual_2022-06-30",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2022",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-11",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2021: 17.53%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0000789019_revenue_growth_annual_2021-06-30 (revenue_growth = 17.5317 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C3"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C3",
+              "evidence_type": "calculation_receipt",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "calculation_id": "0000789019_revenue_growth_annual_2021-06-30",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2021",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-12",
+          "claim_text": "Deterministic calculation of revenue_growth Trend for FYFY2023: -60.7454 %",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt calc_trend_revenue_growth_FY2021_FY2023 (revenue_growth Trend = -60.7454 %).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C4",
+              "evidence_type": "calculation_receipt",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "calculation_id": "calc_trend_revenue_growth_FY2021_FY2023",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2023",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-13",
+          "claim_text": "Longitudinal comparison evaluates changes across consecutive fiscal reporting periods:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-14",
+          "claim_text": "**Revenue Growth (MIXED)**: revenue_growth demonstrated mixed volatility across periods (net shift: -10.65 percentage (-60.7%)).",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "C4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C4",
+              "evidence_type": "calculation_receipt",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "calculation_id": "calc_trend_revenue_growth_FY2021_FY2023",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2023",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-15",
+          "claim_text": "Analysis of operational performance, strategic developments, and management disclosures from Item 7 of statutory filings:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-16",
+          "claim_text": "Management Discussion : use our products and services.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (83.3%) with passage E4 supports narrative assertion.",
+          "confidence_score": 0.95,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_7_3",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-17",
+          "claim_text": "The metrics are disclosed in the MD&A or the Notes to Financial Statements (Part II, Item 8 of this Form 10-K).",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E4 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_7_3",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-18",
+          "claim_text": "Management Discussion : The following Management\u2019s Discussion and Analysis of Financial Condition and Results of Operations (\u201cMD&A\u201d) is intended to help the reader understand the results of operations and financial condition of Microsoft Corporation.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E5 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E5"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E5",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_7_0",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-19",
+          "claim_text": "Management Discussion : to $22.7 billion for fiscal year 2023, due to a $20.4 billion decrease in cash used for acquisitions of companies, net of cash acquired, and purchases of intangible and other assets, offset in part by a $8.2 billion decrease in cash from net investment purchases, sales, and...",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Numerical figures matched and lexical overlap (96.0%) confirms passage E6 (ITEM_7).",
+          "confidence_score": 0.95,
+          "verification_method": "deterministic_numeric_and_lexical",
+          "citation_ids": [
+            "E6"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E6",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_7_12",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-20",
+          "claim_text": "Management Discussion : (\u201cQ2 charge\u201d), which included employee severance expenses of $800 million, impairment charges resulting from changes to our hardware portfolio, and costs related to lease consolidation activities.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Numerical figures matched and lexical overlap (100.0%) confirms passage E10 (ITEM_7).",
+          "confidence_score": 0.95,
+          "verification_method": "deterministic_numeric_and_lexical",
+          "citation_ids": [
+            "E10"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E10",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_7_2",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-21",
+          "claim_text": "Statutory disclosures from SEC Item 1A identifying material risks, competitive challenges, and operational uncertainties:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-22",
+          "claim_text": "Risk Disclosure : in our consolidated financial statements, and the exercise of significant judgment in accounting for its provisions.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E7 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E7"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E7",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_18",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-23",
+          "claim_text": "Risk Disclosure : our customers and users to store and process personal data on-premises or, increasingly, in a cloud-based environment we host.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (93.3%) with passage E8 supports narrative assertion.",
+          "confidence_score": 0.98,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E8",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_9",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-24",
+          "claim_text": "Government authorities can sometimes require us to produce customer or user data in response to valid legal orders.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E8 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E8",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_9",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-25",
+          "claim_text": "In the U.S.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "E8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E8",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_9",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-26",
+          "claim_text": "Risk Disclosure : could result in the imposition of penalties or orders we cease the alleged noncompliant activity.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (83.3%) with passage E9 supports narrative assertion.",
+          "confidence_score": 0.95,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E9"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E9",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_17",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-27",
+          "claim_text": "In addition, there is increasing pressure from advocacy groups, regulators, competitors, customers, and other stakeholders across many of these areas.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E9 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E9"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E9",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_17",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-28",
+          "claim_text": "Risk Disclosure : of economic conditions on our partners, such as the bankruptcy of a major distributor, OEM, or retailer, could cause sales channel disruption.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (94.1%) with passage E11 supports narrative assertion.",
+          "confidence_score": 0.98,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E11"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E11",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_20",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-29",
+          "claim_text": "Challenging economic conditions also may impair the ability of our customers to pay for products and services they have purchased.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E11 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E11"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E11",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_20",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-30",
+          "claim_text": "Risk Disclosure : result in changing regulatory systems and requirements and market interventions that could impact our operating strategies, access to national, regional, and global markets, hiring, and profitability.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (95.2%) with passage E12 supports narrative assertion.",
+          "confidence_score": 0.99,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E12"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E12",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_21",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-31",
+          "claim_text": "**Business Architecture:** Business Operations : 2020.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (50.0%) with passage E1 supports narrative assertion.",
+          "confidence_score": 0.85,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1_23",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-32",
+          "claim_text": "Prior to Microsoft, he served as the Chief Executive Officer of McAfee, LLC from 2017 to 2020, and served as a Senior Vice President and General Manager of Intel Security Group from 2014 until 2017, when he led the initiative to spin out McAfee into a standalone company.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E1 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1_23",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-33",
+          "claim_text": "**Financial Performance:** Verified deterministic calculation establishes Revenue Growth at 6.88% for the target period .",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0000789019_revenue_growth_annual_2023-06-30 (revenue_growth = 6.882 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C1",
+              "evidence_type": "calculation_receipt",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "calculation_id": "0000789019_revenue_growth_annual_2023-06-30",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-34",
+          "claim_text": "**Operational Dynamics:** Management Discussion : use our products and services.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (75.0%) with passage E4 supports narrative assertion.",
+          "confidence_score": 0.92,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_7_3",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-35",
+          "claim_text": "The metrics are disclosed in the MD&A or the Notes to Financial Statements (Part II, Item 8 of this Form 10-K).",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E4 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_7_3",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-36",
+          "claim_text": "**Strategic Risk Profile:** Risk Disclosure : in our consolidated financial statements, and the exercise of significant judgment in accounting for its provisions.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (84.6%) with passage E7 supports narrative assertion.",
+          "confidence_score": 0.95,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E7"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E7",
+              "evidence_type": "filing_passage",
+              "ticker": "MSFT",
+              "cik": "0000789019",
+              "source_chunk_id": "0000789019_000095017023035122_ITEM_1A_18",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0000950170-23-035122",
+              "document_id": "0000789019_000095017023035122",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2023",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/789019/000095017023035122/msft-20230630.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        }
+      ]
+    },
+    "TSLA": {
+      "ticker": "TSLA",
+      "company_name": "Tesla, Inc.",
+      "cik": "0001318605",
+      "period": "FY2023",
+      "question": "Analyze Tesla FY2023 automotive gross margin, total revenues, and free cash flow.",
+      "status": "COMPLETED",
+      "verification_status": "verified",
+      "report_id": "04e5932f-e604-43c3-9701-5e6face038db",
+      "total_sections": 8,
+      "total_evidence_cited": 14,
+      "total_calculations_cited": 16,
+      "valid_chunk_citations": 23,
+      "valid_calc_receipts": 11,
+      "incomplete_provenance_claims": 0,
+      "trend_integrity_results": [
+        {
+          "citation_id": "C13",
+          "calculation_id": "calc_trend_revenue_growth_FY2021_FY2023",
+          "status": "verified"
+        },
+        {
+          "citation_id": "C14",
+          "calculation_id": "calc_trend_gross_profit_margin_FY2021_FY2023",
+          "status": "verified"
+        },
+        {
+          "citation_id": "C15",
+          "calculation_id": "calc_trend_operating_cash_flow_margin_FY2021_FY2023",
+          "status": "verified"
+        },
+        {
+          "citation_id": "C16",
+          "calculation_id": "calc_trend_free_cash_flow_FY2021_FY2023",
+          "status": "verified"
+        }
+      ],
+      "execution_time_s": 6.97,
+      "warnings": [],
+      "errors": [],
+      "verification_run": {
+        "run_id": "vrun_aa6829202bc9",
+        "answer_id": "04e5932f-e604-43c3-9701-5e6face038db",
+        "overall_status": "verified",
+        "total_claims": 41,
+        "supported_claims": 30,
+        "partially_supported_claims": 0,
+        "unsupported_claims": 0,
+        "contradicted_claims": 0,
+        "not_verifiable_claims": 11,
+        "warnings_json": "[]",
+        "verified_at": "2026-11-25T06:22:07.374044+00:00",
+        "verifier_version": "0.1.0"
+      },
+      "claims": [
+        {
+          "claim_id": "CLM-01",
+          "claim_text": "This executive research brief delivers an autonomous financial investigation of **Tesla, Inc.** (TSLA) covering the **FY2023** reporting period.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-02",
+          "claim_text": "Financial calculations yielded 16 verified deterministic receipts across key ratios and profitability metrics.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-03",
+          "claim_text": "Longitudinal analysis identified 4 multi-period metric trends.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-04",
+          "claim_text": "Identified 6 primary operational and statutory risk factors.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-05",
+          "claim_text": "Business Operations : New York.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1_14",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-06",
+          "claim_text": "13 Table of Contents \u2022Engineering Development Program \u2013 Launched in January 2024, this program targets recent college and university graduates for specialized engineering fields.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Numerical figures matched and lexical overlap (100.0%) confirms passage E1 (ITEM_1).",
+          "confidence_score": 0.95,
+          "verification_method": "deterministic_numeric_and_lexical",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1_14",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-07",
+          "claim_text": "Business Operations : residential expenditures for solar energy systems, which may be claimed by our customers for systems they purchase, or by us for arrangements where we own the systems for properties that meet statutory requirements.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (91.3%) with passage E2 supports narrative assertion.",
+          "confidence_score": 0.97,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E2"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E2",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1_8",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-08",
+          "claim_text": "Business Operations : releases.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "E3"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E3",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1_7",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-09",
+          "claim_text": "The IRA includes multiple incentives to promote clean energy, electric vehicles, battery and energy storage manufacture or purchase, including through providing tax credits to consumers.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E3 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E3"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E3",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1_7",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-10",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2023: 18.80%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001318605_revenue_growth_annual_2023-12-31 (revenue_growth = 18.7953 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C1",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "0001318605_revenue_growth_annual_2023-12-31",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-11",
+          "claim_text": "Deterministic calculation of gross_profit_margin for FY2023: 18.25%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001318605_gross_profit_margin_annual_2023-12-31 (gross_profit_margin = 18.2489 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C2"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C2",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "0001318605_gross_profit_margin_annual_2023-12-31",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Gross Profit Margin: (Gross Profit / Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-12",
+          "claim_text": "Deterministic calculation of operating_cash_flow_margin for FY2023: 13.70%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001318605_operating_cash_flow_margin_annual_2023-12-31 (operating_cash_flow_margin = 13.698 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C3"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C3",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "0001318605_operating_cash_flow_margin_annual_2023-12-31",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Operating Cash Flow Margin: (Operating Cash Flow / Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-13",
+          "claim_text": "Deterministic calculation of free_cash_flow for FY2023: 4357000000.0 USD",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001318605_free_cash_flow_annual_2023-12-31 (free_cash_flow = 4357000000.0 USD).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C4",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "0001318605_free_cash_flow_annual_2023-12-31",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Free Cash Flow: Operating Cash Flow - Normalized CapEx",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-14",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2022: 51.35%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001318605_revenue_growth_annual_2022-12-31 (revenue_growth = 51.3517 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C5"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C5",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "0001318605_revenue_growth_annual_2022-12-31",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2022",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-15",
+          "claim_text": "Deterministic calculation of gross_profit_margin for FY2022: 25.60%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001318605_gross_profit_margin_annual_2022-12-31 (gross_profit_margin = 25.5984 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C6"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C6",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "0001318605_gross_profit_margin_annual_2022-12-31",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2022",
+              "sec_url": null,
+              "description": "Gross Profit Margin: (Gross Profit / Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-16",
+          "claim_text": "Longitudinal comparison evaluates changes across consecutive fiscal reporting periods:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-17",
+          "claim_text": "**Revenue Growth (DOWNWARD)**: Top-line revenue expansion decelerated (-87.5%).",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt calc_trend_revenue_growth_FY2021_FY2023 (revenue_growth Trend = -87.5356 %).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C13"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C13",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "calc_trend_revenue_growth_FY2021_FY2023",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2023",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-18",
+          "claim_text": "**Gross Profit Margin (MIXED)**: gross_profit_margin demonstrated mixed volatility across periods (net shift: -7.03 percentage (-27.8%)).",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "C14"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C14",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "calc_trend_gross_profit_margin_FY2021_FY2023",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2023",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-19",
+          "claim_text": "**Operating Cash Flow Margin (DOWNWARD)**: Profitability margins experienced downward compression (-35.9%).",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt calc_trend_operating_cash_flow_margin_FY2021_FY2023 (operating_cash_flow_margin Trend = -35.8732 %).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C15"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C15",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "calc_trend_operating_cash_flow_margin_FY2021_FY2023",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2023",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-20",
+          "claim_text": "**Free Cash Flow (MIXED)**: free_cash_flow demonstrated mixed volatility across periods (net shift: -658000000.00 USD (-13.1%)).",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "C16"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C16",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "calc_trend_free_cash_flow_FY2021_FY2023",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2023",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-21",
+          "claim_text": "Analysis of operational performance, strategic developments, and management disclosures from Item 7 of statutory filings:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-22",
+          "claim_text": "Management Discussion : billion decrease in repayments of debt.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (66.7%) with passage E4 supports narrative assertion.",
+          "confidence_score": 0.9,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-23",
+          "claim_text": "See Note 11, Debt, to the consolidated financial statements included elsewhere in this Annual Report on Form 10-K for further details regarding our debt obligations.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E4 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-24",
+          "claim_text": "Management Discussion : The following discussion and analysis should be read in conjunction with the consolidated financial statements and the related notes included elsewhere in this Annual Report on Form 10-K.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E5 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E5"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E5",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_0",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-25",
+          "claim_text": "Management Discussion : of our capital-intensive projects and other potential variables such as rising material prices and increases in supply chain and labor expenses resulting from changes in global trade conditions and labor availability.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (95.7%) with passage E6 supports narrative assertion.",
+          "confidence_score": 0.99,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E6"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E6",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_4",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-26",
+          "claim_text": "Management Discussion : Automotive & Services and Other Segment Automotive sales revenue includes revenues related to cash and financing deliveries of new Model S, Model X, Semi, Model 3, Model Y, and Cybertruck vehicles, including access to our FSD Capability features and their ongoing maintenance,...",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Numerical figures matched and lexical overlap (92.6%) confirms passage E10 (ITEM_7).",
+          "confidence_score": 0.95,
+          "verification_method": "deterministic_numeric_and_lexical",
+          "citation_ids": [
+            "E10"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E10",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_8",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-27",
+          "claim_text": "Management Discussion : to higher used vehicle revenue driven by increases in volume, body shop and part sales revenue, non-warranty maintenance services revenue, paid Supercharging revenue and insurance services revenue, all of which are primarily attributable to our growing fleet.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (92.3%) with passage E11 supports narrative assertion.",
+          "confidence_score": 0.98,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E11"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E11",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_9",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-28",
+          "claim_text": "Statutory disclosures from SEC Item 1A identifying material risks, competitive challenges, and operational uncertainties:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-29",
+          "claim_text": "Risk Disclosure : in this Annual Report on Form 10-K. To our knowledge, no government agency in any such ongoing investigation has concluded that any wrongdoing occurred.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (88.9%) with passage E7 supports narrative assertion.",
+          "confidence_score": 0.97,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E7"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E7",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_23",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-30",
+          "claim_text": "Risk Disclosure : the holders to accelerate our obligation to repay the debt.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (75.0%) with passage E8 supports narrative assertion.",
+          "confidence_score": 0.92,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E8",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-31",
+          "claim_text": "If any of our debt is accelerated, we may not have sufficient funds available to repay it.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E8 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E8",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-32",
+          "claim_text": "Additional funds may not be available to us when we need or want them.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E8 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E8",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-33",
+          "claim_text": "Risk Disclosure : us, legal liability, fines, damages, ongoing audit requirements and other significant costs.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E9 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E9"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E9",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_22",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-34",
+          "claim_text": "Risk Disclosure : experienced extreme price and volume fluctuations that have often been unrelated or disproportionate to the operating performance of those companies.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (86.7%) with passage E12 supports narrative assertion.",
+          "confidence_score": 0.96,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E12"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E12",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_24",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-35",
+          "claim_text": "Risk Disclosure : the impact on our financial performance that could occur as a result of various risks and uncertainties, the market value of our common stock could decline significantly.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (88.9%) with passage E13 supports narrative assertion.",
+          "confidence_score": 0.97,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E13"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E13",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_25",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-36",
+          "claim_text": "**Business Architecture:** Business Operations : New York.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (60.0%) with passage E1 supports narrative assertion.",
+          "confidence_score": 0.88,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1_14",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-37",
+          "claim_text": "13 Table of Contents \u2022Engineering Development Program \u2013 Launched in January 2024, this program targets recent college and university graduates for specialized engineering fields.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Numerical figures matched and lexical overlap (100.0%) confirms passage E1 (ITEM_1).",
+          "confidence_score": 0.95,
+          "verification_method": "deterministic_numeric_and_lexical",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1_14",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-38",
+          "claim_text": "**Financial Performance:** Verified deterministic calculation establishes Revenue Growth at 18.80% for the target period .",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001318605_revenue_growth_annual_2023-12-31 (revenue_growth = 18.7953 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C1",
+              "evidence_type": "calculation_receipt",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "calculation_id": "0001318605_revenue_growth_annual_2023-12-31",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-39",
+          "claim_text": "**Operational Dynamics:** Management Discussion : billion decrease in repayments of debt.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (50.0%) with passage E4 supports narrative assertion.",
+          "confidence_score": 0.85,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-40",
+          "claim_text": "See Note 11, Debt, to the consolidated financial statements included elsewhere in this Annual Report on Form 10-K for further details regarding our debt obligations.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E4 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_7_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-41",
+          "claim_text": "**Strategic Risk Profile:** Risk Disclosure : in this Annual Report on Form 10-K. To our knowledge, no government agency in any such ongoing investigation has concluded that any wrongdoing occurred.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (80.0%) with passage E7 supports narrative assertion.",
+          "confidence_score": 0.94,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E7"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E7",
+              "evidence_type": "filing_passage",
+              "ticker": "TSLA",
+              "cik": "0001318605",
+              "source_chunk_id": "0001318605_000162828024002390_ITEM_1A_23",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001628280-24-002390",
+              "document_id": "0001318605_000162828024002390",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1318605/000162828024002390/tsla-20231231.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        }
+      ]
+    },
+    "NVDA": {
+      "ticker": "NVDA",
+      "company_name": "NVIDIA Corporation",
+      "cik": "0001045810",
+      "period": "FY2024",
+      "question": "Analyze NVIDIA FY2024 revenue growth, gross margin expansion, and capital allocation.",
+      "status": "COMPLETED",
+      "verification_status": "verified",
+      "report_id": "18525955-ca1f-45c2-968e-6f2781da7655",
+      "total_sections": 8,
+      "total_evidence_cited": 12,
+      "total_calculations_cited": 8,
+      "valid_chunk_citations": 18,
+      "valid_calc_receipts": 9,
+      "incomplete_provenance_claims": 0,
+      "trend_integrity_results": [
+        {
+          "citation_id": "C7",
+          "calculation_id": "calc_trend_revenue_growth_FY2022_FY2024",
+          "status": "verified"
+        },
+        {
+          "citation_id": "C8",
+          "calculation_id": "calc_trend_gross_profit_margin_FY2022_FY2024",
+          "status": "verified"
+        }
+      ],
+      "execution_time_s": 6.81,
+      "warnings": [],
+      "errors": [],
+      "verification_run": {
+        "run_id": "vrun_22fd1a56f215",
+        "answer_id": "18525955-ca1f-45c2-968e-6f2781da7655",
+        "overall_status": "verified",
+        "total_claims": 34,
+        "supported_claims": 24,
+        "partially_supported_claims": 0,
+        "unsupported_claims": 0,
+        "contradicted_claims": 0,
+        "not_verifiable_claims": 10,
+        "warnings_json": "[]",
+        "verified_at": "2026-11-25T06:22:14.194682+00:00",
+        "verifier_version": "0.1.0"
+      },
+      "claims": [
+        {
+          "claim_id": "CLM-01",
+          "claim_text": "This executive research brief delivers an autonomous financial investigation of **NVIDIA CORP** (NVDA) covering the **FY2024** reporting period.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-02",
+          "claim_text": "Financial calculations yielded 8 verified deterministic receipts across key ratios and profitability metrics.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-03",
+          "claim_text": "Longitudinal analysis identified 2 multi-period metric trends.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-04",
+          "claim_text": "Identified 4 primary operational and statutory risk factors.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-05",
+          "claim_text": "Business Operations : requirements, the responsible use of AI, climate change, cryptocurrency, and consumer laws, could increase our costs, impact our competitive position, and otherwise may have a material adverse impact on our business, financial condition and results of operations in subsequent...",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E1 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1_12",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-06",
+          "claim_text": "Business Operations : consulting, and product development positions at Hewlett-Packard, an information technology company, Booz Allen Hamilton Inc., a management and technology consulting company, and Texas Instruments Incorporated.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E2 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E2"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E2",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-07",
+          "claim_text": "Puri holds a B.S.E.E.",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "E2"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E2",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1_16",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-08",
+          "claim_text": "Business Operations : of hardware and software for SoC products that are used in servers or embedded into automobiles, autonomous machines, and gaming devices, such as Ambarella, Inc., AMD, Broadcom Inc., or Broadcom, Intel, Qualcomm Incorporated, Renesas Electronics Corporation, and Samsung, or...",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E3 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E3"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E3",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1_10",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-09",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2024: 125.85%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001045810_revenue_growth_annual_2024-01-28 (revenue_growth = 125.8545 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C1",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "0001045810_revenue_growth_annual_2024-01-28",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2024",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-10",
+          "claim_text": "Deterministic calculation of gross_profit_margin for FY2024: 72.72%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001045810_gross_profit_margin_annual_2024-01-28 (gross_profit_margin = 72.7176 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C2"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C2",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "0001045810_gross_profit_margin_annual_2024-01-28",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2024",
+              "sec_url": null,
+              "description": "Gross Profit Margin: (Gross Profit / Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-11",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2023: 0.22%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001045810_revenue_growth_annual_2023-01-29 (revenue_growth = 0.2229 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C3"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C3",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "0001045810_revenue_growth_annual_2023-01-29",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-12",
+          "claim_text": "Deterministic calculation of gross_profit_margin for FY2023: 56.93%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001045810_gross_profit_margin_annual_2023-01-29 (gross_profit_margin = 56.9289 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C4",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "0001045810_gross_profit_margin_annual_2023-01-29",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2023",
+              "sec_url": null,
+              "description": "Gross Profit Margin: (Gross Profit / Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-13",
+          "claim_text": "Deterministic calculation of revenue_growth for FY2022: 61.40%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001045810_revenue_growth_annual_2022-01-30 (revenue_growth = 61.4033 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C5"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C5",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "0001045810_revenue_growth_annual_2022-01-30",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2022",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-14",
+          "claim_text": "Deterministic calculation of gross_profit_margin for FY2022: 64.93%",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001045810_gross_profit_margin_annual_2022-01-30 (gross_profit_margin = 64.929 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C6"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C6",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "0001045810_gross_profit_margin_annual_2022-01-30",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2022",
+              "sec_url": null,
+              "description": "Gross Profit Margin: (Gross Profit / Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-15",
+          "claim_text": "Longitudinal comparison evaluates changes across consecutive fiscal reporting periods:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-16",
+          "claim_text": "**Revenue Growth (MIXED)**: revenue_growth demonstrated mixed volatility across periods (net shift: +64.45 percentage (+105.0%)).",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "C7"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C7",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "calc_trend_revenue_growth_FY2022_FY2024",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2024",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-17",
+          "claim_text": "**Gross Profit Margin (MIXED)**: gross_profit_margin demonstrated mixed volatility across periods (net shift: +7.79 percentage (+12.0%)).",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [
+            "C8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C8",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "calc_trend_gross_profit_margin_FY2022_FY2024",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FYFY2024",
+              "sec_url": null,
+              "description": "Multi-Period Percentage Growth Analysis: ((V_end - V_start) / abs(V_start)) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-18",
+          "claim_text": "Analysis of operational performance, strategic developments, and management disclosures from Item 7 of statutory filings:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-19",
+          "claim_text": "Management Discussion : Each fiscal reporting period, we measure progress to completion based on actual cost incurred to date as a percentage of the estimated total cost required to complete each project.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (95.2%) with passage E4 supports narrative assertion.",
+          "confidence_score": 0.99,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_7_7",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-20",
+          "claim_text": "Management Discussion : The following discussion and analysis of our financial condition and results of operations should be read in conjunction with \u201cItem 1A.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (92.9%) with passage E5 supports narrative assertion.",
+          "confidence_score": 0.98,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E5"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E5",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_7_0",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-21",
+          "claim_text": "Management Discussion : Financial Statements in Part IV, Item 15 of this Annual Report on Form 10-K for further information.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (92.9%) with passage E6 supports narrative assertion.",
+          "confidence_score": 0.98,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E6"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E6",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_7_13",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-22",
+          "claim_text": "Management Discussion : Reportable Segments Revenue by Reportable Segments Year Ended ($ in millions) Operating Income by Reportable Segments Year Ended ($ in millions) Compute & Networking revenue \u2013 The year-on-year increase was due to higher Data Center revenue.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (88.9%) with passage E10 supports narrative assertion.",
+          "confidence_score": 0.97,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E10"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E10",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_7_8",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-23",
+          "claim_text": "Management Discussion : assets, liabilities, revenue, cost of revenue, expenses and related disclosure of contingencies.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E11 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E11"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E11",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_7_5",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-24",
+          "claim_text": "Statutory disclosures from SEC Item 1A identifying material risks, competitive challenges, and operational uncertainties:",
+          "claim_type": "general_fact",
+          "is_verifiable": false,
+          "outcome": "not_verifiable",
+          "reason": "Claim is an introductory remark, greeting, or subjective meta-statement.",
+          "confidence_score": 0.5,
+          "verification_method": "unverifiable_filter",
+          "citation_ids": [],
+          "provenance": []
+        },
+        {
+          "claim_id": "CLM-25",
+          "claim_text": "Risk Disclosure : The following risk factors should be considered in addition to the other information in this Annual Report on Form 10-K. The following risks could harm our business, financial condition, results of operations or reputation, which could cause our stock price to decline.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (96.4%) with passage E7 supports narrative assertion.",
+          "confidence_score": 0.99,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E7"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E7",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1A_0",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-26",
+          "claim_text": "Risk Disclosure : process sensitive, confidential or personal data or information that is subject to privacy and security laws, regulations, industry standards, external and internal policies, contracts and other obligations that govern the processing of such data by us and on our behalf.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E8 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E8"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E8",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1A_29",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-27",
+          "claim_text": "Risk Disclosure : as such threats and techniques change frequently and may not be detected until after a security incident has occurred.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E9 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E9"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E9",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1A_13",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-28",
+          "claim_text": "Further, we may experience delays in developing and deploying remedial measures designed to address identified vulnerabilities.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E9 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E9"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E9",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1A_13",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-29",
+          "claim_text": "Risk Disclosure : be costly, and our ability to compete could be harmed if we are unsuccessful or if we are prohibited from making or selling our products.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (93.3%) with passage E12 supports narrative assertion.",
+          "confidence_score": 0.98,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E12"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E12",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1A_1",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-30",
+          "claim_text": "\u2022We are subject to stringent and changing data privacy and security laws, rules, regulations, and other obligations.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (100.0%) with passage E12 supports narrative assertion.",
+          "confidence_score": 1.0,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E12"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E12",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1A_1",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-31",
+          "claim_text": "**Business Architecture:** Business Operations : requirements, the responsible use of AI, climate change, cryptocurrency, and consumer laws, could increase our costs, impact our competitive position, and otherwise may have a material adverse impact on our business, financial condition and results of operations in subsequent...",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (96.3%) with passage E1 supports narrative assertion.",
+          "confidence_score": 0.99,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E1",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1_12",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-32",
+          "claim_text": "**Financial Performance:** Verified deterministic calculation establishes Revenue Growth at 125.85% for the target period .",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Claim supported by deterministic calculation receipt 0001045810_revenue_growth_annual_2024-01-28 (revenue_growth = 125.8545 percentage).",
+          "confidence_score": 1.0,
+          "verification_method": "deterministic_receipt",
+          "citation_ids": [
+            "C1"
+          ],
+          "provenance": [
+            {
+              "citation_id": "C1",
+              "evidence_type": "calculation_receipt",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "calculation_id": "0001045810_revenue_growth_annual_2024-01-28",
+              "source_chunk_id": null,
+              "accession_number": null,
+              "filing_type": "Deterministic Python Engine",
+              "period": "FY2024",
+              "sec_url": null,
+              "description": "Revenue Growth: ((Current Revenue - Previous Revenue) / Previous Revenue) * 100",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-33",
+          "claim_text": "**Operational Dynamics:** Management Discussion : Each fiscal reporting period, we measure progress to completion based on actual cost incurred to date as a percentage of the estimated total cost required to complete each project.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (87.0%) with passage E4 supports narrative assertion.",
+          "confidence_score": 0.96,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E4"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E4",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_7_7",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_7",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_7",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        },
+        {
+          "claim_id": "CLM-34",
+          "claim_text": "**Strategic Risk Profile:** Risk Disclosure : The following risk factors should be considered in addition to the other information in this Annual Report on Form 10-K. The following risks could harm our business, financial condition, results of operations or reputation, which could cause our stock price to decline.",
+          "claim_type": "general_fact",
+          "is_verifiable": true,
+          "outcome": "supported",
+          "reason": "Lexical overlap (90.0%) with passage E7 supports narrative assertion.",
+          "confidence_score": 0.97,
+          "verification_method": "lexical_overlap",
+          "citation_ids": [
+            "E7"
+          ],
+          "provenance": [
+            {
+              "citation_id": "E7",
+              "evidence_type": "filing_passage",
+              "ticker": "NVDA",
+              "cik": "0001045810",
+              "source_chunk_id": "0001045810_000104581024000029_ITEM_1A_0",
+              "chunk_id_exists_in_db": true,
+              "accession_number": "0001045810-24-000029",
+              "document_id": "0001045810_000104581024000029",
+              "section_identifier": "ITEM_1A",
+              "filing_type": "10-K",
+              "period": "2024",
+              "sec_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581024000029/nvda-20240128.htm",
+              "description": "Section ITEM_1A",
+              "provenance_complete": true,
+              "missing_fields": []
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

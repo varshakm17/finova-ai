@@ -164,6 +164,7 @@ class ReportAgent(BaseFinovaAgent):
                 ReportReference(
                     ref_type="filing_passage",
                     citation_id=eid,
+                    chunk_id=einfo.get("chunk_id"),
                     filing_name=f"{einfo.get('company_name', '')} {einfo.get('filing_type', '10-K')}",
                     form_type=einfo.get("filing_type", "10-K"),
                     filing_date=einfo.get("filing_date"),

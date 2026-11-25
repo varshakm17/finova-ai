@@ -1,7 +1,8 @@
 import json
 import time
-from backend.orchestration.graph import FinovaOrchestrationEngine
+
 from backend.agents.agent_models import ReportGenerationRequest
+from backend.orchestration.graph import FinovaOrchestrationEngine
 
 engine = FinovaOrchestrationEngine()
 
@@ -29,7 +30,7 @@ companies = [
 results = []
 
 for c in companies:
-    print(f"\n==========================================")
+    print("\n==========================================")
     print(f"Running report for {c['ticker']} ({c['company_name']})...")
     req = ReportGenerationRequest(
         ticker=c["ticker"],

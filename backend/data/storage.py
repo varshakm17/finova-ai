@@ -550,6 +550,7 @@ class Database:
                     report_id TEXT NOT NULL,
                     ref_type TEXT NOT NULL,
                     citation_id TEXT NOT NULL,
+                    chunk_id TEXT,
                     filing_name TEXT,
                     form_type TEXT,
                     filing_date TEXT,
@@ -564,6 +565,9 @@ class Database:
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_ref_report_id ON report_references (report_id);"
             )
+            ref_cols = [c[1] for c in cursor.execute("PRAGMA table_info(report_references);").fetchall()]
+            if "chunk_id" not in ref_cols:
+                cursor.execute("ALTER TABLE report_references ADD COLUMN chunk_id TEXT;")
 
             # 16. Evaluation Runs Table (Session 12)
             cursor.execute(
@@ -1801,11 +1805,12 @@ class Database:
                     conn.execute(
                         """
                         INSERT INTO report_references (
-                            reference_id, report_id, ref_type, citation_id, filing_name,
-                            form_type, filing_date, reporting_period, accession_number,
-                            sec_url, description
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            reference_id, report_id, ref_type, citation_id, chunk_id,
+                            filing_name, form_type, filing_date, reporting_period,
+                            accession_number, sec_url, description
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(reference_id) DO UPDATE SET
+                            chunk_id = excluded.chunk_id,
                             filing_name = excluded.filing_name,
                             form_type = excluded.form_type,
                             filing_date = excluded.filing_date,
@@ -1819,6 +1824,7 @@ class Database:
                             report_data["report_id"],
                             r["ref_type"],
                             r["citation_id"],
+                            r.get("chunk_id"),
                             r.get("filing_name"),
                             r.get("form_type"),
                             r.get("filing_date"),
