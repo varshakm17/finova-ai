@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 
+from backend.verification.period_verifier import normalize_period
 from backend.verification.verification_models import (
     ClaimExtractionResult,
     ClaimType,
@@ -86,6 +87,12 @@ COMPARISON_TRIGGERS = [
     "lower than",
     "expanded from",
     "contracted from",
+    "across periods",
+    "across comparative",
+    "across the comparative",
+    "multi-period",
+    "longitudinal",
+    "net shift",
 ]
 
 RISK_TRIGGERS = [
@@ -154,7 +161,7 @@ class ClaimExtractor:
                 continue
 
             # Strip bullet prefixes like "- ", "* ", "1. "
-            line = re.sub(r"^(?:[-*•]|\d+[\.)])\s*", "", line)
+            line = re.sub(r"^(?:[-*•]|\d+[\.)])\s+", "", line)
             if not line:
                 continue
 
@@ -270,7 +277,7 @@ class ClaimExtractor:
         for pattern in PERIOD_PATTERNS:
             match = pattern.search(text)
             if match:
-                return match.group(1).strip()
+                return normalize_period(match.group(1).strip())
         return None
 
     def extract_company(self, text: str) -> str | None:
@@ -461,7 +468,6 @@ class ClaimExtractor:
                     or c_lower.startswith("financial calculations yielded")
                     or c_lower.startswith("longitudinal analysis identified")
                     or (c_lower.startswith("identified ") and "risk factors" in c_lower)
-                    or "demonstrated mixed volatility across periods" in c_lower
                     or "operates within statutory reporting guidelines" in c_lower
                     or c_lower.startswith("_no ")
                     or c_lower.startswith("no specific")

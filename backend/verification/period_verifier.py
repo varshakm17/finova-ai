@@ -27,6 +27,60 @@ ORDINAL_QUARTER_PATTERN = re.compile(
 ORDINAL_MAP = {"first": 1, "second": 2, "third": 3, "fourth": 4}
 
 
+def normalize_period(period_str: str | None) -> str | None:
+    """Normalize fiscal period strings into canonical representations.
+
+    Examples:
+        '2023' -> 'FY2023'
+        'FY2023' -> 'FY2023'
+        'FY 2023' -> 'FY2023'
+        'FYFY2023' -> 'FY2023'
+        'fiscal year 2023' -> 'FY2023'
+        'Q3 FY2023' -> 'Q3 FY2023'
+        'Q3 2023' -> 'Q3 FY2023'
+        'FY2023-Q3' -> 'Q3 FY2023'
+        '2023-09-30' -> '2023-09-30'
+        'FY2021-FY2023' -> 'FY2021-FY2023'
+        'FY2021_FY2023' -> 'FY2021-FY2023'
+        '2021-2023' -> 'FY2021-FY2023'
+    """
+    if not period_str:
+        return None
+    s = str(period_str).strip()
+    if not s or s.lower() in ("none", "null"):
+        return None
+
+    # 1. Exact calendar date YYYY-MM-DD
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
+        return s
+
+    # 2. Multi-period span e.g. FY2021-FY2023, FY2021_FY2023, 2021-2023
+    m_span = re.match(r"^(?:FY\s*)?(\d{4})[-_](?:FY\s*)?(\d{4})$", s, re.IGNORECASE)
+    if m_span:
+        return f"FY{m_span.group(1)}-FY{m_span.group(2)}"
+
+    # 3. Quarter + Year e.g. Q3 FY2023, Q3 2023, FY2023-Q3, third quarter of 2023
+    q_match = re.search(r"Q([1-4])", s, re.IGNORECASE)
+    y_match = re.search(r"(?:19|20)\d{2}", s)
+    if q_match and y_match:
+        return f"Q{q_match.group(1)} FY{y_match.group(0)}"
+
+    # 4. Clean repeated FY prefixes e.g. FYFY2023, FY FY 2023, fiscal year 2023
+    clean_s = re.sub(
+        r"^(?:fiscal\s+year|fiscal|calendar)\s*", "", s, flags=re.IGNORECASE
+    ).strip()
+    clean_s = re.sub(r"^(?:FY\s*)+", "", clean_s, flags=re.IGNORECASE).strip()
+
+    # Check if what remains is a 4-digit year
+    if re.match(r"^(?:19|20)\d{2}$", clean_s):
+        return f"FY{clean_s}"
+
+    if y_match:
+        return f"FY{y_match.group(0)}"
+
+    return s
+
+
 class PeriodVerifier:
     """Verifies that time horizons, fiscal years, and quarters align between claim and evidence."""
 
@@ -61,7 +115,7 @@ class PeriodVerifier:
         calculation_evidence: list[CalculationEvidence],
     ) -> PeriodVerificationDetail:
         """Audit reporting period alignment between claim text and all cited evidence items."""
-        claimed_period = claim.mentioned_period
+        claimed_period = normalize_period(claim.mentioned_period)
         if not claimed_period:
             return PeriodVerificationDetail(
                 is_consistent=True,
@@ -74,7 +128,8 @@ class PeriodVerifier:
         claimed_year = self.parse_period_year(claimed_period)
         claimed_quarter = self.parse_quarter(claimed_period)
         is_claimed_annual = (
-            "annual" in claimed_period.lower() or "fy" in claimed_period.lower()
+            ("annual" in claimed_period.lower() or "fy" in claimed_period.lower())
+            and not bool(claimed_quarter)
         )
 
         calc_map = {ce.evidence_id.upper(): ce for ce in calculation_evidence}

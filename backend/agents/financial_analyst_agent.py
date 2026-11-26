@@ -26,6 +26,7 @@ from backend.finance.financial_trends import (
     compute_percentage_change,
 )
 from backend.utils.logger import get_logger
+from backend.verification.period_verifier import normalize_period
 
 logger = get_logger("financial_analyst_agent")
 
@@ -211,9 +212,9 @@ class FinancialAnalystAgent(BaseFinovaAgent):
             )
 
             periods = [
-                f"FY{r.get('fiscal_year')}"
+                normalize_period(r.get("fiscal_year"))
                 if r.get("fiscal_period") in ("FY", None)
-                else f"FY{r.get('fiscal_year')}-{r.get('fiscal_period')}"
+                else f"{normalize_period(r.get('fiscal_year'))}-{r.get('fiscal_period')}"
                 for r in sorted_receipts
             ]
             values = [float(r["calculated_value"]) for r in sorted_receipts]
@@ -386,7 +387,7 @@ class FinancialAnalystAgent(BaseFinovaAgent):
         periods_analyzed = sorted(
             list(
                 {
-                    f"FY{r.get('fiscal_year')}"
+                    normalize_period(r.get("fiscal_year"))
                     for r in receipts_data
                     if r.get("fiscal_year") is not None
                 }

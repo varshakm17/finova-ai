@@ -755,6 +755,7 @@ class FinovaOrchestrationEngine:
             )
             if report_obj
             else len(final_state.get("calculation_results", [])),
+            calculations=final_state.get("calculation_results", []),
             execution_time_ms=duration_ms,
             trace=trace_events,
             warnings=final_state.get("warnings", []),

@@ -17,6 +17,7 @@ from backend.finance.financial_trends import (
     verify_trend_math,
 )
 from backend.utils.logger import get_logger
+from backend.verification.period_verifier import normalize_period
 
 logger = get_logger("research_coordinator")
 
@@ -201,8 +202,9 @@ class ResearchCoordinator(BaseFinovaAgent):
                 if unit == "percentage" and isinstance(val, (int, float))
                 else f"{val} {unit}"
             )
+            norm_fy = normalize_period(fy) or f"FY{fy}"
             fact_str = (
-                f"Deterministic calculation of {metric} for FY{fy}: {val_fmt} [{cid}]"
+                f"Deterministic calculation of {metric} for {norm_fy}: {val_fmt} [{cid}]"
             )
             sections["financial_performance"].append(fact_str)
 
@@ -364,7 +366,8 @@ class ResearchCoordinator(BaseFinovaAgent):
                 if unit == "percentage" and isinstance(val, (int, float))
                 else f"{val} {unit}"
             )
-            categorized["calculated"].append(f"{metric} in FY{fy}: {val_fmt} [{cid}]")
+            norm_fy = normalize_period(fy) or f"FY{fy}"
+            categorized["calculated"].append(f"{metric} in {norm_fy}: {val_fmt} [{cid}]")
 
         # Narrative facts
         for eid, einfo in evidence_map.items():
@@ -452,6 +455,8 @@ class ResearchCoordinator(BaseFinovaAgent):
 
         return {
             "consolidated_findings": consolidated,
+            "calculation_map": calc_map,
+            "calculation_results": valid_receipts,
             "retrieved_evidence": deduped_evidence,
             "current_step": "research_coordinator",
             "warnings": warnings,

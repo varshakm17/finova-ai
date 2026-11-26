@@ -12,6 +12,7 @@ from typing import Any
 
 from backend.rag.rag_models import CalculationEvidence
 from backend.utils.logger import get_logger
+from backend.verification.period_verifier import normalize_period
 
 logger = get_logger("financial_trends")
 
@@ -94,8 +95,8 @@ def build_trend_receipt(
     if abs_chg is None:
         return None
 
-    p_start = str(periods[0])
-    p_end = str(periods[-1])
+    p_start = normalize_period(str(periods[0])) or str(periods[0])
+    p_end = normalize_period(str(periods[-1])) or str(periods[-1])
     p_label = f"{p_start}-{p_end}"
 
     clean_metric_id = re.sub(r"[^a-zA-Z0-9_]", "_", metric_name)
@@ -164,11 +165,19 @@ def verify_trend_math(
         metric_name = receipt.metric_name
 
     input_map: dict[str, float] = {}
-    for inp in inputs:
-        name = inp.get("input_name")
-        val = inp.get("value")
-        if name and val is not None and isinstance(val, (int, float)):
-            input_map[name] = float(val)
+    if isinstance(inputs, dict):
+        for name, val in inputs.items():
+            if val is not None and isinstance(val, (int, float)):
+                input_map[name] = float(val)
+    elif isinstance(inputs, list):
+        for inp in inputs:
+            if hasattr(inp, "model_dump"):
+                inp = inp.model_dump()
+            if isinstance(inp, dict):
+                name = inp.get("input_name") or inp.get("name")
+                val = inp.get("value")
+                if name and val is not None and isinstance(val, (int, float)):
+                    input_map[name] = float(val)
 
     start_v = input_map.get("start_value")
     end_v = input_map.get("end_value")

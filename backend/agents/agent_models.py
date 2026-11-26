@@ -443,6 +443,7 @@ class ReportGenerationResponse(BaseModel):
     total_sections: int = 0
     total_evidence_cited: int = 0
     total_calculations_cited: int = 0
+    calculations: list[dict[str, Any]] = Field(default_factory=list)
     execution_time_ms: float = 0.0
     trace: list[AgentExecutionEvent] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

@@ -24,6 +24,7 @@ from backend.data.company_service import CompanyService
 from backend.llm import get_llm_provider
 from backend.llm.llm_provider import LLMProvider
 from backend.utils.logger import get_logger
+from backend.verification.period_verifier import normalize_period
 from config.settings import Settings, get_settings
 
 logger = get_logger("research_planner")
@@ -194,6 +195,7 @@ class ResearchPlanner(BaseFinovaAgent):
                 "Company ticker could not be resolved from question or inputs."
             )
 
+        final_period = normalize_period(final_period)
         fiscal_years = self.extract_fiscal_years(question)
         if not final_period and fiscal_years:
             final_period = (

@@ -4,7 +4,7 @@ from backend.verification.claim_extractor import ClaimExtractor
 from backend.verification.contradiction_detector import ContradictionDetector
 from backend.verification.evidence_verifier import EvidenceVerifier
 from backend.verification.numeric_verifier import NumericVerifier
-from backend.verification.period_verifier import PeriodVerifier
+from backend.verification.period_verifier import PeriodVerifier, normalize_period
 from backend.verification.verification_models import (
     ClaimExtractionResult,
     ClaimType,
@@ -35,6 +35,7 @@ __all__ = [
     "OverallVerificationStatus",
     "PeriodVerificationDetail",
     "PeriodVerifier",
+    "normalize_period",
     "VerificationOutcome",
     "VerificationRun",
     "VerificationService",

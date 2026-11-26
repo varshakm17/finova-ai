@@ -24,6 +24,7 @@ from backend.agents.state import FinovaAgentState
 from backend.llm import get_llm_provider
 from backend.llm.llm_provider import LLMProvider
 from backend.utils.logger import get_logger
+from backend.verification.period_verifier import normalize_period
 from config.settings import Settings, get_settings
 
 logger = get_logger("report_agent")
@@ -69,7 +70,7 @@ class ReportAgent(BaseFinovaAgent):
                 if isinstance(val, float)
                 else str(val)
             )
-            fy = f"FY{cinfo.get('fiscal_year', '')}"
+            fy = normalize_period(cinfo.get("fiscal_year", "")) or f"FY{cinfo.get('fiscal_year', '')}"
             formula = cinfo.get("formula_expression") or cinfo.get("formula_name", "")
             rows.append([metric, fy, val_str, unit, f"[{cid}] ({formula})"])
 
@@ -151,7 +152,8 @@ class ReportAgent(BaseFinovaAgent):
                     filing_name=f"{cinfo.get('metric_name', '')} Calculation",
                     form_type="Deterministic Python Engine",
                     filing_date=datetime.now(UTC).strftime("%Y-%m-%d"),
-                    reporting_period=f"FY{cinfo.get('fiscal_year', '')}",
+                    reporting_period=normalize_period(cinfo.get("fiscal_year", ""))
+                    or f"FY{cinfo.get('fiscal_year', '')}",
                     accession_number=cinfo.get("calculation_id"),
                     sec_url=None,
                     description=f"{cinfo.get('formula_name', '')}: {cinfo.get('formula_expression', '')}",
@@ -436,8 +438,9 @@ class ReportAgent(BaseFinovaAgent):
         for cid, cinfo in calc_map.items():
             metric = cinfo.get("metric_name", "")
             fy = cinfo.get("fiscal_year", "")
+            norm_fy = normalize_period(fy) or f"FY{fy}"
             ref_lines.append(
-                f"- **[{cid}]**: Deterministic Python receipt for {metric} (FY{fy}) via XBRL facts."
+                f"- **[{cid}]**: Deterministic Python receipt for {metric} ({norm_fy}) via XBRL facts."
             )
         for eid, einfo in evidence_map.items():
             sec = einfo.get("section_identifier", "")
