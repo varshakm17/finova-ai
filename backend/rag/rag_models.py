@@ -128,6 +128,7 @@ class CalculationEvidence(BaseModel):
     direction: str | None = Field(default=None, description="Net directional trend")
     trajectory: str | None = Field(default=None, description="Detailed intermediate trajectory classification")
     periods: list[str] = Field(default_factory=list, description="Ordered reporting periods")
+    values: list[float] = Field(default_factory=list, description="Ordered observation values")
     observations: list[dict[str, Any]] = Field(default_factory=list, description="Ordered observation series")
     formula_name: str | None = Field(default=None, description="Descriptive formula name")
     formula_expression: str | None = Field(default=None, description="Canonical mathematical formula expression")

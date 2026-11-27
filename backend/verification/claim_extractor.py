@@ -77,6 +77,11 @@ METRIC_KEYWORDS = {
 
 COMPARISON_TRIGGERS = [
     "compared to",
+    "compared with",
+    "compared with the previous",
+    "compared with prior",
+    "compared to the previous",
+    "compared to prior",
     "increased by",
     "decreased by",
     "rose from",
@@ -94,8 +99,16 @@ COMPARISON_TRIGGERS = [
     "longitudinal",
     "net shift",
     "demonstrated mixed volatility",
-    "decelerated",
-    "accelerated",
+    "growth accelerated",
+    "growth decelerated",
+    "expansion accelerated",
+    "expansion decelerated",
+    "accelerated across",
+    "decelerated across",
+    "accelerated over",
+    "decelerated over",
+    "increased compared with",
+    "decreased compared with",
 ]
 
 RISK_TRIGGERS = [
@@ -327,6 +340,63 @@ class ClaimExtractor:
         for trig in COMPARISON_TRIGGERS:
             if trig in t_lower:
                 return ClaimType.HISTORICAL_COMPARISON
+
+        # Contextual acceleration/deceleration check (distinguishing financial trends from debt/legal or operational speedups)
+        if "accelerated" in t_lower or "decelerated" in t_lower:
+            is_debt_clause = "debt" in t_lower and (
+                "repay" in t_lower
+                or "due" in t_lower
+                or "maturity" in t_lower
+                or "default" in t_lower
+            )
+            is_generic_production = (
+                "production" in t_lower
+                and "accelerated production" in t_lower
+                and not any(
+                    k in t_lower
+                    for k in [
+                        "growth",
+                        "margin",
+                        "revenue",
+                        "fy",
+                        "period",
+                        "compared",
+                    ]
+                )
+            )
+            if not is_debt_clause and not is_generic_production:
+                has_metric = any(kw in t_lower for kw in METRIC_KEYWORDS) or any(
+                    w in t_lower
+                    for w in [
+                        "growth",
+                        "expansion",
+                        "margin",
+                        "revenue",
+                        "sales",
+                        "income",
+                        "profit",
+                        "costs",
+                        "expenses",
+                    ]
+                )
+                has_comparative = any(
+                    w in t_lower
+                    for w in [
+                        "period",
+                        "periods",
+                        "comparative",
+                        "fiscal",
+                        "fy",
+                        "year",
+                        "quarter",
+                        "annual",
+                        "yoy",
+                        "across",
+                        "over",
+                    ]
+                )
+                if has_metric and has_comparative:
+                    return ClaimType.HISTORICAL_COMPARISON
 
         if any(trig in t_lower for trig in RISK_TRIGGERS):
             return ClaimType.RISK_OR_BUSINESS

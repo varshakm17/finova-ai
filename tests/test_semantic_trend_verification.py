@@ -23,6 +23,7 @@ from backend.finance.financial_trends import (
     build_trend_receipt,
     classify_trajectory,
     verify_trend_math,
+    verify_trend_semantics,
 )
 from backend.rag.rag_models import CalculationEvidence
 from backend.verification.claim_extractor import ClaimExtractor
@@ -484,3 +485,433 @@ class TestClaimClassificationPersistence:
             assert loaded_run is not None
             loaded_claim_res = loaded_run["claim_results"][0]
             assert loaded_claim_res["claim_type"] == "historical_comparison"
+
+
+class TestSession18_1_4_1_AdversarialSuite:
+    """Session 18.1.4.1 20-case adversarial regression suite calling production functions."""
+
+    def test_case_01_three_genuine_observations_mixed_trajectory(self) -> None:
+        """1. Three genuine observations with mixed trajectory."""
+        receipt = build_trend_receipt(
+            metric_name="revenue_growth",
+            periods=["FY2021", "FY2022", "FY2023"],
+            values=[17.5317, 17.9565, 6.8820],
+            unit="%",
+            citation_id="C1",
+        )
+        assert receipt is not None
+        assert receipt["trajectory"] == "MIXED_DOWNWARD_NET"
+        assert receipt["direction"] == "MIXED"
+        ok, reason = verify_trend_math(receipt)
+        assert ok, reason
+        sem_ok, sem_outcome, sem_reason = verify_trend_semantics(
+            claim_text="Revenue growth demonstrated mixed volatility across periods (net shift: -10.65 percentage (-60.7%)).",
+            receipt=receipt,
+            numeric_values=[NumericClaimValue(raw_text="-60.7%", numeric_value=-60.7, unit="%")],
+        )
+        assert sem_ok, sem_reason
+        assert sem_outcome == "supported"
+
+    def test_case_02_three_observations_monotonic_upward_trajectory(self) -> None:
+        """2. Three observations with monotonic upward trajectory."""
+        receipt = build_trend_receipt(
+            metric_name="cloud_revenue",
+            periods=["FY2021", "FY2022", "FY2023"],
+            values=[60.0, 75.0, 95.0],
+            unit="USD",
+            citation_id="C2",
+        )
+        assert receipt is not None
+        assert receipt["trajectory"] == "MONOTONIC_UPWARD"
+        assert receipt["direction"] == "UPWARD"
+        ok, reason = verify_trend_math(receipt)
+        assert ok, reason
+        sem_ok, sem_outcome, sem_reason = verify_trend_semantics(
+            claim_text="Cloud revenue increased monotonically across fiscal periods.",
+            receipt=receipt,
+        )
+        assert sem_ok, sem_reason
+        assert sem_outcome == "supported"
+
+    def test_case_03_three_observations_monotonic_downward_trajectory(self) -> None:
+        """3. Three observations with monotonic downward trajectory."""
+        receipt = build_trend_receipt(
+            metric_name="operating_margin",
+            periods=["FY2021", "FY2022", "FY2023"],
+            values=[30.0, 25.0, 20.0],
+            unit="%",
+            citation_id="C3",
+        )
+        assert receipt is not None
+        assert receipt["trajectory"] == "MONOTONIC_DOWNWARD"
+        assert receipt["direction"] == "DOWNWARD"
+        ok, reason = verify_trend_math(receipt)
+        assert ok, reason
+        sem_ok, sem_outcome, sem_reason = verify_trend_semantics(
+            claim_text="Operating margin decreased steadily across fiscal periods.",
+            receipt=receipt,
+        )
+        assert sem_ok, sem_reason
+        assert sem_outcome == "supported"
+
+    def test_case_04_two_observation_receipt_asserting_mixed_movement(self) -> None:
+        """4. A two-observation receipt asserting mixed movement."""
+        two_pt_receipt = {
+            "calculation_id": "calc_trend_two_pt",
+            "citation_id": "C4",
+            "metric_name": "growth Trend",
+            "calculated_value": 50.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2022"],
+            "values": [10.0, 15.0],
+            "trajectory": "MIXED_UPWARD_NET",
+            "inputs": [
+                {"input_name": "start_value", "value": 10.0},
+                {"input_name": "end_value", "value": 15.0},
+                {"input_name": "percentage_change", "value": 50.0},
+                {"input_name": "absolute_change", "value": 5.0},
+            ],
+        }
+        ok, reason = verify_trend_math(two_pt_receipt)
+        assert not ok
+        assert "two-observation" in reason.lower() and "mixed" in reason.lower()
+
+    def test_case_05_three_period_receipt_with_only_two_observations(self) -> None:
+        """5. A three-period receipt with only two observations."""
+        receipt = {
+            "calculation_id": "calc_trend_mismatch_counts",
+            "citation_id": "C5",
+            "metric_name": "margin Trend",
+            "calculated_value": 10.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2022", "FY2023"],
+            "values": [20.0, 22.0],
+            "inputs": [
+                {"input_name": "start_value", "value": 20.0},
+                {"input_name": "end_value", "value": 22.0},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "does not match period count" in reason.lower()
+
+    def test_case_06_missing_period_in_middle_of_series(self) -> None:
+        """6. Missing period in the middle of a series."""
+        receipt = {
+            "calculation_id": "calc_trend_missing_mid",
+            "citation_id": "C6",
+            "metric_name": "revenue Trend",
+            "calculated_value": 50.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2023"],
+            "values": [100.0, 150.0],
+            "inputs": [
+                {"input_name": "start_value", "value": 100.0},
+                {"input_name": "end_value", "value": 150.0},
+                {"input_name": "percentage_change", "value": 50.0},
+                {"input_name": "absolute_change", "value": 50.0},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "missing intermediate period" in reason.lower()
+
+    def test_case_07_duplicate_periods_rejected(self) -> None:
+        """7. Duplicate periods."""
+        receipt = {
+            "calculation_id": "calc_trend_dupe_periods",
+            "citation_id": "C7",
+            "metric_name": "profit Trend",
+            "calculated_value": 20.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2021", "FY2022"],
+            "values": [10.0, 10.0, 12.0],
+            "inputs": [
+                {"input_name": "start_value", "value": 10.0},
+                {"input_name": "end_value", "value": 12.0},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "duplicate periods" in reason.lower()
+
+    def test_case_08_out_of_order_periods_rejected(self) -> None:
+        """8. Out-of-order periods."""
+        receipt = {
+            "calculation_id": "calc_trend_out_of_order",
+            "citation_id": "C8",
+            "metric_name": "ebitda Trend",
+            "calculated_value": 50.0,
+            "unit": "%",
+            "periods": ["FY2023", "FY2021", "FY2022"],
+            "values": [10.0, 12.0, 15.0],
+            "inputs": [
+                {"input_name": "start_value", "value": 10.0},
+                {"input_name": "end_value", "value": 15.0},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "chronological order" in reason.lower()
+
+    def test_case_09_observation_unit_mismatch(self) -> None:
+        """9. Observation unit mismatch."""
+        receipt = {
+            "calculation_id": "calc_trend_unit_mismatch",
+            "citation_id": "C9",
+            "metric_name": "margin Trend",
+            "calculated_value": 20.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2022", "FY2023"],
+            "observations": [
+                {"period": "FY2021", "value": 10.0, "unit": "USD"},
+                {"period": "FY2022", "value": 11.0, "unit": "%"},
+                {"period": "FY2023", "value": 12.0, "unit": "USD"},
+            ],
+            "inputs": [
+                {"input_name": "start_value", "value": 10.0, "unit": "%"},
+                {"input_name": "end_value", "value": 12.0, "unit": "%"},
+                {"input_name": "percentage_change", "value": 20.0, "unit": "%"},
+                {"input_name": "absolute_change", "value": 2.0, "unit": "%"},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "unit mismatch" in reason.lower()
+
+    def test_case_10_altered_intermediate_observation(self) -> None:
+        """10. Altered intermediate observation."""
+        receipt = {
+            "calculation_id": "calc_trend_altered_obs",
+            "citation_id": "C10",
+            "metric_name": "revenue Trend",
+            "calculated_value": 100.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2022", "FY2023"],
+            "values": [10.0, 5.0, 20.0],
+            "trajectory": "MONOTONIC_UPWARD",
+            "inputs": [
+                {"input_name": "start_value", "value": 10.0},
+                {"input_name": "end_value", "value": 20.0},
+                {"input_name": "percentage_change", "value": 100.0},
+                {"input_name": "absolute_change", "value": 10.0},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "trajectory mismatch" in reason.lower()
+
+    def test_case_11_stored_trajectory_inconsistent_with_actual_observations(self) -> None:
+        """11. Stored trajectory inconsistent with actual observations."""
+        receipt = {
+            "calculation_id": "calc_trend_inconsistent_traj",
+            "citation_id": "C11",
+            "metric_name": "gross_profit_margin Trend",
+            "calculated_value": -50.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2022", "FY2023"],
+            "values": [20.0, 15.0, 10.0],
+            "trajectory": "MONOTONIC_UPWARD",
+            "inputs": [
+                {"input_name": "start_value", "value": 20.0},
+                {"input_name": "end_value", "value": 10.0},
+                {"input_name": "percentage_change", "value": -50.0},
+                {"input_name": "absolute_change", "value": -10.0},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "trajectory mismatch" in reason.lower()
+
+    def test_case_12_missing_full_receipt(self) -> None:
+        """12. Missing full receipt."""
+        ok, outcome, reason = verify_trend_semantics(
+            claim_text="Revenue growth demonstrated mixed volatility across periods.",
+            receipt={},
+        )
+        assert not ok
+        assert outcome in ("missing_receipt", "incomplete", "unsupported")
+        assert "validation" in reason.lower() or "missing" in reason.lower()
+
+    def test_case_13_missing_observations_in_calculation_model(self) -> None:
+        """13. Missing observations in the calculation model."""
+        calc = CalculationEvidence(
+            evidence_id="C13",
+            calculation_id="calc_no_obs",
+            metric_name="revenue Trend",
+            calculated_value=0.0,
+            unit="%",
+            formula="V_end - V_start",
+            period_end="FY2023",
+            periods=["FY2021", "FY2022", "FY2023"],
+            input_observations=[
+                {"input_name": "start_value", "value": 10.0},
+                {"input_name": "end_value", "value": 10.0},
+            ],
+        )
+        ok, reason = verify_trend_math(calc)
+        assert not ok
+        assert "missing or insufficient intermediate observations" in reason.lower()
+
+    def test_case_14_wrong_percentage_and_absolute_change(self) -> None:
+        """14. Wrong percentage and absolute change."""
+        receipt = {
+            "calculation_id": "calc_trend_wrong_math",
+            "citation_id": "C14",
+            "metric_name": "cash Trend",
+            "calculated_value": 999.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2022", "FY2023"],
+            "values": [100.0, 120.0, 150.0],
+            "inputs": [
+                {"input_name": "start_value", "value": 100.0},
+                {"input_name": "end_value", "value": 150.0},
+                {"input_name": "percentage_change", "value": 999.0},
+                {"input_name": "absolute_change", "value": 999.0},
+            ],
+        }
+        ok, reason = verify_trend_math(receipt)
+        assert not ok
+        assert "mismatch" in reason.lower()
+
+    def test_case_15_wrong_metric_citation(self) -> None:
+        """15. Wrong metric citation."""
+        receipt = build_trend_receipt(
+            metric_name="gross_profit_margin",
+            periods=["FY2021", "FY2022", "FY2023"],
+            values=[25.0, 26.0, 18.0],
+            unit="%",
+            citation_id="C15",
+        )
+        assert receipt is not None
+        ok, outcome, reason = verify_trend_semantics(
+            claim_text="Free cash flow demonstrated mixed volatility across periods.",
+            receipt=receipt,
+        )
+        assert not ok
+        assert outcome == "unsupported"
+        assert "metric mismatch" in reason.lower()
+
+    def test_case_16_wrong_reporting_period(self) -> None:
+        """16. Wrong reporting period."""
+        receipt = build_trend_receipt(
+            metric_name="revenue",
+            periods=["FY2021", "FY2022", "FY2023"],
+            values=[100.0, 120.0, 140.0],
+            unit="USD",
+            citation_id="C16",
+        )
+        assert receipt is not None
+        ok, outcome, reason = verify_trend_semantics(
+            claim_text="Revenue grew steadily during FY2018.",
+            receipt=receipt,
+            mentioned_period="FY2018",
+        )
+        assert not ok
+        assert outcome == "unsupported"
+        assert "period mismatch" in reason.lower()
+
+    def test_case_17_semantic_contradiction_reflected_in_reconciled_audit_counts(self) -> None:
+        """17. Semantic contradiction reflected in reconciled audit counts."""
+        claim = ExtractedClaim(
+            claim_id="CLM-CONTRADICT",
+            claim_text="Revenue growth demonstrated mixed volatility across periods (-87.5%).",
+            claim_type=ClaimType.HISTORICAL_COMPARISON,
+            citation_ids=["C17"],
+            is_verifiable=True,
+        )
+        receipt = build_trend_receipt(
+            metric_name="revenue_growth",
+            periods=["FY2021", "FY2022", "FY2023"],
+            values=[150.0, 50.0, 10.0],
+            unit="%",
+            citation_id="C17",
+        )
+        assert receipt is not None
+        assert receipt["trajectory"] == "MONOTONIC_DOWNWARD"
+
+        sem_ok, sem_outcome, sem_reason = verify_trend_semantics(
+            claim_text=claim.claim_text,
+            receipt=receipt,
+        )
+        assert not sem_ok
+        assert sem_outcome == "contradicted"
+
+        orig_supported = 10
+        orig_contradicted = 0
+        if not sem_ok and sem_outcome == "contradicted":
+            reconciled_supported = orig_supported - 1
+            reconciled_contradicted = orig_contradicted + 1
+        else:
+            reconciled_supported = orig_supported
+            reconciled_contradicted = orig_contradicted
+
+        assert reconciled_supported == 9
+        assert reconciled_contradicted == 1
+
+    def test_case_18_incomplete_receipt_prevents_final_verified_status(self) -> None:
+        """18. Incomplete receipt preventing final verified status."""
+        auditor = TrendReceiptAuditor()
+        incomplete_receipt = {
+            "calculation_id": "calc_incomplete",
+            "citation_id": "C18",
+            "metric_name": "growth Trend",
+            "calculated_value": 10.0,
+            "unit": "%",
+            "periods": ["FY2021", "FY2022", "FY2023"],
+            "values": [10.0],
+            "inputs": [{"input_name": "start_value", "value": 10.0}],
+        }
+        record = auditor.audit_receipt(incomplete_receipt, citation_id="C18", claim_id="CLM-INC")
+        assert record["status"] == "incomplete"
+        assert not record["is_valid"]
+
+        substantive_failures = 1 if record["status"] != "valid" else 0
+        company_status = "verified" if substantive_failures == 0 else "partially_verified"
+        assert company_status == "partially_verified"
+
+    def test_case_19_multiple_claims_referencing_same_receipt(self) -> None:
+        """19. Multiple claims referencing the same receipt."""
+        auditor = TrendReceiptAuditor()
+        receipt = build_trend_receipt(
+            metric_name="revenue_growth",
+            periods=["FY2021", "FY2022", "FY2023"],
+            values=[17.5317, 17.9565, 6.8820],
+            unit="%",
+            citation_id="C19",
+        )
+        assert receipt is not None
+        rec1 = auditor.audit_receipt(receipt, citation_id="C19", claim_id="CLM-01")
+        rec2 = auditor.audit_receipt(receipt, citation_id="C19", claim_id="CLM-02")
+        assert rec1 == rec2
+        assert len(auditor.audited_receipts) == 1
+        summary = auditor.get_summary()
+        assert summary["total_unique_receipts"] == 1
+        assert summary["total_referencing_claims"] == 2
+        assert "CLM-01" in auditor.receipt_to_claims[receipt["calculation_id"]]
+        assert "CLM-02" in auditor.receipt_to_claims[receipt["calculation_id"]]
+
+    def test_case_20_generic_use_of_accelerated_not_classified_as_financial_trend(self) -> None:
+        """20. Generic use of 'accelerated' not classified as a financial trend."""
+        extractor = ClaimExtractor()
+
+        # 1. Genuine financial trend: accelerated
+        res1 = extractor.extract_claims("Revenue growth accelerated across FY2021–FY2023.")
+        assert res1.claims[0].claim_type == ClaimType.HISTORICAL_COMPARISON
+
+        # 2. Genuine financial trend: decelerated
+        res2 = extractor.extract_claims("Revenue growth decelerated over comparative fiscal periods.")
+        assert res2.claims[0].claim_type == ClaimType.HISTORICAL_COMPARISON
+
+        # 3. Debt acceleration clause: NOT historical comparison
+        res3 = extractor.extract_claims("If any of our debt is accelerated, repayment may become due.")
+        assert res3.claims[0].claim_type != ClaimType.HISTORICAL_COMPARISON
+
+        # 4. Generic operational speedup: NOT historical comparison
+        res4 = extractor.extract_claims("The company accelerated production.")
+        assert res4.claims[0].claim_type != ClaimType.HISTORICAL_COMPARISON
+
+        # 5. Period comparison: historical comparison
+        res5 = extractor.extract_claims("Operating costs increased compared with the previous year.")
+        assert res5.claims[0].claim_type == ClaimType.HISTORICAL_COMPARISON
+

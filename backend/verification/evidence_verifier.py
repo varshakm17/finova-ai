@@ -342,44 +342,115 @@ class EvidenceVerifier:
         # Check 6: Deterministic Calculation Receipt Match & Semantic Trend Verification
         cited_calcs = [calc_map[cid] for cid in cited_upper if cid in calc_map]
         if cited_calcs:
-            from backend.finance.financial_trends import verify_trend_semantics
-
             calc = cited_calcs[0]
-            sem_ok, sem_outcome, sem_reason = verify_trend_semantics(
-                claim_text=claim.claim_text,
-                receipt=calc,
-                numeric_values=claim.numeric_values,
-                tolerance_pct=self.numeric_verifier.tolerance_pct,
+            calc_inputs = getattr(calc, "inputs", None) or getattr(calc, "input_observations", None) or []
+            is_trend = (
+                "trend" in str(calc.calculation_id).lower()
+                or "trend" in str(calc.metric_name).lower()
+                or getattr(calc, "trajectory", None) is not None
+                or len(getattr(calc, "periods", [])) > 1
+                or len(getattr(calc, "observations", [])) > 1
+                or (isinstance(calc_inputs, list) and any("observation_" in str(inp.get("input_name", "") if isinstance(inp, dict) else "") for inp in calc_inputs))
             )
-            if not sem_ok:
-                outcome = (
-                    VerificationOutcome.CONTRADICTED
-                    if sem_outcome == "contradicted"
-                    else VerificationOutcome.UNSUPPORTED
+
+            if is_trend:
+                from backend.finance.financial_trends import verify_trend_semantics
+
+                sem_ok, sem_outcome, sem_reason = verify_trend_semantics(
+                    claim_text=claim.claim_text,
+                    receipt=calc,
+                    numeric_values=claim.numeric_values,
+                    tolerance_pct=self.numeric_verifier.tolerance_pct,
                 )
-                contra_ids = (
-                    [calc.evidence_id] if sem_outcome == "contradicted" else []
-                )
+                if not sem_ok:
+                    outcome = (
+                        VerificationOutcome.CONTRADICTED
+                        if sem_outcome == "contradicted"
+                        else VerificationOutcome.UNSUPPORTED
+                    )
+                    contra_ids = (
+                        [calc.evidence_id] if sem_outcome == "contradicted" else []
+                    )
+                    return self._make_result(
+                        claim=claim,
+                        outcome=outcome,
+                        verification_reason=sem_reason,
+                        verification_method="trend_semantic_verifier",
+                        confidence_score=0.98 if sem_outcome == "contradicted" else 0.95,
+                        contradicting_evidence_ids=contra_ids,
+                        period_check=period_detail,
+                        warnings=[sem_reason],
+                    )
+
                 return self._make_result(
                     claim=claim,
-                    outcome=outcome,
+                    outcome=VerificationOutcome.SUPPORTED,
                     verification_reason=sem_reason,
                     verification_method="trend_semantic_verifier",
-                    confidence_score=0.98 if sem_outcome == "contradicted" else 0.95,
-                    contradicting_evidence_ids=contra_ids,
+                    confidence_score=1.0,
+                    supporting_evidence_ids=[calc.evidence_id],
                     period_check=period_detail,
-                    warnings=[sem_reason],
+                )
+            else:
+                # Single-period calculation receipt verification
+                c_lower = claim.claim_text.lower()
+                calc_m_clean = (
+                    calc.metric_name.lower().replace("_", " ").strip()
                 )
 
-            return self._make_result(
-                claim=claim,
-                outcome=VerificationOutcome.SUPPORTED,
-                verification_reason=sem_reason,
-                verification_method="deterministic_receipt",
-                confidence_score=1.0,
-                supporting_evidence_ids=[calc.evidence_id],
-                period_check=period_detail,
-            )
+                known_metrics = {
+                    "revenue": "revenue",
+                    "sales": "revenue",
+                    "gross profit": "gross_profit_margin",
+                    "gross margin": "gross_profit_margin",
+                    "operating margin": "operating_profit_margin",
+                    "operating income": "operating_profit_margin",
+                    "net margin": "net_profit_margin",
+                    "net income": "net_profit_margin",
+                    "current ratio": "current_ratio",
+                    "quick ratio": "quick_ratio",
+                    "debt to equity": "debt_to_equity",
+                    "free cash flow": "free_cash_flow",
+                    "return on assets": "return_on_assets",
+                    "return on equity": "return_on_equity",
+                }
+                mismatch_metric = None
+                for kw, canon in known_metrics.items():
+                    if kw in c_lower:
+                        canon_clean = canon.replace("_", " ")
+                        if (
+                            canon_clean not in calc_m_clean
+                            and calc_m_clean not in canon_clean
+                            and kw not in calc_m_clean
+                        ):
+                            mismatch_metric = kw
+                            break
+                if mismatch_metric:
+                    return self._make_result(
+                        claim=claim,
+                        outcome=VerificationOutcome.UNSUPPORTED,
+                        verification_reason=(
+                            f"Metric mismatch: Claim asserts '{mismatch_metric}' which differs from cited "
+                            f"calculation receipt {calc.calculation_id} ({calc.metric_name})."
+                        ),
+                        confidence_score=0.95,
+                        verification_method="metric_alignment_check",
+                        period_check=period_detail,
+                        warnings=[f"Metric mismatch with receipt {calc.calculation_id}"],
+                    )
+
+                return self._make_result(
+                    claim=claim,
+                    outcome=VerificationOutcome.SUPPORTED,
+                    verification_reason=(
+                        f"Deterministic calculation receipt {calc.evidence_id} ({calc.calculation_id}) "
+                        f"verifies {calc.metric_name} = {calc.calculated_value:.4f} {calc.unit}."
+                    ),
+                    verification_method="deterministic_receipt",
+                    confidence_score=1.0,
+                    supporting_evidence_ids=[calc.evidence_id],
+                    period_check=period_detail,
+                )
 
         # Check 7: Lexical & Semantic Overlap with Cited Filing Passages
         cited_passages = [

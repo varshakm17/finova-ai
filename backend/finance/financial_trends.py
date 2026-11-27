@@ -18,6 +18,46 @@ from backend.verification.period_verifier import normalize_period
 logger = get_logger("financial_trends")
 
 
+def parse_period_chronological_key(period_str: str | None) -> tuple[int, int, str]:
+    """Extract a numeric sort key (year, quarter/month, raw) to verify chronological ordering."""
+    if not period_str:
+        return (0, 0, "")
+    norm = normalize_period(str(period_str)) or str(period_str).strip()
+    # Check date YYYY-MM-DD
+    m_date = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", norm)
+    if m_date:
+        return (int(m_date.group(1)), int(m_date.group(2)), norm)
+    # Check quarter Q[1-4] FYYYYY or FYYYYY-Q[1-4]
+    m_q = re.search(r"Q([1-4])", norm, re.IGNORECASE)
+    m_y = re.search(r"(?:19|20)\d{2}", norm)
+    if m_q and m_y:
+        return (int(m_y.group(0)), int(m_q.group(1)), norm)
+    # Check annual FYYYYY or YYYY
+    if m_y:
+        return (int(m_y.group(0)), 0, norm)
+    return (0, 0, norm)
+
+
+def are_units_compatible(u1: str | None, u2: str | None) -> bool:
+    """Check if two observation or calculation units are mathematically compatible."""
+    if not u1 or not u2:
+        return True
+    u1_clean = str(u1).lower().strip()
+    u2_clean = str(u2).lower().strip()
+    if u1_clean == u2_clean:
+        return True
+    pcts = {"%", "percentage", "pct", "percent", "bps"}
+    if u1_clean in pcts and u2_clean in pcts:
+        return True
+    currs = {"usd", "$", "dollar", "dollars"}
+    if u1_clean in currs and u2_clean in currs:
+        return True
+    ratios = {"ratio", "x", "multiple"}
+    if u1_clean in ratios and u2_clean in ratios:
+        return True
+    return False
+
+
 class TrajectoryType(str, Enum):
     """Deterministic trajectory classification for multi-period financial trends."""
 
@@ -289,12 +329,18 @@ def verify_trend_math(
         1. Non-empty receipt with valid calculation_id and metric_name.
         2. Presence of finite start_value and end_value.
         3. Extraction of ordered observation series (at least 2 observations).
-        4. Independent recalculation and validation of absolute change.
-        5. Independent recalculation and validation of percentage change (if applicable).
-        6. Zero denominator handling: undefined percentage change if start_value is 0.
-        7. Trajectory classification recalculation and validation against recorded trajectory.
-        8. Formula metadata agreement between formula_name and formula_expression.
-        9. Mathematical agreement between calculated_value and recalculated value.
+        4. Observation count strictly matches period count.
+        5. Chronological period ordering without duplicates.
+        6. Absence of missing intermediate annual periods (e.g. FY2021 to FY2023 requires all 3 years).
+        7. Observation unit compatibility across all data points and receipt unit.
+        8. Matching of first and last observations with start_value and end_value.
+        9. Independent recalculation of absolute and percentage changes.
+        10. Independent recalculation of trajectory from complete observation series.
+        11. Rejection of two-period series claiming mixed trajectory.
+        12. Agreement between recorded trajectory and recalculated trajectory.
+        13. Zero denominator handling: undefined percentage change if start_value is 0.
+        14. Formula metadata agreement between formula_name and formula_expression.
+        15. Mathematical agreement between calculated_value and recalculated value.
 
     Returns:
         (is_valid, explanation)
@@ -311,6 +357,11 @@ def verify_trend_math(
         metric_name = receipt.get("metric_name", "Trend")
         recorded_traj = receipt.get("trajectory")
         top_obs = receipt.get("observations") or receipt.get("values")
+        raw_periods = receipt.get("periods")
+        p_start = receipt.get("period_start", "")
+        p_end = receipt.get("period_end", "")
+        recorded_abs = receipt.get("absolute_change")
+        recorded_pct = receipt.get("percentage_change")
     else:
         calc_val = receipt.calculated_value
         unit = receipt.unit
@@ -326,17 +377,21 @@ def verify_trend_math(
         top_obs = getattr(receipt, "observations", None) or getattr(
             receipt, "values", None
         )
+        raw_periods = getattr(receipt, "periods", None)
+        p_start = getattr(receipt, "period_start", "")
+        p_end = getattr(receipt, "period_end", "")
+        recorded_abs = getattr(receipt, "absolute_change", None)
+        recorded_pct = getattr(receipt, "percentage_change", None)
 
     if calc_val is None:
         return False, f"Missing calculated_value in trend receipt for {metric_name}"
 
     input_map: dict[str, float] = {}
-    input_names: list[str] = []
-    obs_from_inputs: list[tuple[int, float]] = []
+    input_units: dict[str, str] = {}
+    obs_from_inputs: list[tuple[int, float, str | None, str | None]] = []
 
     if isinstance(inputs, dict):
         for name, val in inputs.items():
-            input_names.append(name)
             if val is not None and isinstance(val, (int, float)):
                 input_map[name] = float(val)
     elif isinstance(inputs, list):
@@ -346,8 +401,10 @@ def verify_trend_math(
             if isinstance(inp, dict):
                 name = inp.get("input_name") or inp.get("name")
                 val = inp.get("value")
-                if name:
-                    input_names.append(name)
+                inp_unit = inp.get("unit")
+                inp_p = inp.get("period")
+                if name and inp_unit:
+                    input_units[name] = str(inp_unit)
                 if name and val is not None and isinstance(val, (int, float)):
                     input_map[name] = float(val)
                     if name.startswith("observation_") or "index" in inp:
@@ -357,10 +414,17 @@ def verify_trend_math(
                             if match:
                                 idx = int(match.group(1))
                         if idx is not None:
-                            obs_from_inputs.append((int(idx), float(val)))
+                            obs_from_inputs.append(
+                                (int(idx), float(val), inp_p, inp_unit)
+                            )
 
     start_v = input_map.get("start_value")
     end_v = input_map.get("end_value")
+
+    if recorded_abs is None:
+        recorded_abs = input_map.get("absolute_change")
+    if recorded_pct is None:
+        recorded_pct = input_map.get("percentage_change")
 
     if start_v is None or end_v is None:
         return (
@@ -376,19 +440,78 @@ def verify_trend_math(
     ):
         return False, f"Non-finite start or end values in trend inputs for {metric_name}"
 
+    is_pct_receipt = (
+        unit in {"%", "percentage", "pct"}
+        or "abs(V_start)" in str(formula_expr)
+        or "Percentage" in str(formula_name)
+    )
+
+    # 0. Early zero denominator check for percentage receipts
+    if is_pct_receipt and abs(start_v) < 1e-9:
+        return (
+            False,
+            f"Zero denominator: percentage change undefined for {metric_name} (start_value=0)",
+        )
+
+    expected_abs = compute_absolute_change(start_v, end_v)
+    expected_pct = compute_percentage_change(start_v, end_v)
+
+    if recorded_abs is not None and expected_abs is not None:
+        if not math.isclose(recorded_abs, expected_abs, rel_tol=0.01, abs_tol=1e-3):
+            return (
+                False,
+                f"Recorded absolute change mismatch for {metric_name}: recorded {recorded_abs}, recalculated {expected_abs}",
+            )
+
+    if recorded_pct is not None and expected_pct is not None:
+        if not math.isclose(recorded_pct, expected_pct, rel_tol=0.01, abs_tol=1e-3):
+            return (
+                False,
+                f"Recorded percentage change mismatch for {metric_name}: recorded {recorded_pct}, recalculated {expected_pct}",
+            )
+
+    if is_pct_receipt:
+        if expected_pct is None:
+            return (
+                False,
+                f"Trend percentage change undefined for {metric_name} (start_value={start_v})",
+            )
+        pct_diff = abs(calc_val - expected_pct)
+        pct_denom = abs(expected_pct) if abs(expected_pct) > 1e-6 else 1.0
+        pct_rel_err = (pct_diff / pct_denom) * 100
+        if pct_rel_err > tolerance_pct and pct_diff > 0.05:
+            return (
+                False,
+                f"Trend percentage mismatch for {metric_name}: receipt has {calc_val:.4f}, recalculated {expected_pct:.4f} (diff {pct_diff:.4f}%)",
+            )
+    else:
+        if expected_abs is None:
+            return False, f"Trend absolute change undefined for {metric_name}"
+        abs_diff = abs(calc_val - expected_abs)
+        abs_denom = abs(expected_abs) if abs(expected_abs) > 1e-6 else 1.0
+        abs_rel_err = (abs_diff / abs_denom) * 100
+        if abs_rel_err > tolerance_pct and abs_diff > 0.05:
+            return (
+                False,
+                f"Trend absolute mismatch for {metric_name}: receipt has {calc_val:.4f}, recalculated {expected_abs:.4f}",
+            )
+
     # Extract complete ordered observations
     obs_vals: list[float] = []
-    if top_obs is not None:
+    obs_units: list[str] = []
+    if top_obs:
         if not isinstance(top_obs, list) or len(top_obs) < 2:
             return (
                 False,
                 f"Missing or insufficient intermediate observations for {metric_name} (found {len(top_obs) if isinstance(top_obs, list) else 0} < 2)",
             )
-        for item in top_obs:
+        for idx, item in enumerate(top_obs):
             if isinstance(item, dict):
                 val = item.get("value")
+                u = item.get("unit")
             else:
                 val = item
+                u = unit
             if val is None:
                 return (
                     False,
@@ -402,6 +525,8 @@ def verify_trend_math(
                         f"Non-finite observation value in trend observations for {metric_name}",
                     )
                 obs_vals.append(fv)
+                if u:
+                    obs_units.append(str(u))
             except (ValueError, TypeError):
                 return (
                     False,
@@ -410,8 +535,7 @@ def verify_trend_math(
     elif obs_from_inputs and len(obs_from_inputs) >= 2:
         obs_from_inputs.sort(key=lambda x: x[0])
         obs_vals = [x[1] for x in obs_from_inputs]
-    elif start_v is not None and end_v is not None:
-        obs_vals = [start_v, end_v]
+        obs_units = [x[3] for x in obs_from_inputs if x[3]]
     else:
         return (
             False,
@@ -423,6 +547,103 @@ def verify_trend_math(
             False,
             f"Missing or insufficient intermediate observations for {metric_name} (found {len(obs_vals)} < 2)",
         )
+
+    # Extract & validate periods
+    norm_periods: list[str] = []
+    if raw_periods:
+        for p in raw_periods:
+            if p is None or str(p).strip() == "":
+                return False, f"Null or empty period in periods array for {metric_name}"
+            norm_periods.append(normalize_period(str(p)) or str(p).strip())
+    elif top_obs and isinstance(top_obs, list) and any(isinstance(o, dict) and o.get("period") for o in top_obs):
+        for o in top_obs:
+            if isinstance(o, dict) and o.get("period"):
+                norm_periods.append(normalize_period(str(o["period"])) or str(o["period"]).strip())
+    elif obs_from_inputs and any(x[2] for x in obs_from_inputs):
+        obs_from_inputs.sort(key=lambda x: x[0])
+        norm_periods = [normalize_period(str(x[2])) or str(x[2]).strip() for x in obs_from_inputs if x[2]]
+    elif p_start and p_end:
+        pk_s = parse_period_chronological_key(p_start)
+        pk_e = parse_period_chronological_key(p_end)
+        if pk_s[1] == 0 and pk_e[1] == 0 and pk_e[0] >= pk_s[0]:
+            annual_count = pk_e[0] - pk_s[0] + 1
+            if annual_count == len(obs_vals):
+                norm_periods = [f"FY{y}" for y in range(pk_s[0], pk_e[0] + 1)]
+            else:
+                return (
+                    False,
+                    f"Missing intermediate annual observations for {metric_name}: expected {annual_count} periods for {p_start} to {p_end}, found {len(obs_vals)}",
+                )
+    elif raw_periods is None and not p_start and not p_end and len(obs_vals) >= 2:
+        norm_periods = [f"Period_{i+1}" for i in range(len(obs_vals))]
+
+    if not norm_periods or len(norm_periods) < 2:
+        return (
+            False,
+            f"Missing or insufficient periods for {metric_name} (found {len(norm_periods)} < 2)",
+        )
+
+    # Reject duplicate periods
+    if len(set(norm_periods)) != len(norm_periods):
+        return (
+            False,
+            f"Duplicate periods detected in trend receipt for {metric_name}: {norm_periods}",
+        )
+
+    # Verify chronological ordering
+    period_keys = [parse_period_chronological_key(p) for p in norm_periods]
+    for i in range(len(period_keys) - 1):
+        k1 = period_keys[i]
+        k2 = period_keys[i + 1]
+        if k1[0] > k2[0] or (k1[0] == k2[0] and k1[1] >= k2[1] and k1[1] != 0):
+            return (
+                False,
+                f"Periods out of chronological order for {metric_name}: {norm_periods[i]} precedes or equals {norm_periods[i+1]}",
+            )
+
+    # Check for missing intermediate annual periods
+    for i in range(len(period_keys) - 1):
+        if period_keys[i][1] == 0 and period_keys[i + 1][1] == 0:
+            year_gap = period_keys[i + 1][0] - period_keys[i][0]
+            if year_gap > 1:
+                return (
+                    False,
+                    f"Missing intermediate period in annual series for {metric_name}: gap between {norm_periods[i]} and {norm_periods[i+1]} (expected consecutive years, found gap of {year_gap} years)",
+                )
+
+    # If period_start and period_end are specified as annual, check span continuity
+    if p_start and p_end:
+        pk_s = parse_period_chronological_key(p_start)
+        pk_e = parse_period_chronological_key(p_end)
+        if pk_s[1] == 0 and pk_e[1] == 0 and pk_e[0] > pk_s[0]:
+            expected_annual_span = pk_e[0] - pk_s[0] + 1
+            if len(norm_periods) < expected_annual_span:
+                return (
+                    False,
+                    f"Missing intermediate annual observations for {metric_name}: expected {expected_annual_span} periods for {p_start} to {p_end}, found {len(norm_periods)}",
+                )
+
+    # Require observation count to match period count
+    if len(obs_vals) != len(norm_periods):
+        return (
+            False,
+            f"Observation count ({len(obs_vals)}) does not match period count ({len(norm_periods)}) for {metric_name}",
+        )
+
+    # Verify unit compatibility
+    if obs_units:
+        base_u = obs_units[0]
+        for idx, u in enumerate(obs_units[1:], start=1):
+            if not are_units_compatible(base_u, u):
+                return (
+                    False,
+                    f"Observation unit mismatch across series for {metric_name}: observation 0 has unit '{base_u}', observation {idx} has unit '{u}'",
+                )
+        if not is_pct_receipt and not are_units_compatible(base_u, unit):
+            return (
+                False,
+                f"Observation unit mismatch for {metric_name}: observation unit '{base_u}' is incompatible with non-percentage receipt unit '{unit}'",
+            )
 
     # Validate that start and end match observations
     if not math.isclose(start_v, obs_vals[0], abs_tol=1e-4):
@@ -438,10 +659,22 @@ def verify_trend_math(
 
     # Trajectory independent recalculation & validation
     recalculated_traj = classify_trajectory(obs_vals)
+
+    # A two-observation series may be monotonic upward, monotonic downward, or flat. It must NEVER be classified as mixed!
+    if len(obs_vals) == 2 and (
+        recalculated_traj
+        in (TrajectoryType.MIXED_UPWARD_NET, TrajectoryType.MIXED_DOWNWARD_NET)
+        or (recorded_traj and "MIXED" in str(recorded_traj).upper())
+    ):
+        return (
+            False,
+            f"Two-observation series cannot establish mixed trajectory for {metric_name} (recorded '{recorded_traj}')",
+        )
+
     if recorded_traj and recorded_traj != recalculated_traj.value:
-        return False, (
-            f"Trajectory mismatch for {metric_name}: recorded '{recorded_traj}', "
-            f"recalculated '{recalculated_traj.value}' from observations {obs_vals}"
+        return (
+            False,
+            f"Trajectory mismatch for {metric_name}: recorded '{recorded_traj}', recalculated '{recalculated_traj.value}' from observations {obs_vals}",
         )
 
     # Formula metadata agreement validation
@@ -462,44 +695,9 @@ def verify_trend_math(
                     f"but formula_expression is '{formula_expr}'"
                 )
 
-    expected_abs = compute_absolute_change(start_v, end_v)
-    expected_pct = compute_percentage_change(start_v, end_v)
-
-    is_pct_receipt = (
-        unit in {"%", "percentage", "pct"}
-        or "abs(V_start)" in str(formula_expr)
-        or "Percentage" in str(formula_name)
-    )
-
     if is_pct_receipt:
-        if abs(start_v) < 1e-9:
-            return (
-                False,
-                f"Zero denominator: percentage change undefined for {metric_name} (start_value=0)",
-            )
-        if expected_pct is None:
-            return False, f"Unable to compute percentage change for {metric_name}"
-
-        # Check percentage calculation
-        if not math.isclose(
-            calc_val, expected_pct, rel_tol=tolerance_pct / 100.0, abs_tol=1e-3
-        ):
-            return False, (
-                f"Trend percentage mismatch on {metric_name}: recorded {calc_val}%, "
-                f"recalculated {expected_pct}% from start={start_v}, end={end_v}"
-            )
         return True, "Deterministic trend percentage verified"
     else:
-        # Absolute shift receipt
-        if expected_abs is None:
-            return False, f"Unable to compute absolute change for {metric_name}"
-        if not math.isclose(
-            calc_val, expected_abs, rel_tol=tolerance_pct / 100.0, abs_tol=1e-3
-        ):
-            return False, (
-                f"Trend absolute change mismatch on {metric_name}: recorded {calc_val}, "
-                f"recalculated {expected_abs} from start={start_v}, end={end_v}"
-            )
         return True, "Deterministic trend absolute change verified"
 
 
@@ -508,15 +706,20 @@ def verify_trend_semantics(
     receipt: dict[str, Any] | CalculationEvidence,
     numeric_values: list[Any] | None = None,
     tolerance_pct: float = 1.0,
+    mentioned_period: str | None = None,
 ) -> tuple[bool, str, str]:
     """Verify semantic agreement between claim narrative assertions and trend receipt.
 
     Audits:
         1. Non-empty receipt existence.
-        2. Metric identity alignment.
-        3. Qualitative trajectory agreement (mixed volatility vs monotonic).
-        4. Net directional polarity agreement.
-        5. Quantitative figures alignment against receipt calculations and observations.
+        2. Independent mathematical and observation validation of receipt.
+        3. Independent derivation of trajectory directly from actual observations.
+        4. Agreement between stored trajectory and recalculated trajectory.
+        5. Metric identity alignment.
+        6. Period identity alignment.
+        7. Qualitative trajectory agreement (mixed volatility vs monotonic).
+        8. Net directional polarity agreement.
+        9. Quantitative figures alignment against receipt calculations.
 
     Returns:
         (is_supported, outcome, reason)
@@ -529,29 +732,83 @@ def verify_trend_semantics(
             "Claim cites missing or non-existent calculation receipt.",
         )
 
+    # 1. Independent mathematical and observational validation
+    is_valid, math_reason = verify_trend_math(receipt, tolerance_pct=tolerance_pct)
+    if not is_valid:
+        if (
+            "missing" in math_reason.lower()
+            or "insufficient" in math_reason.lower()
+            or "null" in math_reason.lower()
+        ):
+            return (
+                False,
+                "incomplete",
+                f"Receipt failed completeness validation: {math_reason}",
+            )
+        elif (
+            "trajectory" in math_reason.lower()
+            or "stored trajectory" in math_reason.lower()
+        ):
+            return (
+                False,
+                "contradicted",
+                f"Receipt failed trajectory validation: {math_reason}",
+            )
+        return (
+            False,
+            "unsupported",
+            f"Receipt failed mathematical validation: {math_reason}",
+        )
+
     if isinstance(receipt, dict):
         calc_id = receipt.get("calculation_id", "receipt")
         m_name = receipt.get("metric_name", "")
         calc_val = receipt.get("calculated_value")
         unit = receipt.get("unit", "")
-        recorded_traj = receipt.get("trajectory")
-        obs_vals = receipt.get("values", [])
+        obs_vals = receipt.get("values") or [
+            o["value"] if isinstance(o, dict) else o
+            for o in receipt.get("observations", [])
+            if (isinstance(o, dict) and "value" in o) or isinstance(o, (int, float))
+        ] or [
+            inp.get("value")
+            for inp in receipt.get("inputs", [])
+            if isinstance(inp, dict) and ("observation_" in inp.get("input_name", "") or "observation_" in inp.get("name", ""))
+        ]
+        periods = receipt.get("periods", [])
+        p_start = receipt.get("period_start", "")
+        p_end = receipt.get("period_end", "")
     else:
         calc_id = receipt.calculation_id
         m_name = receipt.metric_name
         calc_val = receipt.calculated_value
         unit = receipt.unit
-        recorded_traj = getattr(receipt, "trajectory", None)
-        obs_vals = getattr(receipt, "values", []) or [
+        obs_vals = getattr(receipt, "values", None) or [
+            o["value"] if isinstance(o, dict) else o
+            for o in (getattr(receipt, "observations", None) or [])
+            if (isinstance(o, dict) and "value" in o) or isinstance(o, (int, float))
+        ] or [
             inp.get("value")
-            for inp in getattr(receipt, "input_observations", [])
-            if "observation_" in inp.get("input_name", "")
+            for inp in (getattr(receipt, "input_observations", None) or getattr(receipt, "inputs", None) or [])
+            if isinstance(inp, dict) and ("observation_" in inp.get("input_name", "") or "observation_" in inp.get("name", ""))
         ]
+        periods = getattr(receipt, "periods", None) or []
+        p_start = getattr(receipt, "period_start", "")
+        p_end = getattr(receipt, "period_end", "")
+
+    if not periods and p_start and p_end:
+        pk_s = parse_period_chronological_key(p_start)
+        pk_e = parse_period_chronological_key(p_end)
+        if pk_s[1] == 0 and pk_e[1] == 0 and pk_e[0] >= pk_s[0] and (pk_e[0] - pk_s[0] + 1 == len(obs_vals or [])):
+            periods = [f"FY{y}" for y in range(pk_s[0], pk_e[0] + 1)]
+
+    # Derive trajectory directly from verified observations
+    recalculated_traj = classify_trajectory(obs_vals)
+    traj_str = recalculated_traj.value
 
     c_lower = claim_text.lower()
     calc_m_clean = m_name.lower().replace("_", " ").replace(" trend", "").strip()
 
-    # 1. Metric Identity Alignment Check
+    # 2. Metric Identity Alignment Check
     known_metrics = {
         "revenue": "revenue",
         "sales": "revenue",
@@ -583,12 +840,38 @@ def verify_trend_semantics(
                     f"calculation receipt {calc_id} ({m_name}).",
                 )
 
-    # Resolve trajectory
-    if not recorded_traj and obs_vals and len(obs_vals) >= 2:
-        recorded_traj = classify_trajectory(obs_vals).value
-    traj_str = str(recorded_traj) if recorded_traj else "INSUFFICIENT_DATA"
+    # 3. Period Identity Alignment Check
+    if mentioned_period:
+        norm_mp = normalize_period(mentioned_period)
+        norm_periods = [normalize_period(p) for p in periods]
+        p_span = f"{normalize_period(p_start)}-{normalize_period(p_end)}"
+        if (
+            norm_mp not in norm_periods
+            and norm_mp != p_span
+            and norm_mp != normalize_period(p_start)
+            and norm_mp != normalize_period(p_end)
+        ):
+            return (
+                False,
+                "unsupported",
+                f"Period mismatch: Claim asserts period '{mentioned_period}' which does not align with trend receipt periods {norm_periods} ({p_span}).",
+            )
 
-    # 2. Trajectory Semantic Agreement Check
+    years_in_text = re.findall(r"\b(?:FY\s*)?(20\d{2})\b", claim_text, re.IGNORECASE)
+    if years_in_text:
+        receipt_years = [
+            re.search(r"20\d{2}", p).group(0)
+            for p in periods
+            if re.search(r"20\d{2}", p)
+        ]
+        if receipt_years and all(y not in receipt_years for y in years_in_text):
+            return (
+                False,
+                "unsupported",
+                f"Period mismatch: Claim text mentions year(s) {years_in_text} not present in trend receipt periods {periods}.",
+            )
+
+    # 4. Trajectory Semantic Agreement Check
     mixed_keywords = {
         "mixed volatility",
         "mixed movement",
@@ -608,7 +891,23 @@ def verify_trend_semantics(
     asserts_mixed = any(kw in c_lower for kw in mixed_keywords)
     asserts_monotonic = any(kw in c_lower for kw in monotonic_keywords)
 
+    if (
+        recalculated_traj == TrajectoryType.INSUFFICIENT_DATA
+        and (asserts_mixed or asserts_monotonic)
+    ):
+        return (
+            False,
+            "incomplete",
+            "Observation series has insufficient data to verify trend trajectory.",
+        )
+
     if asserts_mixed:
+        if len(obs_vals) < 3:
+            return (
+                False,
+                "contradicted",
+                f"Trajectory contradiction: Claim asserts mixed volatility, but series contains only {len(obs_vals)} observations, which cannot establish mixed movement.",
+            )
         if traj_str in ("MONOTONIC_UPWARD", "MONOTONIC_DOWNWARD"):
             return (
                 False,
@@ -633,7 +932,7 @@ def verify_trend_semantics(
                 f"demonstrate mixed volatility ({traj_str}).",
             )
 
-    # 3. Directional Polarity Agreement Check
+    # 5. Directional Polarity Agreement Check
     if calc_val is not None:
         c_clean = c_lower
         for metric_title in [
@@ -705,10 +1004,39 @@ def verify_trend_semantics(
                 f"receipt {calc_id} calculated positive growth ({calc_val} {unit}).",
             )
 
+    # 6. Quantitative Figures Alignment Check
+    if numeric_values:
+        for nv in numeric_values:
+            val = getattr(nv, "numeric_value", None)
+            if val is not None and isinstance(val, (int, float)):
+                # If claim asserts a percentage that clearly contradicts calc_val
+                if getattr(nv, "is_percentage", False) or "%" in getattr(
+                    nv, "raw_text", ""
+                ):
+                    if calc_val is not None and abs(calc_val) > 1.0:
+                        if not math.isclose(
+                            val,
+                            calc_val,
+                            rel_tol=tolerance_pct / 100.0,
+                            abs_tol=2.0,
+                        ):
+                            # Also check if it matches an intermediate observation
+                            if not any(
+                                math.isclose(
+                                    val, obs_v, rel_tol=tolerance_pct / 100.0, abs_tol=2.0
+                                )
+                                for obs_v in obs_vals
+                            ):
+                                return (
+                                    False,
+                                    "unsupported",
+                                    f"Numeric mismatch: Claim asserts percentage {val}% which does not match receipt calculated value {calc_val}% or intermediate observations.",
+                                )
+
     return (
         True,
         "supported",
-        f"Claim supported by deterministic calculation receipt {calc_id} ({m_name} = {calc_val} {unit}).",
+        f"Claim supported by verified trend receipt {calc_id} ({m_name} = {calc_val} {unit}, trajectory={traj_str}).",
     )
 
 
@@ -753,8 +1081,14 @@ class TrendReceiptAuditor:
                 "recalculated_percentage_change": None,
                 "start_value": None,
                 "end_value": None,
+                "periods": [],
                 "observations": [],
+                "observation_values": [],
+                "observation_units": [],
+                "independently_calculated_trajectory": "INSUFFICIENT_DATA",
+                "recorded_trajectory": None,
                 "trajectory": "INSUFFICIENT_DATA",
+                "supporting_receipt_ids": [],
             }
             return failed_record
 
@@ -767,9 +1101,21 @@ class TrendReceiptAuditor:
             unit = receipt.get("unit", "")
             p_start = receipt.get("period_start", "")
             p_end = receipt.get("period_end", "")
+            formula_name = receipt.get("formula_name", "")
             formula_expr = receipt.get("formula_expression", "")
             inputs = receipt.get("inputs", [])
             supporting_ids = receipt.get("supporting_receipt_ids", [])
+            recorded_traj = receipt.get("trajectory")
+            periods_list = receipt.get("periods") or []
+            obs_list = receipt.get("observations") or []
+            obs_vals = receipt.get("values") or [
+                o.get("value")
+                for o in obs_list
+                if isinstance(o, dict) and "value" in o
+            ]
+            obs_units = receipt.get("observation_units") or [
+                o.get("unit") for o in obs_list if isinstance(o, dict) and "unit" in o
+            ]
         else:
             calc_id = receipt.calculation_id or cit_upper
             m_name = receipt.metric_name
@@ -777,6 +1123,7 @@ class TrendReceiptAuditor:
             unit = receipt.unit
             p_start = getattr(receipt, "period_start", "")
             p_end = getattr(receipt, "period_end", "")
+            formula_name = getattr(receipt, "formula_name", "")
             formula_expr = getattr(receipt, "formula_expression", "") or getattr(
                 receipt, "formula", ""
             )
@@ -784,12 +1131,25 @@ class TrendReceiptAuditor:
                 receipt, "input_observations", []
             )
             supporting_ids = getattr(receipt, "supporting_receipt_ids", [])
+            recorded_traj = getattr(receipt, "trajectory", None)
+            periods_list = getattr(receipt, "periods", None) or []
+            obs_list = getattr(receipt, "observations", None) or []
+            obs_vals = getattr(receipt, "values", None) or [
+                o.get("value")
+                for o in obs_list
+                if isinstance(o, dict) and "value" in o
+            ]
+            obs_units = getattr(receipt, "observation_units", None) or [
+                o.get("unit") for o in obs_list if isinstance(o, dict) and "unit" in o
+            ]
 
         self.citation_to_calc_id[cit_upper] = calc_id
         if calc_id not in self.receipt_to_claims:
             self.receipt_to_claims[calc_id] = set()
         if claim_id:
             self.receipt_to_claims[calc_id].add(claim_id)
+            if cit_upper not in self.claim_to_citations.setdefault(claim_id, []):
+                self.claim_to_citations[claim_id].append(cit_upper)
 
         # Return cached evaluation if already audited (guaranteeing single independent evaluation)
         if calc_id in self.audited_receipts:
@@ -799,6 +1159,8 @@ class TrendReceiptAuditor:
         is_valid, reason = verify_trend_math(receipt, tolerance_pct=self.tolerance_pct)
 
         input_map: dict[str, float] = {}
+        obs_from_inputs: list[tuple[int, float, str | None, str | None]] = []
+
         if isinstance(inputs, dict):
             input_map = {
                 k: float(v)
@@ -812,8 +1174,20 @@ class TrendReceiptAuditor:
                 if isinstance(inp, dict):
                     k = inp.get("input_name") or inp.get("name")
                     v = inp.get("value")
+                    inp_p = inp.get("period")
+                    inp_u = inp.get("unit")
                     if k and v is not None and isinstance(v, (int, float)):
                         input_map[k] = float(v)
+                        if k.startswith("observation_") or "index" in inp:
+                            idx = inp.get("index")
+                            if idx is None:
+                                match = re.search(r"^observation_(\d+)_", k)
+                                if match:
+                                    idx = int(match.group(1))
+                            if idx is not None:
+                                obs_from_inputs.append(
+                                    (int(idx), float(v), inp_p, inp_u)
+                                )
 
         start_v = input_map.get("start_value")
         end_v = input_map.get("end_value")
@@ -829,14 +1203,16 @@ class TrendReceiptAuditor:
             else None
         )
 
-        obs_vals = (
-            receipt.get("values", [])
-            if isinstance(receipt, dict)
-            else getattr(receipt, "values", [])
-        )
-        if not obs_vals and start_v is not None and end_v is not None:
-            obs_vals = [start_v, end_v]
-        trajectory = classify_trajectory(obs_vals).value
+        if not obs_vals and obs_from_inputs:
+            obs_from_inputs.sort(key=lambda x: x[0])
+            obs_vals = [x[1] for x in obs_from_inputs]
+            if not periods_list:
+                periods_list = [x[2] for x in obs_from_inputs if x[2]]
+            if not obs_units:
+                obs_units = [x[3] for x in obs_from_inputs if x[3]]
+
+        recalculated_traj = classify_trajectory(obs_vals)
+        independent_traj = recalculated_traj.value
 
         if is_valid:
             status = "verified"
@@ -849,20 +1225,44 @@ class TrendReceiptAuditor:
         else:
             status = "failed_recalculation"
 
+        norm_periods = [
+            normalize_period(str(p)) or str(p) for p in periods_list
+        ]
+        if not obs_units:
+            obs_units = [unit] * len(obs_vals)
+
+        formatted_observations = []
+        if obs_list:
+            formatted_observations = obs_list
+        elif obs_vals and norm_periods and len(obs_vals) == len(norm_periods):
+            formatted_observations = [
+                {"period": p, "value": v, "unit": u}
+                for p, v, u in zip(norm_periods, obs_vals, obs_units)
+            ]
+
         record: dict[str, Any] = {
             "citation_id": cit_upper,
             "calculation_id": calc_id,
             "metric_name": m_name,
             "period_start": p_start,
             "period_end": p_end,
+            "periods": norm_periods,
+            "observations": formatted_observations,
+            "observation_values": obs_vals,
+            "observation_units": obs_units,
             "start_value": start_v,
             "end_value": end_v,
             "calculated_absolute_change": recalc_abs,
             "calculated_percentage_change": recalc_pct,
+            "recalculated_absolute_change": recalc_abs,
+            "recalculated_percentage_change": recalc_pct,
             "recorded_receipt_value": calc_val,
             "unit": unit,
+            "formula_name": formula_name,
             "formula_expression": formula_expr,
-            "trajectory": trajectory,
+            "recorded_trajectory": recorded_traj,
+            "independently_calculated_trajectory": independent_traj,
+            "trajectory": independent_traj,
             "status": status,
             "is_valid": is_valid,
             "verification_reason": reason,

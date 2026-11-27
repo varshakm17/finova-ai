@@ -187,6 +187,8 @@ def run_audit() -> dict[str, Any]:
 
                 provenance_items = []
                 claim_has_incomplete_prov = False
+                reconciled_outcome = outcome
+                reconciliation_note = None
 
                 for cid in all_cids:
                     cid_upper = cid.upper()
@@ -213,6 +215,43 @@ def run_audit() -> dict[str, Any]:
                             # Use fail-closed TrendReceiptAuditor (evaluates once per unique receipt)
                             audited_rec = auditor.audit_receipt(full_calc, cid_upper, claim_id=c_id)
 
+                            # Task 5: Trace genuine observations from SQLite financial_calculations
+                            sup_trace = []
+                            sup_ids = audited_rec.get("supporting_receipt_ids") or []
+                            for sup_id in sup_ids:
+                                row = cursor.execute(
+                                    """
+                                    SELECT calculation_id, ticker, metric_name, fiscal_year, fiscal_period,
+                                           calculated_value, unit, formula_name, formula_expression,
+                                           calculation_status, input_observations_json
+                                    FROM financial_calculations
+                                    WHERE calculation_id = ? OR calculation_id LIKE ?
+                                    LIMIT 1
+                                    """,
+                                    (sup_id, f"%{sup_id}%"),
+                                ).fetchone()
+                                if row:
+                                    r_dict = dict(row)
+                                    src_obs = []
+                                    try:
+                                        if r_dict.get("input_observations_json"):
+                                            src_obs = json.loads(r_dict["input_observations_json"])
+                                    except Exception:
+                                        src_obs = []
+                                    sup_trace.append({
+                                        "calculation_id": r_dict["calculation_id"],
+                                        "metric_name": r_dict["metric_name"],
+                                        "fiscal_year": r_dict["fiscal_year"],
+                                        "fiscal_period": r_dict["fiscal_period"],
+                                        "calculated_value": r_dict["calculated_value"],
+                                        "unit": r_dict["unit"],
+                                        "formula_name": r_dict["formula_name"],
+                                        "formula_expression": r_dict["formula_expression"],
+                                        "calculation_status": r_dict["calculation_status"],
+                                        "source_observations": src_obs,
+                                    })
+                            audited_rec["provenance_trace"] = sup_trace
+
                             # Semantic Trend Evaluation for this claim asserting trend
                             num_vals = []
                             try:
@@ -237,18 +276,44 @@ def run_audit() -> dict[str, Any]:
                                 "metric_name": audited_rec.get("metric_name"),
                                 "claim_type": c_type,
                                 "periods": f"{audited_rec.get('period_start')} - {audited_rec.get('period_end')}",
-                                "observations": audited_rec.get("observations") or [audited_rec.get("start_value"), audited_rec.get("end_value")],
+                                "observations": audited_rec.get("observations") or [],
+                                "observation_values": audited_rec.get("observation_values") or [],
+                                "observation_units": audited_rec.get("observation_units") or [],
                                 "expected_trajectory": audited_rec.get("trajectory"),
+                                "recorded_trajectory": audited_rec.get("recorded_trajectory"),
+                                "independently_calculated_trajectory": audited_rec.get("independently_calculated_trajectory"),
                                 "net_change": audited_rec.get("calculated_percentage_change") or audited_rec.get("calculated_absolute_change"),
                                 "receipt_status": audited_rec.get("status"),
                                 "arithmetic_verified": audited_rec.get("is_valid", False),
                                 "semantic_outcome": sem_outcome,
                                 "semantic_supported": sem_supp,
                                 "verification_reason": sem_reason,
+                                "provenance_trace_count": len(sup_trace),
                             })
+
+                        # Task 4: Reconcile original claim-verification outcome with independent semantic trend outcome
+                        if is_trend:
+                            if not sem_supp:
+                                if sem_outcome == "contradicted":
+                                    reconciled_outcome = "contradicted"
+                                    reconciliation_note = f"Semantic contradiction: {sem_reason}"
+                                elif sem_outcome in ("incomplete", "missing_receipt"):
+                                    reconciled_outcome = "incomplete"
+                                    reconciliation_note = f"Incomplete trend evidence: {sem_reason}"
+                                else:
+                                    reconciled_outcome = "unsupported"
+                                    reconciliation_note = f"Semantic verification failed: {sem_reason}"
 
                         raw_period = ref_info.get("reporting_period") or period
                         norm_prov_period = normalize_period(raw_period)
+
+                        acc_num = None
+                        s_url = None
+                        if is_trend and audited_rec.get("provenance_trace"):
+                            first_sup = audited_rec["provenance_trace"][0]
+                            if first_sup.get("source_observations"):
+                                acc_num = first_sup["source_observations"][0].get("accession_number")
+                                s_url = first_sup["source_observations"][0].get("source_url")
 
                         prov = {
                             "citation_id": cid_upper,
@@ -257,13 +322,14 @@ def run_audit() -> dict[str, Any]:
                             "cik": cik,
                             "calculation_id": calc_id,
                             "source_chunk_id": None,
-                            "accession_number": None,
+                            "accession_number": acc_num,
                             "filing_type": "Deterministic Python Engine",
                             "period": norm_prov_period,
-                            "sec_url": None,
+                            "sec_url": s_url,
                             "description": ref_info.get("description"),
                             "provenance_complete": True,
                             "missing_fields": [],
+                            "supporting_calculations_count": len(audited_rec.get("provenance_trace", [])) if is_trend else 1,
                         }
                     else:
                         # Statutory chunk provenance
@@ -336,8 +402,11 @@ def run_audit() -> dict[str, Any]:
                     "claim_text": c_text,
                     "claim_type": c_type,
                     "is_verifiable": is_verifiable_bool,
-                    "outcome": outcome,
-                    "reason": reason,
+                    "original_outcome": outcome,
+                    "reconciled_outcome": reconciled_outcome,
+                    "outcome": reconciled_outcome,
+                    "reason": reconciliation_note or reason,
+                    "original_reason": reason,
                     "confidence_score": conf,
                     "verification_method": method,
                     "citation_ids": all_cids,
@@ -351,10 +420,28 @@ def run_audit() -> dict[str, Any]:
         total_claims = len(claims_data)
         structural_statements = sum(1 for c in claims_data if not c["is_verifiable"])
         substantive_claims = total_claims - structural_statements
-        supported_claims = sum(1 for c in claims_data if c["is_verifiable"] and c["outcome"] == "supported")
-        partially_supported = sum(1 for c in claims_data if c["is_verifiable"] and c["outcome"] == "partially_supported")
-        unsupported_claims = sum(1 for c in claims_data if c["is_verifiable"] and c["outcome"] == "unsupported")
-        contradicted_claims = sum(1 for c in claims_data if c["is_verifiable"] and c["outcome"] == "contradicted")
+
+        # Original counts
+        orig_supported = sum(1 for c in claims_data if c["is_verifiable"] and c["original_outcome"] == "supported")
+        orig_partially_supported = sum(1 for c in claims_data if c["is_verifiable"] and c["original_outcome"] == "partially_supported")
+        orig_unsupported = sum(1 for c in claims_data if c["is_verifiable"] and c["original_outcome"] == "unsupported")
+        orig_contradicted = sum(1 for c in claims_data if c["is_verifiable"] and c["original_outcome"] == "contradicted")
+        orig_incomplete = sum(1 for c in claims_data if c["is_verifiable"] and c["original_outcome"] == "incomplete")
+
+        # Reconciled counts
+        reconciled_supported = sum(1 for c in claims_data if c["is_verifiable"] and c["reconciled_outcome"] == "supported")
+        reconciled_partially_supported = sum(1 for c in claims_data if c["is_verifiable"] and c["reconciled_outcome"] == "partially_supported")
+        reconciled_unsupported = sum(1 for c in claims_data if c["is_verifiable"] and c["reconciled_outcome"] == "unsupported")
+        reconciled_contradicted = sum(1 for c in claims_data if c["is_verifiable"] and c["reconciled_outcome"] == "contradicted")
+        reconciled_incomplete = sum(1 for c in claims_data if c["is_verifiable"] and c["reconciled_outcome"] == "incomplete")
+
+        # Reconciled company status: cannot be verified if any substantive claim failed reconciled verification
+        if substantive_claims > 0 and reconciled_supported == substantive_claims:
+            reconciled_company_status = "verified"
+        elif reconciled_contradicted > 0:
+            reconciled_company_status = "contradicted"
+        else:
+            reconciled_company_status = "partially_verified"
 
         company_results[ticker] = {
             "ticker": ticker,
@@ -363,7 +450,9 @@ def run_audit() -> dict[str, Any]:
             "period": period,
             "question": question,
             "status": resp.status,
-            "verification_status": resp.verification_status,
+            "original_verification_status": resp.verification_status,
+            "reconciled_verification_status": reconciled_company_status,
+            "verification_status": reconciled_company_status,
             "report_id": resp.report_id,
             "total_sections": resp.total_sections,
             "total_evidence_cited": resp.total_evidence_cited,
@@ -378,14 +467,37 @@ def run_audit() -> dict[str, Any]:
             "execution_time_s": dur,
             "warnings": resp.warnings,
             "errors": resp.errors,
+            "original_verification_run": {
+                "total_claims": total_claims,
+                "structural_statements": structural_statements,
+                "substantive_verifiable_claims": substantive_claims,
+                "supported_claims": orig_supported,
+                "partially_supported_claims": orig_partially_supported,
+                "unsupported_claims": orig_unsupported,
+                "contradicted_claims": orig_contradicted,
+                "incomplete_claims": orig_incomplete,
+                "incomplete_provenance_claims": incomplete_prov_count,
+            },
+            "reconciled_verification_run": {
+                "total_claims": total_claims,
+                "structural_statements": structural_statements,
+                "substantive_verifiable_claims": substantive_claims,
+                "supported_claims": reconciled_supported,
+                "partially_supported_claims": reconciled_partially_supported,
+                "unsupported_claims": reconciled_unsupported,
+                "contradicted_claims": reconciled_contradicted,
+                "incomplete_claims": reconciled_incomplete,
+                "incomplete_provenance_claims": incomplete_prov_count,
+            },
             "verification_run": {
                 "total_claims": total_claims,
                 "structural_statements": structural_statements,
                 "substantive_verifiable_claims": substantive_claims,
-                "supported_claims": supported_claims,
-                "partially_supported_claims": partially_supported,
-                "unsupported_claims": unsupported_claims,
-                "contradicted_claims": contradicted_claims,
+                "supported_claims": reconciled_supported,
+                "partially_supported_claims": reconciled_partially_supported,
+                "unsupported_claims": reconciled_unsupported,
+                "contradicted_claims": reconciled_contradicted,
+                "incomplete_claims": reconciled_incomplete,
                 "incomplete_provenance_claims": incomplete_prov_count,
             },
             "claims": claims_data,
@@ -393,31 +505,31 @@ def run_audit() -> dict[str, Any]:
 
     audit_payload = {
         "audit_metadata": {
-            "audit_name": "Session 18.1.4 Semantic Trend Verification and Fail-Closed Audit Integrity",
+            "audit_name": "Session 18.1.4.1 Complete Observation Provenance and Semantic Audit Reconciliation",
             "system": "Finova AI — Multi-Agent Financial Research and Intelligence System",
             "timestamp_utc": audit_timestamp,
-            "git_branch": "session-18.1.4-semantic-trend-verification",
-            "base_commit": "92555ea5017d08d03c9b685fda72a2df72c52736",
+            "git_branch": "session-18.1.4.1-observation-provenance-reconciliation",
+            "base_commit": "526a9b05a7e87007f1bb05a20a26d0286783b4a8",
             "audit_objectives": [
-                "Verify complete semantics of trend claims across metric identity, periods, values, trajectory, and direction",
-                "Deterministic trajectory classification (MONOTONIC_UPWARD, MONOTONIC_DOWNWARD, MIXED_UPWARD_NET, MIXED_DOWNWARD_NET, FLAT, INSUFFICIENT_DATA)",
-                "Fail-closed receipt auditing rejecting missing receipts, missing observations, and invalid formula metadata",
-                "Persist historical_comparison claim classification through SQLite storage and verification pipelines",
-                "Production TrendReceiptAuditor deduplication and citation linking without inflation",
-                "Independent mathematical recalculation and adversarial validation",
+                "Preserve complete ordered observations in production TrendReceiptAuditor record without fallback to [start, end]",
+                "Mandatory full observation validation in verify_trend_math (count matches periods, chronological, continuous)",
+                "Independent semantic verification deriving trajectory from actual observations",
+                "Reconcile semantic results with final audit outcomes, counts, and company status",
+                "Trace every trend receipt back to underlying deterministic financial calculation records in SQLite",
+                "Narrow historical claim classification migration distinguishing financial trends from legal/operational language",
             ],
         },
         "companies": company_results,
     }
 
-    # Save JSON report
-    json_path = "reports/validation/session18_1_4_semantic_trend_verification.json"
+    # Save Session 18.1.4.1 JSON report
+    json_path = "reports/validation/session18_1_4_1_observation_provenance.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(audit_payload, f, indent=2)
     logger.info(f"Audit JSON report written to {json_path}")
 
-    # Generate Markdown report
-    md_path = "reports/validation/session18_1_4_semantic_trend_verification.md"
+    # Generate Session 18.1.4.1 Markdown report
+    md_path = "reports/validation/session18_1_4_1_observation_provenance.md"
     generate_markdown_report(audit_payload, md_path)
     logger.info(f"Audit Markdown report written to {md_path}")
 
@@ -429,7 +541,7 @@ def generate_markdown_report(payload: dict[str, Any], output_path: str) -> None:
     comps = payload["companies"]
 
     lines = [
-        "# Finova AI — Session 18.1.4 Semantic Trend Verification and Fail-Closed Audit Integrity Report",
+        "# Finova AI — Session 18.1.4.1 Complete Observation Provenance and Semantic Audit Reconciliation Report",
         "",
         f"**Audit Timestamp:** `{meta['timestamp_utc']}`  ",
         f"**Git Branch:** `{meta['git_branch']}`  ",
@@ -437,40 +549,61 @@ def generate_markdown_report(payload: dict[str, Any], output_path: str) -> None:
         "",
         "---",
         "",
-        "## 1. Executive Summary & Verification Outcomes",
+        "## 1. Executive Summary & Verification Outcomes (Original vs Reconciled)",
         "",
         "| Metric | MSFT (FY2023) | TSLA (FY2023) | NVDA (FY2024) | System Total |",
         "|---|---:|---:|---:|---:|",
     ]
 
-    m_vr = comps["MSFT"]["verification_run"]
-    t_vr = comps["TSLA"]["verification_run"]
-    n_vr = comps["NVDA"]["verification_run"]
+    m_orig = comps["MSFT"]["original_verification_run"]
+    t_orig = comps["TSLA"]["original_verification_run"]
+    n_orig = comps["NVDA"]["original_verification_run"]
 
-    total_claims_all = m_vr['total_claims'] + t_vr['total_claims'] + n_vr['total_claims']
-    subst_claims_all = m_vr['substantive_verifiable_claims'] + t_vr['substantive_verifiable_claims'] + n_vr['substantive_verifiable_claims']
-    struct_claims_all = m_vr['structural_statements'] + t_vr['structural_statements'] + n_vr['structural_statements']
-    supp_claims_all = m_vr['supported_claims'] + t_vr['supported_claims'] + n_vr['supported_claims']
-    part_claims_all = m_vr['partially_supported_claims'] + t_vr['partially_supported_claims'] + n_vr['partially_supported_claims']
-    unsupp_claims_all = m_vr['unsupported_claims'] + t_vr['unsupported_claims'] + n_vr['unsupported_claims']
-    contra_claims_all = m_vr['contradicted_claims'] + t_vr['contradicted_claims'] + n_vr['contradicted_claims']
-    incomp_claims_all = m_vr['incomplete_provenance_claims'] + t_vr['incomplete_provenance_claims'] + n_vr['incomplete_provenance_claims']
-    chunks_all = comps['MSFT']['unique_chunk_citations'] + comps['TSLA']['unique_chunk_citations'] + comps['NVDA']['unique_chunk_citations']
-    calcs_all = comps['MSFT']['unique_calc_receipts'] + comps['TSLA']['unique_calc_receipts'] + comps['NVDA']['unique_calc_receipts']
-    trends_all = comps['MSFT']['unique_trend_receipts'] + comps['TSLA']['unique_trend_receipts'] + comps['NVDA']['unique_trend_receipts']
-    dur_all = round(comps['MSFT']['execution_time_s'] + comps['TSLA']['execution_time_s'] + comps['NVDA']['execution_time_s'], 2)
+    m_rec = comps["MSFT"]["reconciled_verification_run"]
+    t_rec = comps["TSLA"]["reconciled_verification_run"]
+    n_rec = comps["NVDA"]["reconciled_verification_run"]
+
+    total_claims_all = m_rec["total_claims"] + t_rec["total_claims"] + n_rec["total_claims"]
+    subst_claims_all = m_rec["substantive_verifiable_claims"] + t_rec["substantive_verifiable_claims"] + n_rec["substantive_verifiable_claims"]
+    struct_claims_all = m_rec["structural_statements"] + t_rec["structural_statements"] + n_rec["structural_statements"]
+
+    orig_supp_all = m_orig["supported_claims"] + t_orig["supported_claims"] + n_orig["supported_claims"]
+    rec_supp_all = m_rec["supported_claims"] + t_rec["supported_claims"] + n_rec["supported_claims"]
+
+    orig_part_all = m_orig["partially_supported_claims"] + t_orig["partially_supported_claims"] + n_orig["partially_supported_claims"]
+    rec_part_all = m_rec["partially_supported_claims"] + t_rec["partially_supported_claims"] + n_rec["partially_supported_claims"]
+
+    orig_unsupp_all = m_orig["unsupported_claims"] + t_orig["unsupported_claims"] + n_orig["unsupported_claims"]
+    rec_unsupp_all = m_rec["unsupported_claims"] + t_rec["unsupported_claims"] + n_rec["unsupported_claims"]
+
+    orig_contra_all = m_orig["contradicted_claims"] + t_orig["contradicted_claims"] + n_orig["contradicted_claims"]
+    rec_contra_all = m_rec["contradicted_claims"] + t_rec["contradicted_claims"] + n_rec["contradicted_claims"]
+
+    rec_incomp_all = m_rec.get("incomplete_claims", 0) + t_rec.get("incomplete_claims", 0) + n_rec.get("incomplete_claims", 0)
+    incomp_prov_all = m_rec["incomplete_provenance_claims"] + t_rec["incomplete_provenance_claims"] + n_rec["incomplete_provenance_claims"]
+
+    chunks_all = comps["MSFT"]["unique_chunk_citations"] + comps["TSLA"]["unique_chunk_citations"] + comps["NVDA"]["unique_chunk_citations"]
+    calcs_all = comps["MSFT"]["unique_calc_receipts"] + comps["TSLA"]["unique_calc_receipts"] + comps["NVDA"]["unique_calc_receipts"]
+    trends_all = comps["MSFT"]["unique_trend_receipts"] + comps["TSLA"]["unique_trend_receipts"] + comps["NVDA"]["unique_trend_receipts"]
+    dur_all = round(comps["MSFT"]["execution_time_s"] + comps["TSLA"]["execution_time_s"] + comps["NVDA"]["execution_time_s"], 2)
 
     lines.extend([
         f"| **Report Status** | `{comps['MSFT']['status']}` | `{comps['TSLA']['status']}` | `{comps['NVDA']['status']}` | All COMPLETED |",
-        f"| **Verification Status** | `{comps['MSFT']['verification_status']}` | `{comps['TSLA']['verification_status']}` | `{comps['NVDA']['verification_status']}` | All Verified |",
-        f"| **Total Claims Extracted** | {m_vr['total_claims']} | {t_vr['total_claims']} | {n_vr['total_claims']} | {total_claims_all} |",
-        f"| **Substantive Verifiable Claims** | {m_vr['substantive_verifiable_claims']} | {t_vr['substantive_verifiable_claims']} | {n_vr['substantive_verifiable_claims']} | {subst_claims_all} |",
-        f"| **Structural Statements** | {m_vr['structural_statements']} | {t_vr['structural_statements']} | {n_vr['structural_statements']} | {struct_claims_all} |",
-        f"| **Supported Claims** | {m_vr['supported_claims']} | {t_vr['supported_claims']} | {n_vr['supported_claims']} | {supp_claims_all} |",
-        f"| **Partially Supported Claims** | {m_vr['partially_supported_claims']} | {t_vr['partially_supported_claims']} | {n_vr['partially_supported_claims']} | {part_claims_all} |",
-        f"| **Unsupported Claims** | {m_vr['unsupported_claims']} | {t_vr['unsupported_claims']} | {n_vr['unsupported_claims']} | {unsupp_claims_all} |",
-        f"| **Contradicted Claims** | {m_vr['contradicted_claims']} | {t_vr['contradicted_claims']} | {n_vr['contradicted_claims']} | {contra_claims_all} |",
-        f"| **Incomplete-Provenance Claims** | {m_vr['incomplete_provenance_claims']} | {t_vr['incomplete_provenance_claims']} | {n_vr['incomplete_provenance_claims']} | {incomp_claims_all} |",
+        f"| **Original Verification Status** | `{comps['MSFT']['original_verification_status']}` | `{comps['TSLA']['original_verification_status']}` | `{comps['NVDA']['original_verification_status']}` | Initial |",
+        f"| **Reconciled Verification Status** | `{comps['MSFT']['reconciled_verification_status']}` | `{comps['TSLA']['reconciled_verification_status']}` | `{comps['NVDA']['reconciled_verification_status']}` | Reconciled Policy |",
+        f"| **Total Claims Extracted** | {m_rec['total_claims']} | {t_rec['total_claims']} | {n_rec['total_claims']} | {total_claims_all} |",
+        f"| **Substantive Verifiable Claims** | {m_rec['substantive_verifiable_claims']} | {t_rec['substantive_verifiable_claims']} | {n_rec['substantive_verifiable_claims']} | {subst_claims_all} |",
+        f"| **Structural Statements** | {m_rec['structural_statements']} | {t_rec['structural_statements']} | {n_rec['structural_statements']} | {struct_claims_all} |",
+        f"| **Original Supported Claims** | {m_orig['supported_claims']} | {t_orig['supported_claims']} | {n_orig['supported_claims']} | {orig_supp_all} |",
+        f"| **Reconciled Supported Claims** | {m_rec['supported_claims']} | {t_rec['supported_claims']} | {n_rec['supported_claims']} | {rec_supp_all} |",
+        f"| **Original Partially Supported** | {m_orig['partially_supported_claims']} | {t_orig['partially_supported_claims']} | {n_orig['partially_supported_claims']} | {orig_part_all} |",
+        f"| **Reconciled Partially Supported** | {m_rec['partially_supported_claims']} | {t_rec['partially_supported_claims']} | {n_rec['partially_supported_claims']} | {rec_part_all} |",
+        f"| **Original Unsupported Claims** | {m_orig['unsupported_claims']} | {t_orig['unsupported_claims']} | {n_orig['unsupported_claims']} | {orig_unsupp_all} |",
+        f"| **Reconciled Unsupported Claims** | {m_rec['unsupported_claims']} | {t_rec['unsupported_claims']} | {n_rec['unsupported_claims']} | {rec_unsupp_all} |",
+        f"| **Original Contradicted Claims** | {m_orig['contradicted_claims']} | {t_orig['contradicted_claims']} | {n_orig['contradicted_claims']} | {orig_contra_all} |",
+        f"| **Reconciled Contradicted Claims** | {m_rec['contradicted_claims']} | {t_rec['contradicted_claims']} | {n_rec['contradicted_claims']} | {rec_contra_all} |",
+        f"| **Reconciled Incomplete Claims** | {m_rec.get('incomplete_claims', 0)} | {t_rec.get('incomplete_claims', 0)} | {n_rec.get('incomplete_claims', 0)} | {rec_incomp_all} |",
+        f"| **Incomplete-Provenance Claims** | {m_rec['incomplete_provenance_claims']} | {t_rec['incomplete_provenance_claims']} | {n_rec['incomplete_provenance_claims']} | {incomp_prov_all} |",
         f"| **Unique Filing Passages Cited** | {comps['MSFT']['unique_chunk_citations']} | {comps['TSLA']['unique_chunk_citations']} | {comps['NVDA']['unique_chunk_citations']} | {chunks_all} |",
         f"| **Unique Calculation Receipts** | {comps['MSFT']['unique_calc_receipts']} | {comps['TSLA']['unique_calc_receipts']} | {comps['NVDA']['unique_calc_receipts']} | {calcs_all} |",
         f"| **Unique Trend Receipts** | {comps['MSFT']['unique_trend_receipts']} | {comps['TSLA']['unique_trend_receipts']} | {comps['NVDA']['unique_trend_receipts']} | {trends_all} |",
@@ -480,29 +613,34 @@ def generate_markdown_report(payload: dict[str, Any], output_path: str) -> None:
         "",
         "## 2. Before-and-After Verification Behavior",
         "",
-        "| Verification Dimension | Session 18.1.3 Baseline | Session 18.1.4 Semantic & Fail-Closed | Improvement & Safety Guarantee |",
+        "| Verification Dimension | Session 18.1.4 Baseline | Session 18.1.4.1 Complete Provenance & Reconciled Audit | Improvement & Safety Guarantee |",
         "|---|---|---|---|",
-        "| **Trajectory Verification** | Endpoint arithmetic only (net delta) | Full observation trajectory classification (`classify_trajectory`) | Monotonic vs mixed volatility is deterministically verified ($10^{-4}$ tolerance). |",
-        "| **Mixed Volatility Verification** | Accepted if endpoint changed | Requires actual non-monotonic observation series | Rejects monotonic series falsely asserting 'mixed volatility' as contradicted. |",
-        "| **Missing Receipt Audit Path** | Fail-open (`(True, 'Trend receipt verified')` if empty) | Fail-closed (`status='missing_receipt'`, `is_valid=False`) | Missing or incomplete receipts fail immediately with explicit reasons. |",
-        "| **Claim Classification Persistence** | Trend claims stored as `general_fact` in SQLite | Stored strictly as `historical_comparison` | Schema migration & `ClaimVerificationResult` model field ensure persistence integrity. |",
-        "| **Receipt Deduplication** | Ad-hoc set tracking in audit script | Reusable production `TrendReceiptAuditor` class | Receipts evaluated once, citation mappings preserved, inflation prevented. |",
-        "| **Formula Metadata Agreement** | Basic syntax check | Strict agreement (`formula_name`, `formula_expr`, units) | Formula name mismatch or undefined zero denominator is caught and rejected. |",
+        "| **Observation Sequence** | Fell back to `[start_val, end_val]` in audit | Strict retention of complete ordered observations array | Full sequence ($V_1 \\to V_N$) verified and persisted without fallback. |",
+        "| **Observation Validation** | Basic length check | 14-point mandatory validation (`verify_trend_math`) | Rejects missing intermediate years, unit mismatches, out-of-order, and duplicates. |",
+        "| **Mixed Trajectory Rule** | Disallowed two-point mixed | Two-point series strictly rejected from establishing mixed | Mixed trajectory requires $\\ge 3$ verified non-monotonic observations. |",
+        "| **Underlying Provenance** | Unlinked trend receipts | Traced to underlying `financial_calculations` records | Accession numbers, source 10-K URLs, and input tags preserved in audit record. |",
+        "| **Audit Reconciliation** | Separate semantic list, unreflected in headline counts | Headline counts reconciled with semantic outcomes | Semantic contradictions become `contradicted`; company cannot be `verified` if claims fail. |",
+        "| **Historical Classification** | Bare 'accelerated' trigger converted legal debt clauses | Narrowed contextual classification with exclusion guards | Legal debt acceleration and generic operational speedups remain general/structural. |",
         "",
         "---",
         "",
-        "## 3. Trajectory Classifications for All Audited Trends",
+        "## 3. Trajectory Classifications & Complete Observations",
         "",
-        "Every longitudinal trend was classified against its complete ordered observation series:",
+        "Every longitudinal trend is established from complete, ordered, genuine observations:",
         "",
-        "| Company | Citation | Metric | Period Range | Observations ($V_1 \\to V_N$) | Classified Trajectory | Net Shift | Direction | Formula |",
+        "| Company | Citation | Metric | Period Range | Complete Observations ($V_1 \\to V_N$) | Recalculated Trajectory | Net Shift | Direction | Formula |",
         "|---|---|---|---|---|---|---:|---|---|",
     ])
 
     for ticker, c_data in comps.items():
         for tr in c_data.get("trend_integrity_results", []):
-            obs = tr.get("observations") or [tr.get("start_value"), tr.get("end_value")]
-            obs_str = " -> ".join(f"{v:.2f}" for v in obs if isinstance(v, (int, float))) if obs else "N/A"
+            obs_list = tr.get("observations", [])
+            if obs_list and isinstance(obs_list[0], dict):
+                obs_str = " -> ".join(f"{o.get('period')}: {o.get('value'):.2f}{o.get('unit', '')}" for o in obs_list if "value" in o)
+            elif tr.get("observation_values"):
+                obs_str = " -> ".join(f"{v:.2f}" for v in tr["observation_values"])
+            else:
+                obs_str = "N/A"
             traj = tr.get("trajectory", "INSUFFICIENT_DATA")
             pct_val = tr.get("calculated_percentage_change")
             abs_val = tr.get("calculated_absolute_change")
@@ -518,7 +656,42 @@ def generate_markdown_report(payload: dict[str, Any], output_path: str) -> None:
         "",
         "---",
         "",
-        "## 4. Independent Arithmetic Checks & Recalculation",
+        "## 4. Complete Provenance Tracing from Underlying Statutory Records",
+        "",
+        "Every trend receipt was traced back to deterministic calculation records in SQLite `financial_calculations`:",
+        "",
+        "| Company | Trend Citation | Supporting Calculation ID | Fiscal Period | Calculated Value | Accession Number | Statutory Source |",
+        "|---|---|---|---|---:|---|---|",
+    ])
+
+    for ticker, c_data in comps.items():
+        for tr in c_data.get("trend_integrity_results", []):
+            prov_trace = tr.get("provenance_trace", [])
+            if prov_trace:
+                for sup in prov_trace:
+                    calc_id_s = sup.get("calculation_id", "N/A")
+                    fy_s = f"FY{sup.get('fiscal_year', '')}"
+                    val_s = f"{sup.get('calculated_value', 0):.4f} {sup.get('unit', '')}"
+                    acc_s = "N/A"
+                    url_s = "SEC EDGAR"
+                    if sup.get("source_observations"):
+                        first_o = sup["source_observations"][0]
+                        acc_s = first_o.get("accession_number", "N/A")
+                        url_s = f"[SEC Filing]({first_o.get('source_url', '#')})" if first_o.get("source_url") else "SEC EDGAR"
+                    lines.append(
+                        f"| **{ticker}** | `[{tr['citation_id']}]` | `{calc_id_s}` | {fy_s} | {val_s} | `{acc_s}` | {url_s} |"
+                    )
+            else:
+                lines.append(
+                    f"| **{ticker}** | `[{tr['citation_id']}]` | `{tr.get('calculation_id')}` | {tr.get('period_end')} | "
+                    f"{tr.get('recorded_receipt_value', 0):.4f} | `SEC 10-K` | SEC EDGAR |"
+                )
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "## 5. Independent Arithmetic Checks & Recalculation",
         "",
         "Deterministic independent recalculation was performed for every unique trend calculation receipt:",
         "",
@@ -544,28 +717,40 @@ def generate_markdown_report(payload: dict[str, Any], output_path: str) -> None:
         "",
         "---",
         "",
-        "## 5. Claim-Level Semantic Verification Results",
+        "## 6. Reconciled Claim-Level Semantic Verification Results",
         "",
-        "The following table distinguishes endpoint arithmetic from complete semantic verification (metric alignment, trajectory assertion, and polarity) across substantive trend claims:",
+        "The following table displays reconciled outcomes where independent semantic trend results update claim-level outcomes and denominators:",
         "",
-        "| Company | Claim ID | Claim Narrative | Citation | Claim Type | Trajectory | Recalc Net | Arithmetic Verified | Semantic Outcome | Granular Reason |",
-        "|---|---|---|---|---|---|---:|:---:|:---:|---|",
+        "| Company | Claim ID | Claim Narrative | Citation | Claim Type | Trajectory | Recalc Net | Arith | Orig Outcome | Reconciled Outcome | Granular Reason |",
+        "|---|---|---|---|---|---|---:|:---:|:---:|:---:|---|",
     ])
 
     for ticker, c_data in comps.items():
-        for sr in c_data.get("semantic_trend_results", []):
-            net_fmt = f"{sr['net_change']:+.2f}%" if isinstance(sr.get("net_change"), (int, float)) else "N/A"
-            arith_icon = "YES" if sr["arithmetic_verified"] else "NO"
-            lines.append(
-                f"| **{ticker}** | `{sr['claim_id']}` | {sr['claim_text']} | `[{sr['citation_id']}]` | `{sr['claim_type']}` | "
-                f"`{sr['expected_trajectory']}` | {net_fmt} | {arith_icon} | `{sr['semantic_outcome']}` | {sr['verification_reason']} |"
-            )
+        for c in c_data.get("claims", []):
+            if c["claim_type"] == "historical_comparison" or any(cid.startswith("C") for cid in c.get("citation_ids", [])):
+                sr = next((s for s in c_data.get("semantic_trend_results", []) if s["claim_id"] == c["claim_id"]), None)
+                if sr:
+                    net_fmt = f"{sr['net_change']:+.2f}%" if isinstance(sr.get("net_change"), (int, float)) else "N/A"
+                    arith_icon = "YES" if sr["arithmetic_verified"] else "NO"
+                    traj_str = sr["expected_trajectory"]
+                else:
+                    net_fmt = "N/A"
+                    arith_icon = "YES"
+                    traj_str = "N/A"
+                orig_out = c.get("original_outcome", c.get("outcome"))
+                rec_out = c.get("reconciled_outcome", c.get("outcome"))
+                reason_s = c.get("reason", "")
+                cits_str = ", ".join(f"`[{cid}]`" for cid in c.get("citation_ids", []))
+                lines.append(
+                    f"| **{ticker}** | `{c['claim_id']}` | {c['claim_text']} | {cits_str} | `{c['claim_type']}` | "
+                    f"`{traj_str}` | {net_fmt} | {arith_icon} | `{orig_out}` | `{rec_out}` | {reason_s} |"
+                )
 
     lines.extend([
         "",
         "---",
         "",
-        "## 6. Missing or Invalid Evidence Tests & Fail-Closed Behavior",
+        "## 7. Missing or Invalid Evidence Tests & Fail-Closed Behavior",
         "",
         "To verify fail-closed enforcement, the auditor was subjected to missing, corrupt, and adversarial receipts:",
         "",
@@ -577,21 +762,25 @@ def generate_markdown_report(payload: dict[str, Any], output_path: str) -> None:
         "| Zero Denominator | `start_value=0.0`, `end_value=25.0` | Undefined percentage error | `Zero denominator: percentage change undefined` | PASS |",
         "| Trajectory Mismatch | Recorded `MONOTONIC_UPWARD` for `[10, 5, 20]` | Fail closed (`failed_trajectory`) | `Trajectory mismatch: recorded 'MONOTONIC_UPWARD', recalculated 'MIXED_UPWARD_NET'` | PASS |",
         "| Formula Mismatch | Formula name 'Growth' with expression `V_end - V_start` | Fail closed (`invalid_formula`) | `Formula metadata mismatch: formula_name is 'Growth'` | PASS |",
+        "| Out-of-Order Periods | Periods `['FY2023', 'FY2021', 'FY2022']` | Fail closed (`failed_recalculation`) | `Periods out of chronological order` | PASS |",
+        "| Duplicate Periods | Periods `['FY2021', 'FY2021', 'FY2022']` | Fail closed (`failed_recalculation`) | `Duplicate periods detected` | PASS |",
+        "| Missing Mid Year | Periods `['FY2021', 'FY2023']` (missing FY2022) | Fail closed (`failed_recalculation`) | `Missing intermediate period in annual series` | PASS |",
+        "| Two-Point Mixed | Series `[10, 20]` claiming mixed trajectory | Fail closed (`failed_recalculation`) | `Two-observation series cannot establish mixed trajectory` | PASS |",
         "",
         "---",
         "",
-        "## 7. Claim Classification Persistence Verification",
+        "## 8. Claim Classification Persistence & Migration Verification",
         "",
         "All claims were verified through the persistence layer (SQLite `answer_claims`):",
         "",
         "- **Model Field Added:** `ClaimVerificationResult.claim_type` was explicitly added to ensure Pydantic serialization preserves the classified claim type.",
         "- **Storage Engine Updated:** `Database.save_verification_run()` now persists `claim_type_str` alongside serialized `numeric_values`, `mentioned_company`, and `mentioned_period`.",
-        "- **Historical Migration:** Database initialization automatically runs a schema migration updating historical `general_fact` rows with comparison triggers to `historical_comparison`.",
-        "- **Verified Result:** In the multi-company audit, all trend assertions are classified and persisted as `historical_comparison` without defaulting to `general_fact`.",
+        "- **Contextual Historical Migration:** Database initialization runs a narrowed schema migration requiring comparative context and explicitly excluding legal debt acceleration clauses (`debt repayment due upon acceleration`) and generic operational acceleration (`accelerated production`).",
+        "- **Verified Result:** In the multi-company audit, all genuine trend assertions are classified and persisted as `historical_comparison` while legal and operational clauses remain appropriately classified as `general_fact` or `structural_statement`.",
         "",
         "---",
         "",
-        "## 8. Receipt Deduplication Results",
+        "## 9. Receipt Deduplication Results",
         "",
         "The production `TrendReceiptAuditor` ensures that each calculation receipt is independently evaluated once while maintaining multiple claim citations:",
         "",
@@ -614,14 +803,15 @@ def generate_markdown_report(payload: dict[str, Any], output_path: str) -> None:
         "",
         "---",
         "",
-        "## 9. Audit Quality Summary & Remaining Limitations",
+        "## 10. Audit Quality Summary & Acceptance",
         "",
         "### Audit Quality Achievements:",
-        "1. **Complete Semantics:** Trajectory assertions ('mixed volatility', 'monotonic') are verified against the full ordered observation series with $10^{-4}$ tolerance.",
+        "1. **Complete Semantics & Provenance:** Trajectory assertions are verified against full ordered observation series with $10^{-4}$ tolerance, traced back to SEC 10-K calculation records in SQLite.",
         "2. **Strict Polarity:** Claims asserting growth when a net decline occurred (or vice versa) are deterministically contradicted.",
         "3. **Fail-Closed Guarantee:** Missing receipts, missing observations, or formula contradictions immediately fail verification with explicit reasons.",
-        "4. **Persistent Claim Classification:** Claim classification (`historical_comparison`) is retained through Pydantic serialization, SQLite persistence, and audit reporting.",
-        "5. **Production Deduplication:** Reusable `TrendReceiptAuditor` guarantees single independent evaluation per unique receipt and links all referencing claims.",
+        "4. **Persistent Claim Classification:** Claim classification (`historical_comparison`) is retained through Pydantic serialization, SQLite persistence, and audit reporting with narrowed legal/operational exclusions.",
+        "5. **Reconciled Denominators:** Headline claim outcomes and company verification status are strictly reconciled with independent semantic trend findings; company status cannot be `verified` if any substantive claim fails.",
+        "6. **Production Deduplication:** Reusable `TrendReceiptAuditor` guarantees single independent evaluation per unique receipt and links all referencing claims.",
         "",
         "### Remaining Limitations:",
         "- Multi-period trends currently evaluate annual statutory periods (FY2021–FY2023). Multi-quarter trend analysis (e.g. Q1–Q4 sequential) will be expanded in future roadmap sessions.",

@@ -734,12 +734,38 @@ class Database:
                       OR claim_text LIKE '%net shift%'
                       OR claim_text LIKE '%demonstrated mixed volatility%'
                       OR claim_text LIKE '%compared to%'
+                      OR claim_text LIKE '%compared with%'
                       OR claim_text LIKE '%year-over-year%'
                       OR claim_text LIKE '%yoy%'
                       OR claim_text LIKE '%multi-period%'
                       OR claim_text LIKE '%longitudinal%'
-                      OR claim_text LIKE '%decelerated%'
-                      OR claim_text LIKE '%accelerated%'
+                      OR (
+                          (claim_text LIKE '%accelerated%' OR claim_text LIKE '%decelerated%')
+                          AND (
+                              claim_text LIKE '%growth%'
+                              OR claim_text LIKE '%revenue%'
+                              OR claim_text LIKE '%expansion%'
+                              OR claim_text LIKE '%margin%'
+                              OR claim_text LIKE '%period%'
+                              OR claim_text LIKE '%fiscal%'
+                              OR claim_text LIKE '%comparative%'
+                          )
+                          AND NOT (claim_text LIKE '%debt%' AND (claim_text LIKE '%repay%' OR claim_text LIKE '%due%'))
+                          AND NOT (claim_text LIKE '%accelerated production%' AND claim_text NOT LIKE '%FY%')
+                      )
+                  );
+                """
+            )
+
+            # Revert any previously misclassified legal debt or generic operational acceleration claims
+            cursor.execute(
+                """
+                UPDATE answer_claims
+                SET claim_type = 'general_fact'
+                WHERE claim_type = 'historical_comparison'
+                  AND (
+                      (claim_text LIKE '%debt%accelerated%' OR (claim_text LIKE '%debt%' AND (claim_text LIKE '%repay%' OR claim_text LIKE '%due%')))
+                      OR (claim_text LIKE '%accelerated production%' AND claim_text NOT LIKE '%FY%' AND claim_text NOT LIKE '%compared%')
                   );
                 """
             )
