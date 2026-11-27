@@ -93,6 +93,9 @@ COMPARISON_TRIGGERS = [
     "multi-period",
     "longitudinal",
     "net shift",
+    "demonstrated mixed volatility",
+    "decelerated",
+    "accelerated",
 ]
 
 RISK_TRIGGERS = [

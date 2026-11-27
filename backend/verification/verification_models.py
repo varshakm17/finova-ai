@@ -193,6 +193,18 @@ class ClaimVerificationResult(BaseModel):
     claim_id: str = Field(..., description="Evaluated claim identifier")
     claim_text: str = Field(..., description="Text of evaluated claim")
     outcome: VerificationOutcome = Field(..., description="Verdict")
+    claim_type: ClaimType = Field(
+        default=ClaimType.GENERAL_FACT, description="Category of assertion"
+    )
+    numeric_values: list[NumericClaimValue] = Field(
+        default_factory=list, description="Extracted quantitative entities"
+    )
+    mentioned_company: str | None = Field(
+        default=None, description="Company referred to in claim"
+    )
+    mentioned_period: str | None = Field(
+        default=None, description="Reporting period referred to in claim"
+    )
     citation_ids: list[str] = Field(
         default_factory=list,
         description="Original citations linked to the claim",

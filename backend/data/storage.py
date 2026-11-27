@@ -722,6 +722,27 @@ class Database:
                 );
                 """
             )
+            # 4. Reconcile historical answer_claims where claim_type was default 'general_fact' but contains comparison triggers
+            cursor.execute(
+                """
+                UPDATE answer_claims
+                SET claim_type = 'historical_comparison'
+                WHERE claim_type = 'general_fact'
+                  AND (
+                      claim_text LIKE '%across periods%'
+                      OR claim_text LIKE '%across comparative%'
+                      OR claim_text LIKE '%net shift%'
+                      OR claim_text LIKE '%demonstrated mixed volatility%'
+                      OR claim_text LIKE '%compared to%'
+                      OR claim_text LIKE '%year-over-year%'
+                      OR claim_text LIKE '%yoy%'
+                      OR claim_text LIKE '%multi-period%'
+                      OR claim_text LIKE '%longitudinal%'
+                      OR claim_text LIKE '%decelerated%'
+                      OR claim_text LIKE '%accelerated%'
+                  );
+                """
+            )
 
         logger.info("Database initialized successfully at: %s", self.db_path)
 
@@ -1301,6 +1322,28 @@ class Database:
                 if cits is None:
                     cits = cr.get("supporting_evidence_ids", [])
 
+                raw_claim_type = cr.get("claim_type", "general_fact")
+                if hasattr(raw_claim_type, "value"):
+                    claim_type_str = raw_claim_type.value
+                elif raw_claim_type:
+                    ct_s = str(raw_claim_type)
+                    claim_type_str = (
+                        ct_s.split(".")[-1].lower() if "." in ct_s else ct_s.lower()
+                    )
+                else:
+                    claim_type_str = "general_fact"
+
+                raw_nums = cr.get("numeric_values", [])
+                if hasattr(raw_nums, "model_dump"):
+                    serialized_nums = raw_nums.model_dump()
+                elif isinstance(raw_nums, list):
+                    serialized_nums = [
+                        nv.model_dump() if hasattr(nv, "model_dump") else nv
+                        for nv in raw_nums
+                    ]
+                else:
+                    serialized_nums = []
+
                 conn.execute(
                     """
                     INSERT INTO answer_claims (
@@ -1312,6 +1355,8 @@ class Database:
                         claim_text = excluded.claim_text,
                         claim_type = excluded.claim_type,
                         numeric_values_json = excluded.numeric_values_json,
+                        mentioned_company = excluded.mentioned_company,
+                        mentioned_period = excluded.mentioned_period,
                         citation_ids_json = excluded.citation_ids_json,
                         is_verifiable = excluded.is_verifiable;
                     """,
@@ -1319,8 +1364,8 @@ class Database:
                         claim_id,
                         answer_id,
                         cr.get("claim_text", ""),
-                        str(cr.get("claim_type", "general_fact")),
-                        json.dumps(cr.get("numeric_values", [])),
+                        claim_type_str,
+                        json.dumps(serialized_nums),
                         cr.get("mentioned_company"),
                         cr.get("mentioned_period"),
                         json.dumps(cits),

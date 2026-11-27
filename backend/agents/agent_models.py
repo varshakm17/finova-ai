@@ -276,6 +276,7 @@ class FinancialTrend(BaseModel):
     values: list[float]
     unit: str
     direction: str  # "UPWARD", "DOWNWARD", "FLAT", "MIXED"
+    trajectory: str = "INSUFFICIENT_DATA"
     absolute_change: float
     percentage_change: float | None = None
     supporting_receipt_ids: list[str] = Field(default_factory=list)

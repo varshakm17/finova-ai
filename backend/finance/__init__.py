@@ -13,10 +13,14 @@ from backend.finance.calculation_service import (
     CalculationService,
 )
 from backend.finance.financial_trends import (
+    TrajectoryType,
+    TrendReceiptAuditor,
     build_trend_receipt,
+    classify_trajectory,
     compute_absolute_change,
     compute_percentage_change,
     verify_trend_math,
+    verify_trend_semantics,
 )
 from backend.finance.period_validator import (
     PeriodValidationError,
@@ -36,7 +40,10 @@ __all__ = [
     "CalculationSummaryResponse",
     "PeriodValidationError",
     "TriggerCalculationRequest",
+    "TrajectoryType",
+    "TrendReceiptAuditor",
     "build_trend_receipt",
+    "classify_trajectory",
     "compute_absolute_change",
     "compute_percentage_change",
     "find_opening_balance_observation",
@@ -44,4 +51,5 @@ __all__ = [
     "validate_instant_balance_sheet_alignment",
     "validate_units",
     "verify_trend_math",
+    "verify_trend_semantics",
 ]

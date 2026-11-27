@@ -22,6 +22,8 @@ from backend.finance.calculation_service import (
     CalculationService,
 )
 from backend.finance.financial_trends import (
+    TrajectoryType,
+    classify_trajectory,
     compute_absolute_change,
     compute_percentage_change,
 )
@@ -252,17 +254,19 @@ class FinancialAnalystAgent(BaseFinovaAgent):
                 abs_change = compute_absolute_change(base_v, final_v) or 0.0
                 pct_change = compute_percentage_change(base_v, final_v)
 
-                # Direction analysis
-                deltas = [values[j + 1] - values[j] for j in range(len(values) - 1)]
-                if all(abs(d) < 0.0001 for d in deltas) or abs(abs_change) < 0.0001:
-                    direction = "FLAT"
-                elif all(d > 0.0001 for d in deltas):
+                # Trajectory classification and direction analysis
+                trajectory = classify_trajectory(values)
+                if trajectory == TrajectoryType.MONOTONIC_UPWARD:
                     direction = "UPWARD"
-                elif all(d < -0.0001 for d in deltas):
+                elif trajectory == TrajectoryType.MONOTONIC_DOWNWARD:
                     direction = "DOWNWARD"
-                else:
-                    # If net shift is significant in one direction, or mixed
+                elif trajectory in (
+                    TrajectoryType.MIXED_UPWARD_NET,
+                    TrajectoryType.MIXED_DOWNWARD_NET,
+                ):
                     direction = "MIXED"
+                else:
+                    direction = "FLAT"
 
                 interpretation = self.generate_trend_interpretation(
                     metric_name=metric_name,
@@ -279,6 +283,7 @@ class FinancialAnalystAgent(BaseFinovaAgent):
                         values=[round(v, 4) for v in values],
                         unit=unit,
                         direction=direction,
+                        trajectory=trajectory.value,
                         absolute_change=abs_change,
                         percentage_change=pct_change,
                         supporting_receipt_ids=receipt_ids,

@@ -8,6 +8,7 @@ from semantic support through layered deterministic, numerical, temporal, and le
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from backend.llm.llm_provider import LLMProvider
 from backend.rag.rag_models import CalculationEvidence, RetrievedEvidence
@@ -45,6 +46,43 @@ class EvidenceVerifier:
         self.llm_provider = llm_provider
         self.overlap_threshold = getattr(
             self.settings, "VERIFICATION_SEMANTIC_OVERLAP_THRESHOLD", 0.25
+        )
+
+    def _make_result(
+        self,
+        claim: ExtractedClaim,
+        outcome: VerificationOutcome,
+        verification_reason: str,
+        verification_method: str,
+        confidence_score: float = 1.0,
+        is_verifiable: bool = True,
+        supporting_evidence_ids: list[str] | None = None,
+        contradicting_evidence_ids: list[str] | None = None,
+        numeric_check: Any = None,
+        period_check: Any = None,
+        contradiction_check: Any = None,
+        warnings: list[str] | None = None,
+    ) -> ClaimVerificationResult:
+        """Construct ClaimVerificationResult while strictly preserving extracted claim metadata."""
+        return ClaimVerificationResult(
+            claim_id=claim.claim_id,
+            claim_text=claim.claim_text,
+            claim_type=claim.claim_type,
+            numeric_values=claim.numeric_values,
+            mentioned_company=claim.mentioned_company,
+            mentioned_period=claim.mentioned_period,
+            outcome=outcome,
+            citation_ids=list(claim.citation_ids),
+            is_verifiable=is_verifiable,
+            supporting_evidence_ids=supporting_evidence_ids or [],
+            contradicting_evidence_ids=contradicting_evidence_ids or [],
+            verification_reason=verification_reason,
+            confidence_score=confidence_score,
+            verification_method=verification_method,
+            numeric_check=numeric_check,
+            period_check=period_check,
+            contradiction_check=contradiction_check,
+            warnings=warnings or [],
         )
 
     def compute_token_overlap(self, text1: str, text2: str) -> float:
@@ -149,11 +187,9 @@ class EvidenceVerifier:
         """
         # If claim is not verifiable (e.g. pleasantry, meta-conclusion)
         if not claim.is_verifiable:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.NOT_VERIFIABLE,
-                citation_ids=list(claim.citation_ids),
                 is_verifiable=False,
                 verification_reason="Claim is an introductory remark, greeting, or subjective meta-statement.",
                 confidence_score=0.5,
@@ -162,12 +198,9 @@ class EvidenceVerifier:
 
         # Check 1: Citation presence
         if not claim.citation_ids:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.UNSUPPORTED,
-                citation_ids=[],
-                is_verifiable=True,
                 verification_reason="Claim makes factual assertions without providing any supporting citation.",
                 confidence_score=1.0,
                 verification_method="citation_presence_check",
@@ -183,12 +216,9 @@ class EvidenceVerifier:
         missing_ids = [c for c in cited_upper if c not in all_available_ids]
 
         if missing_ids:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.UNSUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 contradicting_evidence_ids=[],
                 verification_reason=f"Claim references non-existent or fabricated citation ID(s): {', '.join(missing_ids)}.",
                 confidence_score=1.0,
@@ -203,12 +233,9 @@ class EvidenceVerifier:
             calculation_evidence=calculation_evidence,
         )
         if contra_detail.has_contradiction:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.CONTRADICTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 supporting_evidence_ids=[],
                 contradicting_evidence_ids=[contra_detail.contradicting_evidence_id]
                 if contra_detail.contradicting_evidence_id
@@ -227,12 +254,9 @@ class EvidenceVerifier:
             calculation_evidence=calculation_evidence,
         )
         if not period_detail.is_consistent:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.UNSUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 verification_reason=f"Reporting period inconsistency: {period_detail.explanation}",
                 confidence_score=0.95,
                 verification_method="period_verifier",
@@ -275,12 +299,9 @@ class EvidenceVerifier:
                             )
                         )
                         if not company_match:
-                            return ClaimVerificationResult(
-                                claim_id=claim.claim_id,
-                                claim_text=claim.claim_text,
+                            return self._make_result(
+                                claim=claim,
                                 outcome=VerificationOutcome.CONTRADICTED,
-                                citation_ids=list(claim.citation_ids),
-                                is_verifiable=True,
                                 verification_reason=(
                                     f"Company attribution mismatch: Claim refers to '{claim.mentioned_company}' "
                                     f"but cited passage {cid} belongs to '{passage.company_name}' ({passage.ticker})."
@@ -307,12 +328,9 @@ class EvidenceVerifier:
                 if first_fail.error_type == "sign_mismatch"
                 else VerificationOutcome.UNSUPPORTED
             )
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=outcome,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 verification_reason=f"Numerical mismatch: {first_fail.discrepancy_details}",
                 confidence_score=0.98,
                 verification_method="numeric_verifier",
@@ -321,156 +339,45 @@ class EvidenceVerifier:
                 warnings=[first_fail.discrepancy_details],
             )
 
-        # Check 6: Deterministic Calculation Receipt Match
+        # Check 6: Deterministic Calculation Receipt Match & Semantic Trend Verification
         cited_calcs = [calc_map[cid] for cid in cited_upper if cid in calc_map]
         if cited_calcs:
+            from backend.finance.financial_trends import verify_trend_semantics
+
             calc = cited_calcs[0]
-            c_lower = claim.claim_text.lower()
-            calc_m_clean = (
-                calc.metric_name.lower().replace("_", " ").replace(" trend", "").strip()
-            )
-
-            # Check if claim explicitly references a different financial metric
-            known_metrics = {
-                "revenue": "revenue",
-                "sales": "revenue",
-                "gross profit": "gross_profit_margin",
-                "gross margin": "gross_profit_margin",
-                "operating margin": "operating_profit_margin",
-                "operating income": "operating_profit_margin",
-                "net margin": "net_profit_margin",
-                "net income": "net_profit_margin",
-                "current ratio": "current_ratio",
-                "quick ratio": "quick_ratio",
-                "debt to equity": "debt_to_equity",
-                "free cash flow": "free_cash_flow",
-                "return on assets": "return_on_assets",
-                "return on equity": "return_on_equity",
-            }
-            mismatch_metric = None
-            for kw, canon in known_metrics.items():
-                if kw in c_lower:
-                    canon_clean = canon.replace("_", " ")
-                    if (
-                        canon_clean not in calc_m_clean
-                        and calc_m_clean not in canon_clean
-                        and kw not in calc_m_clean
-                    ):
-                        mismatch_metric = kw
-                        break
-            if mismatch_metric:
-                return ClaimVerificationResult(
-                    claim_id=claim.claim_id,
-                    claim_text=claim.claim_text,
-                    outcome=VerificationOutcome.UNSUPPORTED,
-                    citation_ids=list(claim.citation_ids),
-                    is_verifiable=True,
-                    verification_reason=(
-                        f"Metric mismatch: Claim asserts '{mismatch_metric}' which differs from cited "
-                        f"calculation receipt {calc.calculation_id} ({calc.metric_name})."
-                    ),
-                    confidence_score=0.95,
-                    verification_method="metric_alignment_check",
-                    period_check=period_detail,
-                    warnings=[f"Metric mismatch with receipt {calc.calculation_id}"],
-                )
-
-            # Polarity contradiction check against calculation value
-            if calc.calculated_value is not None:
-                # Strip metric titles so terms like 'Revenue Growth' or 'Margin Expansion' do not falsely trigger polarity
-                c_clean = c_lower
-                for metric_title in [
-                    "revenue growth",
-                    "earnings growth",
-                    "profit growth",
-                    "margin expansion",
-                    "gross margin",
-                    "operating margin",
-                ]:
-                    c_clean = c_clean.replace(metric_title, "")
-
-                pos_words = {
-                    "increased",
-                    "increase",
-                    "grew",
-                    "rose",
-                    "accelerated",
-                    "upward",
-                    "positive",
-                }
-                neg_words = {
-                    "decreased",
-                    "decrease",
-                    "declined",
-                    "decline",
-                    "fell",
-                    "contracted",
-                    "decelerated",
-                    "deceleration",
-                    "downward",
-                    "slowed",
-                    "negative",
-                    "loss",
-                }
-                has_neg_num = any(nv.numeric_value < 0 for nv in claim.numeric_values)
-                has_pos = (
-                    any(re.search(rf"\b{w}\b", c_clean) for w in pos_words)
-                    and not has_neg_num
-                )
-                has_neg = (
-                    any(re.search(rf"\b{w}\b", c_clean) for w in neg_words)
-                    or has_neg_num
-                )
-                if calc.calculated_value < 0 and has_pos and not has_neg:
-                    return ClaimVerificationResult(
-                        claim_id=claim.claim_id,
-                        claim_text=claim.claim_text,
-                        outcome=VerificationOutcome.CONTRADICTED,
-                        citation_ids=list(claim.citation_ids),
-                        is_verifiable=True,
-                        verification_reason=(
-                            f"Trend polarity contradiction: Claim asserts growth/increase, but "
-                            f"receipt {calc.calculation_id} calculated negative shift ({calc.calculated_value} {calc.unit})."
-                        ),
-                        confidence_score=0.98,
-                        verification_method="deterministic_receipt_polarity",
-                        period_check=period_detail,
-                        warnings=[
-                            f"Polarity contradiction with receipt {calc.calculation_id}"
-                        ],
-                    )
-                elif calc.calculated_value > 0 and has_neg and not has_pos:
-                    return ClaimVerificationResult(
-                        claim_id=claim.claim_id,
-                        claim_text=claim.claim_text,
-                        outcome=VerificationOutcome.CONTRADICTED,
-                        citation_ids=list(claim.citation_ids),
-                        is_verifiable=True,
-                        verification_reason=(
-                            f"Trend polarity contradiction: Claim asserts decline/decrease, but "
-                            f"receipt {calc.calculation_id} calculated positive growth ({calc.calculated_value} {calc.unit})."
-                        ),
-                        confidence_score=0.98,
-                        verification_method="deterministic_receipt_polarity",
-                        period_check=period_detail,
-                        warnings=[
-                            f"Polarity contradiction with receipt {calc.calculation_id}"
-                        ],
-                    )
-
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
+            sem_ok, sem_outcome, sem_reason = verify_trend_semantics(
                 claim_text=claim.claim_text,
+                receipt=calc,
+                numeric_values=claim.numeric_values,
+                tolerance_pct=self.numeric_verifier.tolerance_pct,
+            )
+            if not sem_ok:
+                outcome = (
+                    VerificationOutcome.CONTRADICTED
+                    if sem_outcome == "contradicted"
+                    else VerificationOutcome.UNSUPPORTED
+                )
+                contra_ids = (
+                    [calc.evidence_id] if sem_outcome == "contradicted" else []
+                )
+                return self._make_result(
+                    claim=claim,
+                    outcome=outcome,
+                    verification_reason=sem_reason,
+                    verification_method="trend_semantic_verifier",
+                    confidence_score=0.98 if sem_outcome == "contradicted" else 0.95,
+                    contradicting_evidence_ids=contra_ids,
+                    period_check=period_detail,
+                    warnings=[sem_reason],
+                )
+
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.SUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
-                supporting_evidence_ids=[calc.evidence_id],
-                verification_reason=(
-                    f"Claim supported by deterministic calculation receipt {calc.calculation_id} "
-                    f"({calc.metric_name} = {calc.calculated_value} {calc.unit})."
-                ),
-                confidence_score=1.0,
+                verification_reason=sem_reason,
                 verification_method="deterministic_receipt",
+                confidence_score=1.0,
+                supporting_evidence_ids=[calc.evidence_id],
                 period_check=period_detail,
             )
 
@@ -479,12 +386,9 @@ class EvidenceVerifier:
             retrieved_map[cid] for cid in cited_upper if cid in retrieved_map
         ]
         if not cited_passages:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.UNSUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 verification_reason="Claim has no verifiable source passages attached.",
                 confidence_score=1.0,
                 verification_method="citation_resolution",
@@ -515,11 +419,9 @@ class EvidenceVerifier:
             }
         ]
         if len(claim_content_words) < 3 and not claim.numeric_values:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.NOT_VERIFIABLE,
-                citation_ids=list(claim.citation_ids),
                 is_verifiable=False,
                 verification_reason="Claim has insufficient substantive content tokens (<3) to establish verified evidence support.",
                 confidence_score=0.5,
@@ -540,12 +442,9 @@ class EvidenceVerifier:
             claim.claim_text, best_passage.chunk_text
         )
         if has_polar_contra:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.CONTRADICTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 supporting_evidence_ids=[],
                 contradicting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=f"Directional polarity contradiction: {polar_reason}",
@@ -560,12 +459,9 @@ class EvidenceVerifier:
             "valid",
             "whitelisted",
         }:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.PARTIALLY_SUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=f"Passage {best_passage.evidence_id} has questionable provenance status: {best_passage.provenance_status}.",
                 confidence_score=0.6,
@@ -577,12 +473,9 @@ class EvidenceVerifier:
 
         # If claim had matched numbers and overlap is adequate
         if numeric_details and all(nd.matched for nd in numeric_details):
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.SUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=(
                     f"Numerical figures matched and lexical overlap ({best_overlap:.1%}) confirms "
@@ -596,12 +489,9 @@ class EvidenceVerifier:
 
         # Pure qualitative / narrative assertion:
         if best_overlap >= self.overlap_threshold:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.SUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=(
                     f"Lexical overlap ({best_overlap:.1%}) with passage {best_passage.evidence_id} "
@@ -612,12 +502,9 @@ class EvidenceVerifier:
                 period_check=period_detail,
             )
         elif best_overlap >= 0.12:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.PARTIALLY_SUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 supporting_evidence_ids=[best_passage.evidence_id],
                 verification_reason=(
                     f"Partial lexical overlap ({best_overlap:.1%}) found in passage {best_passage.evidence_id}. "
@@ -629,12 +516,9 @@ class EvidenceVerifier:
                 warnings=["Partial evidence overlap."],
             )
         else:
-            return ClaimVerificationResult(
-                claim_id=claim.claim_id,
-                claim_text=claim.claim_text,
+            return self._make_result(
+                claim=claim,
                 outcome=VerificationOutcome.UNSUPPORTED,
-                citation_ids=list(claim.citation_ids),
-                is_verifiable=True,
                 supporting_evidence_ids=[],
                 verification_reason=(
                     f"Insufficient evidence overlap ({best_overlap:.1%}) with cited passage {best_passage.evidence_id}. "
