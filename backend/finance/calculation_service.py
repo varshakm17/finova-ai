@@ -168,12 +168,17 @@ class CalculationService:
             rep_obs = next(iter(period_flow.values()), None) or next(
                 iter(period_instant.values()), None
             )
-            fiscal_year = (
+            ey = (
                 int(period_end[:4])
                 if period_end and len(period_end) >= 4 and period_end[:4].isdigit()
-                else (rep_obs.fiscal_year if rep_obs else None)
+                else None
             )
-            fiscal_period = rep_obs.fiscal_period if rep_obs else None
+            if clean_period_type == "annual":
+                fiscal_year = ey if ey is not None else (rep_obs.fiscal_year if rep_obs else None)
+                fiscal_period = "FY"
+            else:
+                fiscal_year = ey if ey is not None else (rep_obs.fiscal_year if rep_obs else None)
+                fiscal_period = rep_obs.fiscal_period if rep_obs else "Q"
             period_start = rep_obs.period_start if rep_obs else None
 
             # A. Revenue Growth

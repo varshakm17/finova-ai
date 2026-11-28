@@ -6,6 +6,7 @@ handling, mathematical reproducibility, trajectory classification, and receipt v
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from enum import Enum
@@ -56,6 +57,247 @@ def are_units_compatible(u1: str | None, u2: str | None) -> bool:
     if u1_clean in ratios and u2_clean in ratios:
         return True
     return False
+
+
+def periods_align(p_declared: str | None, p_target: str | None) -> bool:
+    """Check if a declared period_start/period_end aligns with an observation or period label.
+
+    Supports:
+        - Exact string equality (case-insensitive)
+        - Normalized period equality (e.g. 'FY 2021' == 'FY2021')
+        - Date-to-FY alignment where both refer to the same annual fiscal year (e.g. '2021-06-30' and 'FY2021')
+    """
+    if not p_declared or not p_target:
+        return True
+    s_dec = str(p_declared).strip()
+    s_tgt = str(p_target).strip()
+    if s_dec.upper() == s_tgt.upper():
+        return True
+    norm_dec = normalize_period(s_dec) or s_dec
+    norm_tgt = normalize_period(s_tgt) or s_tgt
+    if norm_dec.upper() == norm_tgt.upper():
+        return True
+    k_dec = parse_period_chronological_key(norm_dec)
+    k_tgt = parse_period_chronological_key(norm_tgt)
+    if k_dec[0] != 0 and k_dec[0] == k_tgt[0]:
+        if k_dec[1] == 0 or k_tgt[1] == 0:
+            return True
+        if k_dec[1] == k_tgt[1]:
+            return True
+    return False
+
+
+SEC_ACCESSION_PATTERN = re.compile(r"^\d{10}-\d{2}-\d{6}$")
+
+
+def validate_calculation_provenance(
+    calc: dict[str, Any] | CalculationEvidence | Any,
+) -> tuple[bool, str, dict[str, Any]]:
+    """Validate calculation provenance metadata against authoritative dates and SEC sources.
+
+    Reconciles:
+        1. Calculation ID presence and non-emptiness.
+        2. Metric name presence and validity.
+        3. Fiscal year and fiscal period metadata consistency with actual calculation period.
+        4. Period start and period end presence and chronological order.
+        5. Calculated value and unit validity.
+        6. Input observation periods and non-emptiness.
+        7. Authoritative SEC accession numbers.
+        8. Official SEC source filing URLs.
+
+    Returns:
+        (is_valid, reason, details_dict)
+    """
+    if not calc:
+        return False, "Empty or None calculation record", {"provenance_complete": False}
+
+    if isinstance(calc, dict):
+        calc_id = calc.get("calculation_id") or calc.get("id")
+        metric_name = calc.get("metric_name")
+        fy = calc.get("fiscal_year")
+        fp = calc.get("fiscal_period") or "FY"
+        p_start = calc.get("period_start")
+        p_end = calc.get("period_end")
+        val = calc.get("calculated_value")
+        unit = calc.get("unit")
+        status = calc.get("calculation_status") or calc.get("status", "calculated")
+        raw_inputs = calc.get("input_observations") or calc.get("inputs") or []
+        if isinstance(raw_inputs, str):
+            try:
+                raw_inputs = json.loads(raw_inputs)
+            except Exception:
+                raw_inputs = []
+    else:
+        calc_id = getattr(calc, "calculation_id", None) or getattr(calc, "id", None)
+        metric_name = getattr(calc, "metric_name", None)
+        fy = getattr(calc, "fiscal_year", None)
+        fp = getattr(calc, "fiscal_period", "FY")
+        p_start = getattr(calc, "period_start", None)
+        p_end = getattr(calc, "period_end", None)
+        val = getattr(calc, "calculated_value", None)
+        unit = getattr(calc, "unit", None)
+        status = getattr(calc, "calculation_status", "calculated")
+        raw_inputs = (
+            getattr(calc, "input_observations", None)
+            or getattr(calc, "inputs", None)
+            or []
+        )
+
+    details: dict[str, Any] = {
+        "calculation_id": calc_id,
+        "metric_name": metric_name,
+        "fiscal_year": fy,
+        "fiscal_period": fp,
+        "period_start": p_start,
+        "period_end": p_end,
+        "calculated_value": val,
+        "unit": unit,
+        "calculation_status": status,
+        "provenance_complete": False,
+        "missing_fields": [],
+        "inconsistencies": [],
+        "source_observations": [],
+    }
+
+    if not calc_id:
+        details["missing_fields"].append("calculation_id")
+        return False, "Missing calculation_id in provenance record", details
+
+    if not metric_name:
+        details["missing_fields"].append("metric_name")
+        return False, f"Missing metric_name in calculation {calc_id}", details
+
+    if not p_end or str(p_end).strip() == "":
+        details["missing_fields"].append("period_end")
+        return False, f"Missing period_end in calculation {calc_id}", details
+
+    # Parse period_end date year
+    p_end_str = str(p_end).strip()
+    p_end_year = None
+    m_pe = re.match(r"^(\d{4})-\d{2}-\d{2}$", p_end_str)
+    if m_pe:
+        p_end_year = int(m_pe.group(1))
+    else:
+        m_pe_y = re.search(r"(?:19|20)\d{2}", p_end_str)
+        if m_pe_y:
+            p_end_year = int(m_pe_y.group(0))
+
+    if fy is None:
+        details["missing_fields"].append("fiscal_year")
+        return False, f"Missing fiscal_year metadata in calculation {calc_id}", details
+
+    try:
+        fy_int = int(fy)
+    except (ValueError, TypeError):
+        details["inconsistencies"].append(f"Invalid non-integer fiscal_year '{fy}'")
+        return False, f"Invalid fiscal_year '{fy}' in calculation {calc_id}", details
+
+    # Reconcile period dates against fiscal_year
+    if p_end_year is not None:
+        if abs(fy_int - p_end_year) > 1:
+            incon = (
+                f"Calculation period_end '{p_end_str}' (year {p_end_year}) conflicts with "
+                f"stored fiscal_year {fy_int}"
+            )
+            details["inconsistencies"].append(incon)
+            return False, f"Provenance conflict for {calc_id}: {incon}", details
+
+    # Reconcile calculation ID encoding against fiscal_year
+    m_calc_years = re.findall(r"(?:19|20)\d{2}", str(calc_id))
+    if m_calc_years:
+        calc_encoded_year = int(m_calc_years[-1])
+        if abs(calc_encoded_year - fy_int) > 1:
+            incon = (
+                f"Calculation ID '{calc_id}' encodes year {calc_encoded_year} which conflicts "
+                f"with stored fiscal_year {fy_int}"
+            )
+            details["inconsistencies"].append(incon)
+            return False, f"Provenance conflict for {calc_id}: {incon}", details
+
+    # Check calculated value and unit when status is calculated
+    if status == "calculated":
+        if (
+            val is None
+            or not isinstance(val, (int, float))
+            or math.isnan(float(val))
+            or math.isinf(float(val))
+        ):
+            details["inconsistencies"].append(f"Invalid calculated_value: {val}")
+            return (
+                False,
+                f"Invalid calculated_value '{val}' for calculated status in {calc_id}",
+                details,
+            )
+        if not unit:
+            details["missing_fields"].append("unit")
+            return False, f"Missing unit in calculation {calc_id}", details
+
+    # Check underlying input observations
+    if not raw_inputs:
+        details["missing_fields"].append("input_observations")
+        return False, f"Missing input observations provenance for {calc_id}", details
+
+    clean_src_obs = []
+    for idx, inp in enumerate(raw_inputs):
+        if hasattr(inp, "model_dump"):
+            inp = inp.model_dump()
+        if not isinstance(inp, dict):
+            continue
+        accn = inp.get("accession_number")
+        s_url = inp.get("source_url")
+        inp_pe = inp.get("period_end")
+        inp_ps = inp.get("period_start")
+        inp_val = inp.get("value")
+
+        if not accn or str(accn).strip() in ("", "None", "null"):
+            details["missing_fields"].append(f"input[{idx}].accession_number")
+            return (
+                False,
+                f"Missing SEC accession number for input {idx} in {calc_id}",
+                details,
+            )
+
+        accn_clean = str(accn).strip()
+        if not SEC_ACCESSION_PATTERN.match(accn_clean):
+            details["inconsistencies"].append(
+                f"Malformed SEC accession number: {accn_clean}"
+            )
+            return (
+                False,
+                f"Unestablished or malformed SEC accession number '{accn_clean}' in {calc_id}",
+                details,
+            )
+
+        if not s_url or not str(s_url).strip().startswith(("https://", "http://")):
+            details["missing_fields"].append(f"input[{idx}].source_url")
+            return (
+                False,
+                f"Missing or invalid SEC source URL for input {idx} in {calc_id}",
+                details,
+            )
+
+        clean_src_obs.append(
+            {
+                "metric_name": inp.get("metric_name"),
+                "value": inp_val,
+                "period_start": inp_ps,
+                "period_end": inp_pe,
+                "accession_number": accn_clean,
+                "source_url": str(s_url).strip(),
+                "filing_type": inp.get("filing_type"),
+            }
+        )
+
+    if not clean_src_obs:
+        return (
+            False,
+            f"No valid input observation records found for {calc_id}",
+            details,
+        )
+
+    details["provenance_complete"] = True
+    details["source_observations"] = clean_src_obs
+    return True, "Provenance metadata verified and consistent", details
 
 
 class TrajectoryType(str, Enum):
@@ -314,7 +556,7 @@ def build_trend_receipt(
         "absolute_change": abs_chg,
         "percentage_change": pct_chg,
         "inputs": inputs,
-        "input_observations": inputs,
+        "input_observations": [],
         "supporting_receipt_ids": supporting_receipt_ids or [],
     }
 
@@ -499,19 +741,61 @@ def verify_trend_math(
     # Extract complete ordered observations
     obs_vals: list[float] = []
     obs_units: list[str] = []
-    if top_obs:
-        if not isinstance(top_obs, list) or len(top_obs) < 2:
+    obs_periods: list[str] = []
+    is_object_observations = False
+
+    raw_obs_list = top_obs if top_obs is not None else []
+    if not raw_obs_list and obs_from_inputs:
+        raw_obs_list = [
+            {"period": x[2], "value": x[1], "unit": x[3]}
+            for x in obs_from_inputs
+        ]
+
+    if raw_obs_list:
+        if not isinstance(raw_obs_list, list) or len(raw_obs_list) < 2:
             return (
                 False,
-                f"Missing or insufficient intermediate observations for {metric_name} (found {len(top_obs) if isinstance(top_obs, list) else 0} < 2)",
+                f"Missing or insufficient intermediate observations for {metric_name} (found {len(raw_obs_list) if isinstance(raw_obs_list, list) else 0} < 2)",
             )
-        for idx, item in enumerate(top_obs):
-            if isinstance(item, dict):
-                val = item.get("value")
-                u = item.get("unit")
+
+        is_object_observations = any(
+            isinstance(item, dict) or hasattr(item, "period")
+            for item in raw_obs_list
+        )
+
+        for idx, item in enumerate(raw_obs_list):
+            if is_object_observations:
+                if isinstance(item, dict):
+                    p_val = item.get("period")
+                    val = item.get("value")
+                    u = item.get("unit")
+                else:
+                    p_val = getattr(item, "period", None)
+                    val = getattr(item, "value", None)
+                    u = getattr(item, "unit", None)
+
+                if (
+                    p_val is None
+                    or str(p_val).strip() == ""
+                    or str(p_val).strip().lower() in ("none", "null")
+                ):
+                    return (
+                        False,
+                        f"Missing observation period in observation object at index {idx} for {metric_name}",
+                    )
+
+                norm_op = normalize_period(str(p_val))
+                if not norm_op:
+                    return (
+                        False,
+                        f"Observation period '{p_val}' at index {idx} failed normalization for {metric_name}",
+                    )
+
+                obs_periods.append(norm_op)
             else:
                 val = item
                 u = unit
+
             if val is None:
                 return (
                     False,
@@ -532,10 +816,6 @@ def verify_trend_math(
                     False,
                     f"Invalid non-numeric observation value in trend observations for {metric_name}",
                 )
-    elif obs_from_inputs and len(obs_from_inputs) >= 2:
-        obs_from_inputs.sort(key=lambda x: x[0])
-        obs_vals = [x[1] for x in obs_from_inputs]
-        obs_units = [x[3] for x in obs_from_inputs if x[3]]
     else:
         return (
             False,
@@ -548,20 +828,28 @@ def verify_trend_math(
             f"Missing or insufficient intermediate observations for {metric_name} (found {len(obs_vals)} < 2)",
         )
 
-    # Extract & validate periods
+    # Extract & validate periods array
     norm_periods: list[str] = []
     if raw_periods:
-        for p in raw_periods:
-            if p is None or str(p).strip() == "":
-                return False, f"Null or empty period in periods array for {metric_name}"
-            norm_periods.append(normalize_period(str(p)) or str(p).strip())
-    elif top_obs and isinstance(top_obs, list) and any(isinstance(o, dict) and o.get("period") for o in top_obs):
-        for o in top_obs:
-            if isinstance(o, dict) and o.get("period"):
-                norm_periods.append(normalize_period(str(o["period"])) or str(o["period"]).strip())
-    elif obs_from_inputs and any(x[2] for x in obs_from_inputs):
-        obs_from_inputs.sort(key=lambda x: x[0])
-        norm_periods = [normalize_period(str(x[2])) or str(x[2]).strip() for x in obs_from_inputs if x[2]]
+        for idx, p in enumerate(raw_periods):
+            if (
+                p is None
+                or str(p).strip() == ""
+                or str(p).strip().lower() in ("none", "null")
+            ):
+                return (
+                    False,
+                    f"Null or empty period in periods array at index {idx} for {metric_name}",
+                )
+            np = normalize_period(str(p))
+            if not np:
+                return (
+                    False,
+                    f"Invalid period '{p}' in periods array at index {idx} failed normalization for {metric_name}",
+                )
+            norm_periods.append(np)
+    elif is_object_observations:
+        norm_periods = list(obs_periods)
     elif p_start and p_end:
         pk_s = parse_period_chronological_key(p_start)
         pk_e = parse_period_chronological_key(p_end)
@@ -569,13 +857,16 @@ def verify_trend_math(
             annual_count = pk_e[0] - pk_s[0] + 1
             if annual_count == len(obs_vals):
                 norm_periods = [f"FY{y}" for y in range(pk_s[0], pk_e[0] + 1)]
-            else:
-                return (
-                    False,
-                    f"Missing intermediate annual observations for {metric_name}: expected {annual_count} periods for {p_start} to {p_end}, found {len(obs_vals)}",
-                )
-    elif raw_periods is None and not p_start and not p_end and len(obs_vals) >= 2:
-        norm_periods = [f"Period_{i+1}" for i in range(len(obs_vals))]
+        if not norm_periods:
+            return (
+                False,
+                f"Missing periods array for numeric-only observations in {metric_name}",
+            )
+    else:
+        return (
+            False,
+            f"Missing periods array for numeric-only observations in {metric_name}",
+        )
 
     if not norm_periods or len(norm_periods) < 2:
         return (
@@ -583,52 +874,101 @@ def verify_trend_math(
             f"Missing or insufficient periods for {metric_name} (found {len(norm_periods)} < 2)",
         )
 
-    # Reject duplicate periods
-    if len(set(norm_periods)) != len(norm_periods):
-        return (
-            False,
-            f"Duplicate periods detected in trend receipt for {metric_name}: {norm_periods}",
-        )
-
-    # Verify chronological ordering
-    period_keys = [parse_period_chronological_key(p) for p in norm_periods]
-    for i in range(len(period_keys) - 1):
-        k1 = period_keys[i]
-        k2 = period_keys[i + 1]
-        if k1[0] > k2[0] or (k1[0] == k2[0] and k1[1] >= k2[1] and k1[1] != 0):
+    # When observations are represented as objects containing period and value, enforce strict alignment
+    if is_object_observations:
+        if len(obs_periods) != len(norm_periods):
             return (
                 False,
-                f"Periods out of chronological order for {metric_name}: {norm_periods[i]} precedes or equals {norm_periods[i+1]}",
+                f"Number of observation objects ({len(obs_periods)}) does not equal number of periods ({len(norm_periods)}) for {metric_name}",
             )
 
-    # Check for missing intermediate annual periods
-    for i in range(len(period_keys) - 1):
-        if period_keys[i][1] == 0 and period_keys[i + 1][1] == 0:
-            year_gap = period_keys[i + 1][0] - period_keys[i][0]
-            if year_gap > 1:
+        for idx, (op, rp) in enumerate(zip(obs_periods, norm_periods)):
+            if op != rp:
                 return (
                     False,
-                    f"Missing intermediate period in annual series for {metric_name}: gap between {norm_periods[i]} and {norm_periods[i+1]} (expected consecutive years, found gap of {year_gap} years)",
+                    f"Observation period mismatch at index {idx} for {metric_name}: "
+                    f"observation period is '{op}', periods array entry is '{rp}'",
                 )
 
-    # If period_start and period_end are specified as annual, check span continuity
-    if p_start and p_end:
-        pk_s = parse_period_chronological_key(p_start)
-        pk_e = parse_period_chronological_key(p_end)
-        if pk_s[1] == 0 and pk_e[1] == 0 and pk_e[0] > pk_s[0]:
-            expected_annual_span = pk_e[0] - pk_s[0] + 1
-            if len(norm_periods) < expected_annual_span:
+        if len(set(obs_periods)) != len(obs_periods):
+            return (
+                False,
+                f"Duplicate observation period labels detected in trend receipt for {metric_name}: {obs_periods}",
+            )
+
+        obs_keys = [parse_period_chronological_key(p) for p in obs_periods]
+        for i in range(len(obs_keys) - 1):
+            k1 = obs_keys[i]
+            k2 = obs_keys[i + 1]
+            if k1[0] > k2[0] or (k1[0] == k2[0] and k1[1] >= k2[1] and k1[1] != 0):
                 return (
                     False,
-                    f"Missing intermediate annual observations for {metric_name}: expected {expected_annual_span} periods for {p_start} to {p_end}, found {len(norm_periods)}",
+                    f"Observation objects out of chronological order for {metric_name}: {obs_periods[i]} precedes or equals {obs_periods[i+1]}",
                 )
 
-    # Require observation count to match period count
-    if len(obs_vals) != len(norm_periods):
-        return (
-            False,
-            f"Observation count ({len(obs_vals)}) does not match period count ({len(norm_periods)}) for {metric_name}",
-        )
+        for i in range(len(obs_keys) - 1):
+            if obs_keys[i][1] == 0 and obs_keys[i + 1][1] == 0:
+                gap = obs_keys[i + 1][0] - obs_keys[i][0]
+                if gap > 1:
+                    return (
+                        False,
+                        f"Missing intermediate annual period for {metric_name}: gap between {obs_periods[i]} and {obs_periods[i+1]} (expected consecutive annual periods, found gap of {gap} years)",
+                    )
+
+        if p_start:
+            if not periods_align(p_start, obs_periods[0]):
+                return (
+                    False,
+                    f"period_start mismatch for {metric_name}: receipt period_start '{p_start}' disagrees with first observation period '{obs_periods[0]}'",
+                )
+        if p_end:
+            if not periods_align(p_end, obs_periods[-1]):
+                return (
+                    False,
+                    f"period_end mismatch for {metric_name}: receipt period_end '{p_end}' disagrees with last observation period '{obs_periods[-1]}'",
+                )
+
+    if not is_object_observations:
+        if len(obs_vals) != len(norm_periods):
+            return (
+                False,
+                f"Observation count ({len(obs_vals)}) does not match period count ({len(norm_periods)}) for {metric_name}",
+            )
+        if len(set(norm_periods)) != len(norm_periods):
+            return (
+                False,
+                f"Duplicate periods detected in trend receipt for {metric_name}: {norm_periods}",
+            )
+
+        period_keys = [parse_period_chronological_key(p) for p in norm_periods]
+        for i in range(len(period_keys) - 1):
+            k1 = period_keys[i]
+            k2 = period_keys[i + 1]
+            if k1[0] > k2[0] or (k1[0] == k2[0] and k1[1] >= k2[1] and k1[1] != 0):
+                return (
+                    False,
+                    f"Periods out of chronological order for {metric_name}: {norm_periods[i]} precedes or equals {norm_periods[i+1]}",
+                )
+
+        for i in range(len(period_keys) - 1):
+            if period_keys[i][1] == 0 and period_keys[i + 1][1] == 0:
+                gap = period_keys[i + 1][0] - period_keys[i][0]
+                if gap > 1:
+                    return (
+                        False,
+                        f"Missing intermediate period in annual series for {metric_name}: gap between {norm_periods[i]} and {norm_periods[i+1]} (expected consecutive years, found gap of {gap} years)",
+                    )
+
+        if p_start and not periods_align(p_start, norm_periods[0]):
+            return (
+                False,
+                f"period_start mismatch for {metric_name}: receipt period_start '{p_start}' disagrees with first period '{norm_periods[0]}'",
+            )
+        if p_end and not periods_align(p_end, norm_periods[-1]):
+            return (
+                False,
+                f"period_end mismatch for {metric_name}: receipt period_end '{p_end}' disagrees with last period '{norm_periods[-1]}'",
+            )
 
     # Verify unit compatibility
     if obs_units:
@@ -746,6 +1086,17 @@ def verify_trend_semantics(
                 f"Receipt failed completeness validation: {math_reason}",
             )
         elif (
+            "period" in math_reason.lower()
+            or "alignment" in math_reason.lower()
+            or "chronological" in math_reason.lower()
+            or "order" in math_reason.lower()
+        ):
+            return (
+                False,
+                "unsupported",
+                f"Receipt failed period alignment validation: {math_reason}",
+            )
+        elif (
             "trajectory" in math_reason.lower()
             or "stored trajectory" in math_reason.lower()
         ):
@@ -758,6 +1109,24 @@ def verify_trend_semantics(
             False,
             "unsupported",
             f"Receipt failed mathematical validation: {math_reason}",
+        )
+
+    # 1.1. Provenance validation check if attached to receipt
+    prov_valid = (
+        receipt.get("provenance_valid")
+        if isinstance(receipt, dict)
+        else getattr(receipt, "provenance_valid", None)
+    )
+    if prov_valid is False:
+        prov_err = (
+            receipt.get("provenance_error")
+            if isinstance(receipt, dict)
+            else getattr(receipt, "provenance_error", "Provenance validation failed")
+        )
+        return (
+            False,
+            "incomplete",
+            f"Receipt failed provenance validation: {prov_err}",
         )
 
     if isinstance(receipt, dict):
@@ -1214,12 +1583,54 @@ class TrendReceiptAuditor:
         recalculated_traj = classify_trajectory(obs_vals)
         independent_traj = recalculated_traj.value
 
-        if is_valid:
+        # Check if provenance trace is attached and validate it
+        prov_trace = (
+            receipt.get("provenance_trace")
+            if isinstance(receipt, dict)
+            else getattr(receipt, "provenance_trace", None)
+        )
+        provenance_valid = True
+        provenance_reasons: list[str] = []
+        if prov_trace and isinstance(prov_trace, list):
+            for tr_calc in prov_trace:
+                p_ok, p_msg, _ = validate_calculation_provenance(tr_calc)
+                if not p_ok:
+                    provenance_valid = False
+                    provenance_reasons.append(p_msg)
+        else:
+            raw_input_obs = (
+                receipt.get("input_observations")
+                if isinstance(receipt, dict)
+                else getattr(receipt, "input_observations", None)
+            )
+            if raw_input_obs and isinstance(raw_input_obs, list) and len(raw_input_obs) > 0:
+                has_sec_obs = any(
+                    isinstance(x, dict) and ("accession_number" in x or "source_url" in x)
+                    for x in raw_input_obs
+                )
+                if has_sec_obs:
+                    p_ok, p_msg, _ = validate_calculation_provenance(receipt)
+                    if not p_ok:
+                        provenance_valid = False
+                        provenance_reasons.append(p_msg)
+
+        if not provenance_valid:
+            is_valid = False
+            status = "failed_provenance"
+            reason = f"Supporting calculation provenance failure: {'; '.join(provenance_reasons)}"
+        elif is_valid:
             status = "verified"
         elif "missing" in reason.lower() or "insufficient" in reason.lower():
             status = "incomplete"
         elif "formula" in reason.lower():
             status = "invalid_formula"
+        elif (
+            "period" in reason.lower()
+            or "observation" in reason.lower()
+            or "order" in reason.lower()
+            or "alignment" in reason.lower()
+        ):
+            status = "failed_period_alignment"
         elif "trajectory" in reason.lower():
             status = "failed_trajectory"
         else:
@@ -1265,6 +1676,8 @@ class TrendReceiptAuditor:
             "trajectory": independent_traj,
             "status": status,
             "is_valid": is_valid,
+            "alignment_valid": (status != "failed_period_alignment"),
+            "provenance_valid": provenance_valid,
             "verification_reason": reason,
             "supporting_receipt_ids": supporting_ids,
         }

@@ -118,6 +118,15 @@ class CalculationEvidence(BaseModel):
         default=None, description="Fiscal period start date"
     )
     period_end: str = Field(..., description="Fiscal period end date")
+    fiscal_year: int | str | None = Field(
+        default=None, description="Fiscal year of the calculation"
+    )
+    fiscal_period: str | None = Field(
+        default=None, description="Fiscal period (e.g. 'FY', 'Q1')"
+    )
+    inputs: list[dict[str, Any]] = Field(
+        default_factory=list, description="Inputs and intermediate calculations"
+    )
     input_observations: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Source SEC XBRL observations used in formula computation",

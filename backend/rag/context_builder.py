@@ -131,6 +131,11 @@ class RAGContextBuilder:
                     evidence_id = f"C{c_idx}"
                     c_idx += 1
 
+                    fy = rec.get("fiscal_year")
+                    pe_str = str(rec.get("period_end") or "")
+                    if fy is None and pe_str and len(pe_str) >= 4 and pe_str[:4].isdigit():
+                        fy = int(pe_str[:4])
+
                     calc_evidence_list.append(
                         CalculationEvidence(
                             evidence_id=evidence_id,
@@ -140,8 +145,13 @@ class RAGContextBuilder:
                             unit=str(rec.get("unit", "")),
                             formula=str(rec.get("formula_expression", "")),
                             period_start=rec.get("period_start"),
-                            period_end=str(rec.get("period_end", "")),
-                            input_observations=rec.get("inputs", []),
+                            period_end=pe_str,
+                            fiscal_year=fy,
+                            fiscal_period=rec.get("fiscal_period"),
+                            input_observations=rec.get("inputs")
+                            or rec.get("input_observations")
+                            or [],
+                            inputs=rec.get("inputs", []),
                             calculation_status=str(rec.get("status", "calculated")),
                         )
                     )

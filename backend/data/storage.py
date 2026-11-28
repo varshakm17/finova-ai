@@ -770,6 +770,19 @@ class Database:
                 """
             )
 
+            # 5. Reconcile historical fiscal_year metadata in financial_calculations (Session 18.1.4.2)
+            # Reconciles stored fiscal_year against authoritative observation period_end date
+            cursor.execute(
+                """
+                UPDATE financial_calculations
+                SET fiscal_year = CAST(SUBSTR(period_end, 1, 4) AS INTEGER)
+                WHERE period_end IS NOT NULL
+                  AND length(period_end) >= 4
+                  AND (period_type = 'annual' OR fiscal_period = 'FY')
+                  AND fiscal_year != CAST(SUBSTR(period_end, 1, 4) AS INTEGER);
+                """
+            )
+
         logger.info("Database initialized successfully at: %s", self.db_path)
 
     def save_company(self, company_data: dict[str, Any]) -> None:
@@ -1077,7 +1090,13 @@ class Database:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(calculation_id) DO UPDATE SET
                     period_start = excluded.period_start,
+                    period_end = excluded.period_end,
+                    fiscal_year = excluded.fiscal_year,
+                    fiscal_period = excluded.fiscal_period,
                     calculated_value = excluded.calculated_value,
+                    unit = excluded.unit,
+                    formula_name = excluded.formula_name,
+                    formula_expression = excluded.formula_expression,
                     calculation_status = excluded.calculation_status,
                     unavailable_reason = excluded.unavailable_reason,
                     input_observations_json = excluded.input_observations_json,

@@ -393,6 +393,28 @@ class EvidenceVerifier:
                 )
             else:
                 # Single-period calculation receipt verification
+                from backend.finance.financial_trends import (
+                    validate_calculation_provenance,
+                )
+
+                has_prov_metadata = bool(
+                    getattr(calc, "fiscal_year", None) is not None
+                    or getattr(calc, "input_observations", None)
+                    or (isinstance(calc_inputs, list) and len(calc_inputs) > 0)
+                )
+                if has_prov_metadata:
+                    prov_ok, prov_reason, _ = validate_calculation_provenance(calc)
+                    if not prov_ok:
+                        return self._make_result(
+                            claim=claim,
+                            outcome=VerificationOutcome.UNSUPPORTED,
+                            verification_reason=f"Calculation provenance failure: {prov_reason}",
+                            verification_method="provenance_verifier",
+                            confidence_score=0.95,
+                            period_check=period_detail,
+                            warnings=[prov_reason],
+                        )
+
                 c_lower = claim.claim_text.lower()
                 calc_m_clean = (
                     calc.metric_name.lower().replace("_", " ").strip()

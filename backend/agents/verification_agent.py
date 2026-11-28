@@ -80,6 +80,11 @@ class VerificationAgent(BaseFinovaAgent):
             except (ValueError, TypeError):
                 fval = 0.0
 
+            fy = ce.get("fiscal_year")
+            pe_str = str(ce.get("period_end") or "")
+            if fy is None and pe_str and len(pe_str) >= 4 and pe_str[:4].isdigit():
+                fy = int(pe_str[:4])
+
             converted.append(
                 CalculationEvidence(
                     evidence_id=cid,
@@ -94,10 +99,21 @@ class VerificationAgent(BaseFinovaAgent):
                         or ce.get("formula_name", "N/A")
                     ),
                     period_start=ce.get("period_start"),
-                    period_end=str(ce.get("period_end", "2023-09-30")),
+                    period_end=pe_str or "2023-09-30",
+                    fiscal_year=fy,
+                    fiscal_period=ce.get("fiscal_period"),
+                    inputs=ce.get("inputs") or [],
                     input_observations=ce.get("inputs")
                     or ce.get("input_observations")
                     or [],
+                    direction=ce.get("direction"),
+                    trajectory=ce.get("trajectory"),
+                    periods=ce.get("periods") or [],
+                    values=ce.get("values") or [],
+                    observations=ce.get("observations") or [],
+                    formula_name=ce.get("formula_name"),
+                    formula_expression=ce.get("formula_expression"),
+                    supporting_receipt_ids=ce.get("supporting_receipt_ids") or [],
                 )
             )
         return converted
